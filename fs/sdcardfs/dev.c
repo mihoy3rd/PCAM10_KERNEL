@@ -39,16 +39,13 @@ static struct kobject *dcim_kobject;
 static int skipd_enable = 1;
 module_param_named(skipd_enable, skipd_enable, int, S_IRUGO | S_IWUSR);
 
-struct uid_list_info {
-	struct list_head list;
-	uid_t uid;
-};
-struct list_head uid_head;
+static int skipd_uid[MAX_SKIPD_UID_NUMBER];
+static int serial = 0;
 static struct proc_dir_entry *sdcardfs_procdir;
 
 int dcim_delete_skip(void)
 {
-	struct uid_list_info *list;
+	int i = 0;
 
 	if (!skipd_enable)
 		return 0;
@@ -56,10 +53,12 @@ int dcim_delete_skip(void)
 	//system app, do skip
 	if (current_uid().val < AID_APP_START)
 		return 0;
-	list_for_each_entry(list, &uid_head, list) {
-		if (list->uid == current_uid().val) {
+	for (i = 0; i < MAX_SKIPD_UID_NUMBER; i++) {
+		if (skipd_uid[i] == current_uid().val)
 			return 0;
-		}
+
+		if (skipd_uid[i] == 0)
+			break;
 	}
 
 	return 1;
@@ -109,9 +108,9 @@ int dcim_delete_uevent(struct dentry *dentry)
 	}
 
 free_memory:
-	for(i--; i > 0; i--){
-		kfree(denied_param[i]);
-	}
+    for(i--; i > 0; i--)
+        kfree(denied_param[i]);
+
 	kfree(buf);
 
 	mutex_unlock(&dcim_mutex);
@@ -119,13 +118,35 @@ free_memory:
 	return 0;
 }
 
+static int sdfdev_open(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static int sdfdev_release(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static const struct file_operations sdfdev_fops = {
+	.owner = THIS_MODULE,
+	.open = sdfdev_open,
+	.release = sdfdev_release,
+};
+
+static struct miscdevice sdcardfs_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "sdcardfs",
+	.fops = &sdfdev_fops,
+};
+
 static int proc_sdcardfs_skip_show(struct seq_file *m, void *v)
 {
-	struct uid_list_info *list;
+	int i;
 
 	seq_printf(m, "skipd uid is: \n");
-	list_for_each_entry(list, &uid_head, list) {
-		seq_printf(m, "%u\n", list->uid);
+	for (i = 0; i < MAX_SKIPD_UID_NUMBER; i++) {
+		seq_printf(m, "%d\n", skipd_uid[i]);
 	}
 
 	return 0;
@@ -141,7 +162,6 @@ static ssize_t proc_sdcardfs_skip_write(struct file *file, const char __user *bu
 {
 	int uid, ret;
 	char *tmp;
-	struct uid_list_info *list;
 
 	mutex_lock(&dcim_mutex);
 
@@ -170,14 +190,11 @@ static ssize_t proc_sdcardfs_skip_write(struct file *file, const char __user *bu
 		return -EINVAL;
 	}
 
-	list = kzalloc(sizeof(*list), GFP_KERNEL);
-	if (!list) {
-		kfree(tmp);
-		mutex_unlock(&dcim_mutex);
-		return -ENOMEM;
-	}
-	list->uid = uid;
-	list_add_tail(&list->list, &uid_head);
+	skipd_uid[serial] = uid;
+	serial++;
+
+	if (serial >= MAX_SKIPD_UID_NUMBER)
+		serial = 0;
 
 	kfree(tmp);
 	mutex_unlock(&dcim_mutex);
@@ -195,23 +212,26 @@ static const struct file_operations proc_sdcardfs_skip_fops = {
 
 static int __init dcim_event_init(void)
 {
+	int retval;
 	struct proc_dir_entry *skipd_entry;
 
-	INIT_LIST_HEAD(&uid_head);
+	retval = misc_register(&sdcardfs_device);
 	dcim_kobject = kset_find_obj(module_kset, "sdcardfs");
 	if (dcim_kobject == NULL) {
 		printk("sdcardfs: sdcardfs uevent kobject is null");
+		misc_deregister(&sdcardfs_device);
 		return -1;
 	}
 	sdcardfs_procdir = proc_mkdir("fs/sdcardfs", NULL);
 	skipd_entry = proc_create_data("skipd_delete", 664, sdcardfs_procdir,
 				&proc_sdcardfs_skip_fops, NULL);
 
-	return 0;
+	return retval;
 }
 
 static void __exit dcim_event_exit(void)
 {
+	misc_deregister(&sdcardfs_device);
 }
 
 module_init(dcim_event_init);

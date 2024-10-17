@@ -1,5 +1,16 @@
-#ifdef VENDOR_EDIT
-// Liujie.Xie@TECH.Kernel.Sched, 2019/05/22, add for ui first
+/**********************************************************************************
+* Copyright (c), 2008-2019 , Guangdong OPPO Mobile Comm Corp., Ltd.
+* VENDOR_EDIT
+* File: oppo_cfs_mutex.c
+* Description: UI First
+* Version: 2.0
+* Date: 2019-10-01
+* Author: Liujie.Xie@TECH.BSP.Kernel.Sched
+* ------------------------------ Revision History: --------------------------------
+* <version>           <date>                <author>                            <desc>
+* Revision 1.0        2019-05-22       Liujie.Xie@TECH.BSP.Kernel.Sched      Created for UI First
+* Revision 2.0        2019-10-01       Liujie.Xie@TECH.BSP.Kernel.Sched      Add for UI First 2.0
+***********************************************************************************/
 
 #include <linux/version.h>
 #include <linux/sched.h>
@@ -26,7 +37,7 @@ static void mutex_list_add_ux(struct list_head *entry, struct list_head *head)
 
 void mutex_list_add(struct task_struct *task, struct list_head *entry, struct list_head *head, struct mutex *lock)
 {
-	bool is_ux = test_set_dynamic_ux(task);
+	bool is_ux = test_task_ux(task);
 	if (!entry || !head || !lock) {
 		return;
 	}
@@ -63,5 +74,3 @@ void mutex_dynamic_ux_dequeue(struct mutex *lock, struct task_struct *task)
 		lock->ux_dep_task = NULL;
 	}
 }
-
-#endif

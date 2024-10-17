@@ -56,7 +56,8 @@
 #include <linux/random.h>
 #include <linux/trace_events.h>
 #include <linux/suspend.h>
-#include <linux/ftrace.h>
+
+#include <soc/qcom/watchdog.h>
 
 #include "tree.h"
 #include "rcu.h"
@@ -247,24 +248,17 @@ static int rcu_gp_in_progress(struct rcu_state *rsp)
  */
 void rcu_sched_qs(void)
 {
-	unsigned long flags;
-
-	if (__this_cpu_read(rcu_sched_data.cpu_no_qs.s)) {
-		trace_rcu_grace_period(TPS("rcu_sched"),
-				       __this_cpu_read(rcu_sched_data.gpnum),
-				       TPS("cpuqs"));
-		__this_cpu_write(rcu_sched_data.cpu_no_qs.b.norm, false);
-		if (!__this_cpu_read(rcu_sched_data.cpu_no_qs.b.exp))
-			return;
-		local_irq_save(flags);
-		if (__this_cpu_read(rcu_sched_data.cpu_no_qs.b.exp)) {
-			__this_cpu_write(rcu_sched_data.cpu_no_qs.b.exp, false);
-			rcu_report_exp_rdp(&rcu_sched_state,
-					   this_cpu_ptr(&rcu_sched_data),
-					   true);
-		}
-		local_irq_restore(flags);
-	}
+	if (!__this_cpu_read(rcu_sched_data.cpu_no_qs.s))
+		return;
+	trace_rcu_grace_period(TPS("rcu_sched"),
+			       __this_cpu_read(rcu_sched_data.gpnum),
+			       TPS("cpuqs"));
+	__this_cpu_write(rcu_sched_data.cpu_no_qs.b.norm, false);
+	if (!__this_cpu_read(rcu_sched_data.cpu_no_qs.b.exp))
+		return;
+	__this_cpu_write(rcu_sched_data.cpu_no_qs.b.exp, false);
+	rcu_report_exp_rdp(&rcu_sched_state,
+			   this_cpu_ptr(&rcu_sched_data), true);
 }
 
 void rcu_bh_qs(void)
@@ -301,16 +295,15 @@ EXPORT_PER_CPU_SYMBOL_GPL(rcu_qs_ctr);
  * We inform the RCU core by emulating a zero-duration dyntick-idle
  * period, which we in turn do by incrementing the ->dynticks counter
  * by two.
+ *
+ * The caller must have disabled interrupts.
  */
 static void rcu_momentary_dyntick_idle(void)
 {
-	unsigned long flags;
 	struct rcu_data *rdp;
 	struct rcu_dynticks *rdtp;
 	int resched_mask;
 	struct rcu_state *rsp;
-
-	local_irq_save(flags);
 
 	/*
 	 * Yes, we can lose flag-setting operations.  This is OK, because
@@ -341,13 +334,12 @@ static void rcu_momentary_dyntick_idle(void)
 		smp_mb__after_atomic(); /* Later stuff after QS. */
 		break;
 	}
-	local_irq_restore(flags);
 }
 
 /*
  * Note a context switch.  This is a quiescent state for RCU-sched,
  * and requires special handling for preemptible RCU.
- * The caller must have disabled preemption.
+ * The caller must have disabled interrupts.
  */
 void rcu_note_context_switch(void)
 {
@@ -377,9 +369,14 @@ EXPORT_SYMBOL_GPL(rcu_note_context_switch);
  */
 void rcu_all_qs(void)
 {
+	unsigned long flags;
+
 	barrier(); /* Avoid RCU read-side critical sections leaking down. */
-	if (unlikely(raw_cpu_read(rcu_sched_qs_mask)))
+	if (unlikely(raw_cpu_read(rcu_sched_qs_mask))) {
+		local_irq_save(flags);
 		rcu_momentary_dyntick_idle();
+		local_irq_restore(flags);
+	}
 	this_cpu_inc(rcu_qs_ctr);
 	barrier(); /* Avoid RCU read-side critical sections leaking up. */
 }
@@ -1311,6 +1308,11 @@ static void print_other_cpu_stall(struct rcu_state *rsp, unsigned long gpnum)
 
 	rcu_check_gp_kthread_starvation(rsp);
 
+#ifdef CONFIG_RCU_STALL_WATCHDOG_BITE
+	/* Induce watchdog bite */
+	msm_trigger_wdog_bite();
+#endif
+
 	force_quiescent_state(rsp);  /* Kick them all. */
 }
 
@@ -1345,6 +1347,11 @@ static void print_cpu_stall(struct rcu_state *rsp)
 		WRITE_ONCE(rsp->jiffies_stall,
 			   jiffies + 3 * rcu_jiffies_till_stall_check() + 3);
 	raw_spin_unlock_irqrestore(&rnp->lock, flags);
+
+#ifdef CONFIG_RCU_STALL_WATCHDOG_BITE
+	/* Induce non secure watchdog bite to collect context */
+	msm_trigger_wdog_bite();
+#endif
 
 	/*
 	 * Attempt to revive the RCU machinery by forcing a context switch.
@@ -2670,11 +2677,6 @@ static void rcu_do_batch(struct rcu_state *rsp, struct rcu_data *rdp)
 	struct rcu_head *next, *list, **tail;
 	long bl, count, count_lazy;
 	int i;
-#ifdef CONFIG_MTK_RCU_MONITOR
-	struct rcu_invoke_log_entry *e = NULL;
-	ktime_t start, end;
-	int     dstlen;
-#endif
 
 	/* If no callbacks are ready, just return. */
 	if (!cpu_has_callbacks_ready_to_invoke(rdp)) {
@@ -2701,9 +2703,6 @@ static void rcu_do_batch(struct rcu_state *rsp, struct rcu_data *rdp)
 		if (rdp->nxttail[i] == rdp->nxttail[RCU_DONE_TAIL])
 			rdp->nxttail[i] = &rdp->nxtlist;
 	local_irq_restore(flags);
-#ifdef CONFIG_MTK_RCU_MONITOR
-	start = ktime_get();
-#endif
 
 	/* Invoke callbacks. */
 	count = count_lazy = 0;
@@ -2711,22 +2710,6 @@ static void rcu_do_batch(struct rcu_state *rsp, struct rcu_data *rdp)
 		next = list->next;
 		prefetch(next);
 		debug_rcu_head_unqueue(list);
-#ifdef CONFIG_MTK_RCU_MONITOR
-		e = rcu_invoke_log_add();
-		if (e != NULL) {
-			dstlen = strlen(rsp->name);
-			if (dstlen >= MAX_SERVICE_NAME_LEN)
-				dstlen = MAX_SERVICE_NAME_LEN-1;
-
-			strncpy(e->rcuname, rsp->name, dstlen);
-			e->rhp = (unsigned long)list;
-			e->func = (unsigned long)list->func;
-			e->gpnum = rsp->gpnum;
-			e->qlen = rdp->qlen;
-			e->time_start = start;
-			e->timestamp = ktime_get();
-		}
-#endif
 		if (__rcu_reclaim(rsp->name, list))
 			count_lazy++;
 		list = next;
@@ -2736,11 +2719,6 @@ static void rcu_do_batch(struct rcu_state *rsp, struct rcu_data *rdp)
 		     (!is_idle_task(current) && !rcu_is_callbacks_kthread())))
 			break;
 	}
-#ifdef CONFIG_MTK_RCU_MONITOR
-	end = ktime_get();
-	if (e != NULL)
-		e->time_dur = ktime_to_us(ktime_sub(end, start));
-#endif
 
 	local_irq_save(flags);
 	trace_rcu_batch_end(rsp->name, count, !!list, need_resched(),
@@ -3084,10 +3062,6 @@ __call_rcu(struct rcu_head *head, rcu_callback_t func,
 {
 	unsigned long flags;
 	struct rcu_data *rdp;
-#ifdef CONFIG_MTK_RCU_MONITOR
-	struct rcu_callback_log_entry *e;
-	int    dstlen;
-#endif
 
 	WARN_ON_ONCE((unsigned long)head & 0x1); /* Misaligned rcu_head! */
 	if (debug_rcu_head_queue(head)) {
@@ -3139,26 +3113,7 @@ __call_rcu(struct rcu_head *head, rcu_callback_t func,
 	smp_mb();  /* Count before adding callback for rcu_barrier(). */
 	*rdp->nxttail[RCU_NEXT_TAIL] = head;
 	rdp->nxttail[RCU_NEXT_TAIL] = &head->next;
-#ifdef CONFIG_MTK_RCU_MONITOR
-	e = rcu_callback_log_add();
-	if (e != NULL) {
-		dstlen = strlen(rsp->name);
-		if (dstlen >= MAX_SERVICE_NAME_LEN)
-			dstlen = MAX_SERVICE_NAME_LEN-1;
-		strncpy(e->rcuname, rsp->name, dstlen);
 
-		dstlen = strlen(current->comm);
-		if (dstlen >= TASK_COMM_LEN)
-			dstlen = TASK_COMM_LEN-1;
-		strncpy(e->comm, current->comm, dstlen);
-		e->rhp = (unsigned long)head;
-		e->func = (unsigned long)func;
-		e->gpnum = rsp->gpnum;
-		e->qlen = rdp->qlen;
-		e->ip = CALLER_ADDR1;
-		e->time = ktime_get();
-	}
-#endif
 	if (__is_kfree_rcu_offset((unsigned long)func))
 		trace_rcu_kfree_callback(rsp->name, head, (unsigned long)func,
 					 rdp->qlen_lazy, rdp->qlen);

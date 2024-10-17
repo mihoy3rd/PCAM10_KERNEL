@@ -26,6 +26,7 @@
 #include <linux/interrupt.h>
 #include <linux/debug_locks.h>
 #include <linux/osq_lock.h>
+#include <linux/delay.h>
 
 /*
  * In the DEBUG case we are using the "NULL fastpath" for mutexes,
@@ -60,6 +61,7 @@ __mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key)
 // Liujie.Xie@TECH.Kernel.Sched, 2019/05/22, add for ui first
 	lock->ux_dep_task = NULL;
 #endif
+
 	debug_mutex_init(lock, name, key);
 }
 
@@ -381,6 +383,17 @@ static bool mutex_optimistic_spin(struct mutex *lock,
 		 * values at the cost of a few extra spins.
 		 */
 		cpu_relax_lowlatency();
+
+		/*
+		 * On arm systems, we must slow down the waiter's repeated
+		 * aquisition of spin_mlock and atomics on the lock count, or
+		 * we risk starving out a thread attempting to release the
+		 * mutex. The mutex slowpath release must take spin lock
+		 * wait_lock. This spin lock can share a monitor with the
+		 * other waiter atomics in the mutex data structure, so must
+		 * take care to rate limit the waiters.
+		 */
+		udelay(1);
 	}
 
 	osq_unlock(&lock->osq);
@@ -541,14 +554,14 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 
 	debug_mutex_lock_common(lock, &waiter);
 	debug_mutex_add_waiter(lock, &waiter, task);
-	
+
 #ifdef VENDOR_EDIT
 // Liujie.Xie@TECH.Kernel.Sched, 2019/05/22, add for ui first
-	if (sysctl_uifirst_enabled) {
-		mutex_list_add(task, &waiter.list, &lock->wait_list, lock);
-	} else {
-		list_add_tail(&waiter.list, &lock->wait_list);
-	}
+    if (sysctl_uifirst_enabled) {
+        mutex_list_add(task, &waiter.list, &lock->wait_list, lock);
+    } else {
+        list_add_tail(&waiter.list, &lock->wait_list);
+    }
 #else
 	/* add waiting tasks to the end of the waitqueue (FIFO): */
 	list_add_tail(&waiter.list, &lock->wait_list);
@@ -591,15 +604,28 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 		}
 #ifdef VENDOR_EDIT
 // Liujie.Xie@TECH.Kernel.Sched, 2019/05/22, add for ui first
-		if (sysctl_uifirst_enabled) {
-			mutex_dynamic_ux_enqueue(lock, task);
-		}
+        if (sysctl_uifirst_enabled) {
+            mutex_dynamic_ux_enqueue(lock, task);
+        }
 #endif
+
 		__set_task_state(task, state);
 
 		/* didn't get the lock, go to sleep: */
 		spin_unlock_mutex(&lock->wait_lock, flags);
+#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_HEALTHINFO)
+		// Liujie.Xie@TECH.Kernel.Sched, 2019/08/29, add for stuck monitor
+		if (state & TASK_UNINTERRUPTIBLE) {
+			current->in_mutex = 1;
+		}
+#endif
 		schedule_preempt_disabled();
+#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_HEALTHINFO)
+		// Liujie.Xie@TECH.Kernel.Sched, 2019/08/29, add for stuck monitor
+		if (state & TASK_UNINTERRUPTIBLE) {
+			current->in_mutex = 0;
+		}
+#endif
 		spin_lock_mutex(&lock->wait_lock, flags);
 	}
 	__set_task_state(task, TASK_RUNNING);
@@ -761,10 +787,11 @@ __mutex_unlock_common_slowpath(struct mutex *lock, int nested)
 	debug_mutex_unlock(lock);
 #ifdef VENDOR_EDIT
 // Liujie.Xie@TECH.Kernel.Sched, 2019/05/22, add for ui first
-	if (sysctl_uifirst_enabled) {
-		mutex_dynamic_ux_dequeue(lock, current);
-	}
+    if (sysctl_uifirst_enabled) {
+        mutex_dynamic_ux_dequeue(lock, current);
+    }
 #endif
+
 	if (!list_empty(&lock->wait_list)) {
 		/* get the first entry from the wait-list: */
 		struct mutex_waiter *waiter =

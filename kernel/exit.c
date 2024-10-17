@@ -61,6 +61,18 @@
 #include <asm/unistd.h>
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
+#if defined(VENDOR_EDIT) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+/* Kui.Zhang@TEC.Kernel.Performance, 2019/03/13
+ * collect reserve area used count
+ */
+#include <linux/resmap_account.h>
+#endif
+#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_HEALTHINFO)
+/* Kui.Zhang@TEC.Kernel.Performance, 2019/06/06
+ * collect svm_oom log
+ */
+#include <soc/oppo/oppo_healthinfo.h>
+#endif /*VENDOR_EDIT*/
 
 static void exit_mm(struct task_struct *tsk);
 
@@ -407,6 +419,93 @@ assign_new_owner:
 }
 #endif /* CONFIG_MEMCG */
 
+#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_HEALTHINFO) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+static inline bool check_parent_is_zygote(struct task_struct *tsk)
+{
+	struct task_struct *t;
+	bool ret = false;
+
+	rcu_read_lock();
+	t = rcu_dereference(tsk->real_parent);
+	if (t) {
+		const struct cred *tcred = __task_cred(t);
+
+		if (!strcmp(t->comm, "main") && (tcred->uid.val == 0) &&
+				(t->parent != NULL) && !strcmp(t->parent->comm,"init"))
+			ret = true;
+	}
+	rcu_read_unlock();
+	return ret;
+}
+
+#define THRIDPART_APP_UID_LOW_LIMIT 10000UL
+static void trigger_svm_oom_event(struct mm_struct *mm)
+{
+	int len = 0;
+	int oom = 0;
+	int res = 0;
+	int over_time = 0;
+	int change_stack = 0;
+	struct rlimit *rlim;
+	unsigned long long current_time_ns;
+	char *svm_oom_msg = NULL;
+	unsigned int uid = (unsigned int)(current_uid().val);
+
+	if (!(rlimit_svm_log && (current->pid == current->tgid) &&
+				is_compat_task() &&
+				check_parent_is_zygote(current) &&
+				(uid >= THRIDPART_APP_UID_LOW_LIMIT)))
+		return;
+
+	svm_oom_msg = (char*)kmalloc(128, GFP_KERNEL);
+	if (!svm_oom_msg)
+		return;
+
+	down_read(&mm->mmap_sem);
+	if (mm->reserve_vma)
+		res = 1;
+	up_read(&mm->mmap_sem);
+
+	if ((svm_oom_pid == current->pid) &&
+			time_after_eq((svm_oom_jiffies + 15*HZ), jiffies)) {
+		svm_oom_pid = -1;
+		oom = 1;
+	}
+	rlim = current->signal->rlim + RLIMIT_STACK;
+	if (rlim->rlim_cur > STACK_RLIMIT_OVERFFLOW)
+		change_stack = 1;
+
+	if (change_stack) {
+		len = snprintf(svm_oom_msg, 127,
+				"{\"version\":1, \"size\":%ld, \"uid\":%u, \"type\":\"%s,%s\"}",
+				(long)rlim->rlim_cur, uid,
+				(oom ? "oom" : "no_oom"),
+				(res ? "res" : "no_res"));
+		svm_oom_msg[len] = '\0';
+		ohm_action_trig_with_msg(OHM_RLIMIT_MON, svm_oom_msg);
+		kfree(svm_oom_msg);
+		return;
+	}
+
+	current_time_ns = ktime_get_boot_ns();
+	if ((current_time_ns > current->real_start_time) ||
+			(current_time_ns - current->real_start_time >= TRIGGER_TIME_NS))
+		over_time = 1;
+
+	if (oom || (!change_stack && !res && over_time)) {
+		len = snprintf(svm_oom_msg, 127,
+				"{\"version\":1, \"size\":%ld, \"uid\":%u, \"type\":\"%s,%s,%s\"}",
+				(long)mm->backed_vm_size, uid,
+				(oom ? "oom" : "no_oom"),
+				(res ? "res" : "no_res"),
+				(change_stack ? "stack" : "no_stack"));
+		svm_oom_msg[len] = '\0';
+		ohm_action_trig_with_msg(OHM_SVM_MON, svm_oom_msg);
+	}
+	kfree(svm_oom_msg);
+}
+#endif
+
 /*
  * Turn us into a lazy TLB process if we
  * aren't already..
@@ -415,6 +514,7 @@ static void exit_mm(struct task_struct *tsk)
 {
 	struct mm_struct *mm = tsk->mm;
 	struct core_state *core_state;
+	int mm_released;
 
 	mm_release(tsk, mm);
 	if (!mm)
@@ -461,9 +561,18 @@ static void exit_mm(struct task_struct *tsk)
 	enter_lazy_tlb(mm, current);
 	task_unlock(tsk);
 	mm_update_next_owner(mm);
-	mmput(mm);
+
+#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_HEALTHINFO) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+	/* Kui.Zhang@PSW.TEC.KERNEL.Performance, 2019/03/18,
+	 * Trigger and upload the event.
+	 */
+	trigger_svm_oom_event(mm);
+#endif
+	mm_released = mmput(mm);
 	if (test_thread_flag(TIF_MEMDIE))
 		exit_oom_victim();
+	if (mm_released)
+		set_tsk_thread_flag(tsk, TIF_MM_RELEASED);
 }
 
 static struct task_struct *find_alive_thread(struct task_struct *p)
@@ -659,6 +768,7 @@ static void check_stack_usage(void)
 	static DEFINE_SPINLOCK(low_water_lock);
 	static int lowest_to_date = THREAD_SIZE;
 	unsigned long free;
+	int islower = false;
 
 	free = stack_not_used(current);
 
@@ -667,11 +777,16 @@ static void check_stack_usage(void)
 
 	spin_lock(&low_water_lock);
 	if (free < lowest_to_date) {
-		pr_warn("%s (%d) used greatest stack depth: %lu bytes left\n",
-			current->comm, task_pid_nr(current), free);
 		lowest_to_date = free;
+		islower = true;
 	}
 	spin_unlock(&low_water_lock);
+
+	if (islower) {
+		printk(KERN_WARNING "%s (%d) used greatest stack depth: "
+				"%lu bytes left\n",
+				current->comm, task_pid_nr(current), free);
+	}
 }
 #else
 static inline void check_stack_usage(void) {}
@@ -727,10 +842,6 @@ void do_exit(long code)
 //#endif /*VENDOR_EDIT*/
 
 	profile_task_exit(tsk);
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_SPECIAL_BUILD)
-/*xing.xiong@BSP.Kernel.Debug, 2018/10/25, Add for aging*/
-	printk("[%d:%s] exit\n", tsk->pid, tsk->comm);
-#endif
 	kcov_task_exit(tsk);
 
 	WARN_ON(blk_needs_flush_plug(tsk));
@@ -783,6 +894,7 @@ void do_exit(long code)
 
 	exit_signals(tsk);  /* sets PF_EXITING */
 
+	sched_exit(tsk);
 	schedtune_exit_task(tsk);
 
 	/*

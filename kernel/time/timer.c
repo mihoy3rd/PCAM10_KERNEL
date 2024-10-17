@@ -43,7 +43,6 @@
 #include <linux/slab.h>
 #include <linux/compat.h>
 
-#include <asm/cacheflush.h>
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 #include <asm/div64.h>
@@ -54,10 +53,6 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/timer.h>
-
-#ifdef CONFIG_MTK_SCHED_MONITOR
-#include "mtk_sched_mon.h"
-#endif
 
 __visible u64 jiffies_64 __cacheline_aligned_in_smp = INITIAL_JIFFIES;
 
@@ -99,11 +94,15 @@ struct tvec_base {
 	struct tvec tv5;
 } ____cacheline_aligned;
 
+static inline void __run_timers(struct tvec_base *base);
 
 static DEFINE_PER_CPU(struct tvec_base, tvec_bases);
 
 #if defined(CONFIG_SMP) && defined(CONFIG_NO_HZ_COMMON)
 unsigned int sysctl_timer_migration = 1;
+
+struct tvec_base tvec_base_deferrable;
+static atomic_t deferrable_pending;
 
 void timers_update_migration(bool update_nohz)
 {
@@ -140,26 +139,67 @@ int timer_migration_handler(struct ctl_table *table, int write,
 }
 
 static inline struct tvec_base *get_target_base(struct tvec_base *base,
-						int pinned)
+						int pinned, u32 timer_flags)
 {
+	if (!pinned && !(timer_flags & TIMER_PINNED_ON_CPU) &&
+	    (timer_flags & TIMER_DEFERRABLE))
+		return &tvec_base_deferrable;
 	if (pinned || !base->migration_enabled)
 		return this_cpu_ptr(&tvec_bases);
 	return per_cpu_ptr(&tvec_bases, get_nohz_timer_target());
 }
 
+static inline void __run_deferrable_timers(void)
+{
+	if ((atomic_cmpxchg(&deferrable_pending, 1, 0) &&
+		tick_do_timer_cpu == TICK_DO_TIMER_NONE) ||
+		tick_do_timer_cpu == smp_processor_id()) {
+		if (time_after_eq(jiffies,
+			tvec_base_deferrable.timer_jiffies))
+			__run_timers(&tvec_base_deferrable);
+	}
+}
+
+static inline void init_timer_deferrable_global(void)
+{
+	tvec_base_deferrable.cpu = nr_cpu_ids;
+	spin_lock_init(&tvec_base_deferrable.lock);
+	tvec_base_deferrable.timer_jiffies = jiffies;
+	tvec_base_deferrable.next_timer = tvec_base_deferrable.timer_jiffies;
+}
+
+static inline struct tvec_base *get_timer_base(u32 timer_flags)
+{
+	if (!(timer_flags & TIMER_PINNED_ON_CPU) &&
+	    timer_flags & TIMER_DEFERRABLE)
+		return &tvec_base_deferrable;
+	else
+		return per_cpu_ptr(&tvec_bases, timer_flags & TIMER_CPUMASK);
+}
 #else
 static inline struct tvec_base *get_target_base(struct tvec_base *base,
-						int pinned)
+						int pinned, u32 timer_flags)
 {
 	return this_cpu_ptr(&tvec_bases);
 }
 
-#endif
+static inline void __run_deferrable_timers(void)
+{
+}
+
+static inline void init_timer_deferrable_global(void)
+{
+	/*
+	 * initialize cpu unbound deferrable timer base only when CONFIG_SMP.
+	 * UP kernel handles the timers with cpu 0 timer base.
+	 */
+}
 
 static inline struct tvec_base *get_timer_base(u32 timer_flags)
 {
 	return per_cpu_ptr(&tvec_bases, timer_flags & TIMER_CPUMASK);
 }
+#endif
 
 static unsigned long round_jiffies_common(unsigned long j, int cpu,
 		bool force_up)
@@ -460,38 +500,6 @@ static void internal_add_timer(struct tvec_base *base, struct timer_list *timer)
 	}
 }
 
-#ifdef CONFIG_TIMER_STATS
-void __timer_stats_timer_set_start_info(struct timer_list *timer, void *addr)
-{
-	if (timer->start_site)
-		return;
-
-	timer->start_site = addr;
-	memcpy(timer->start_comm, current->comm, TASK_COMM_LEN);
-	timer->start_pid = current->pid;
-}
-
-static void timer_stats_account_timer(struct timer_list *timer)
-{
-	void *site;
-
-	/*
-	 * start_site can be concurrently reset by
-	 * timer_stats_timer_clear_start_info()
-	 */
-	site = READ_ONCE(timer->start_site);
-	if (likely(!site))
-		return;
-
-	timer_stats_update_stats(timer, timer->start_pid, site,
-				 timer->function, timer->start_comm,
-				 timer->flags);
-}
-
-#else
-static void timer_stats_account_timer(struct timer_list *timer) {}
-#endif
-
 #ifdef CONFIG_DEBUG_OBJECTS_TIMERS
 
 static struct debug_obj_descr timer_debug_descr;
@@ -511,7 +519,6 @@ static int timer_fixup_init(void *addr, enum debug_obj_state state)
 
 	switch (state) {
 	case ODEBUG_STATE_ACTIVE:
-		debug_object_mtk_aee_warning("re-init active timer");
 		del_timer_sync(timer);
 		debug_object_init(timer, &timer_debug_descr);
 		return 1;
@@ -550,14 +557,12 @@ static int timer_fixup_activate(void *addr, enum debug_obj_state state)
 			return 0;
 		} else {
 			setup_timer(timer, stub_timer, 0);
-			debug_object_mtk_aee_warning("activate an uninitialized timer");
 			return 1;
 		}
 		return 0;
 
 	case ODEBUG_STATE_ACTIVE:
 		WARN_ON(1);
-		debug_object_mtk_aee_warning("activate an active timer");
 
 	default:
 		return 0;
@@ -576,7 +581,6 @@ static int timer_fixup_free(void *addr, enum debug_obj_state state)
 	case ODEBUG_STATE_ACTIVE:
 		del_timer_sync(timer);
 		debug_object_free(timer, &timer_debug_descr);
-		debug_object_mtk_aee_warning("free an active timer");
 		return 1;
 	default:
 		return 0;
@@ -602,7 +606,6 @@ static int timer_fixup_assert_init(void *addr, enum debug_obj_state state)
 			debug_object_init(timer, &timer_debug_descr);
 			return 0;
 		} else {
-			debug_object_mtk_aee_warning("timer shall be initialized");
 			setup_timer(timer, stub_timer, 0);
 			return 1;
 		}
@@ -699,11 +702,6 @@ static void do_init_timer(struct timer_list *timer, unsigned int flags,
 	timer->entry.pprev = NULL;
 	timer->flags = flags | raw_smp_processor_id();
 	timer->slack = -1;
-#ifdef CONFIG_TIMER_STATS
-	timer->start_site = NULL;
-	timer->start_pid = -1;
-	memset(timer->start_comm, 0, TASK_COMM_LEN);
-#endif
 	lockdep_init_map(&timer->lockdep_map, name, key, 0);
 }
 
@@ -791,15 +789,8 @@ static struct tvec_base *lock_timer_base(struct timer_list *timer,
 		 */
 		tf = READ_ONCE(timer->flags);
 
-		/*
-		 * We need to use READ_ONCE() here, otherwise the compiler
-		 * might re-read @tf between the check for TIMER_MIGRATING
-		 * and spin_lock().
-		 */
-		tf = READ_ONCE(timer->flags);
-
 		if (!(tf & TIMER_MIGRATING)) {
-			base = per_cpu_ptr(&tvec_bases, tf & TIMER_CPUMASK);
+			base = get_timer_base(tf);
 			spin_lock_irqsave(&base->lock, *flags);
 			if (timer->flags == tf)
 				return base;
@@ -817,7 +808,6 @@ __mod_timer(struct timer_list *timer, unsigned long expires,
 	unsigned long flags;
 	int ret = 0;
 
-	timer_stats_timer_set_start_info(timer);
 	BUG_ON(!timer->function);
 
 	base = lock_timer_base(timer, &flags);
@@ -828,7 +818,7 @@ __mod_timer(struct timer_list *timer, unsigned long expires,
 
 	debug_activate(timer, expires);
 
-	new_base = get_target_base(base, pinned);
+	new_base = get_target_base(base, pinned, timer->flags);
 
 	if (base != new_base) {
 		/*
@@ -854,7 +844,6 @@ __mod_timer(struct timer_list *timer, unsigned long expires,
 		timer->flags |= TIMER_PINNED_ON_CPU;
 	else
 		timer->flags &= ~TIMER_PINNED_ON_CPU;
-
 	timer->expires = expires;
 	internal_add_timer(base, timer);
 
@@ -1017,7 +1006,6 @@ void add_timer_on(struct timer_list *timer, int cpu)
 	struct tvec_base *base;
 	unsigned long flags;
 
-	timer_stats_timer_set_start_info(timer);
 	BUG_ON(timer_pending(timer) || !timer->function);
 
 	/*
@@ -1062,7 +1050,6 @@ int del_timer(struct timer_list *timer)
 
 	debug_assert_init(timer);
 
-	timer_stats_timer_clear_start_info(timer);
 	if (timer_pending(timer)) {
 		base = lock_timer_base(timer, &flags);
 		ret = detach_if_pending(timer, base, true);
@@ -1090,33 +1077,10 @@ int try_to_del_timer_sync(struct timer_list *timer)
 
 	base = lock_timer_base(timer, &flags);
 
-	if (base->running_timer != timer) {
-		timer_stats_timer_clear_start_info(timer);
+	if (base->running_timer != timer)
 		ret = detach_if_pending(timer, base, true);
-	}
+
 	spin_unlock_irqrestore(&base->lock, flags);
-
-#if defined(CONFIG_SMP) && !defined(CONFIG_ARM64_LSE_ATOMICS)
-
-#ifndef dmac_flush_range
-#define dmac_flush_range __dma_flush_range
-#endif
-
-	/*
-	 * MTK PATCH to fix ARM v8.0 live spinlock issue.
-	 *
-	 * Flush lock value here if timer deletion is not finished.
-	 *
-	 * In this case, Other CPU may need to get cpu_base spinlock
-	 * to update running timer information. Flush lock value here
-	 * to promise that other CPU can see correct lock value to avoid
-	 * starvation or unfair spinlock competition.
-	 */
-	if (ret == -1 && irqs_disabled()) {
-		dmac_flush_range((void *)&base->lock,
-			(void *)&base->lock + sizeof(spinlock_t) - 1);
-	}
-#endif
 
 	return ret;
 }
@@ -1234,13 +1198,7 @@ static void call_timer_fn(struct timer_list *timer, void (*fn)(unsigned long),
 	lock_map_acquire(&lockdep_map);
 
 	trace_timer_expire_entry(timer);
-#ifdef CONFIG_MTK_SCHED_MONITOR
-	mt_trace_sft_start(fn);
-#endif
 	fn(data);
-#ifdef CONFIG_MTK_SCHED_MONITOR
-	mt_trace_sft_end(fn);
-#endif
 	trace_timer_expire_exit(timer);
 
 	lock_map_release(&lockdep_map);
@@ -1304,8 +1262,6 @@ static inline void __run_timers(struct tvec_base *base)
 			fn = timer->function;
 			data = timer->data;
 			irqsafe = timer->flags & TIMER_IRQSAFE;
-
-			timer_stats_account_timer(timer);
 
 			base->running_timer = timer;
 			detach_expired_timer(timer, base);
@@ -1434,6 +1390,30 @@ static u64 cmp_next_hrtimer_event(u64 basem, u64 expires)
 	return DIV_ROUND_UP_ULL(nextevt, TICK_NSEC) * TICK_NSEC;
 }
 
+#ifdef CONFIG_SMP
+/*
+ * check_pending_deferrable_timers - Check for unbound deferrable timer expiry.
+ * @cpu - Current CPU
+ *
+ * The function checks whether any global deferrable pending timers
+ * are exipired or not. This function does not check cpu bounded
+ * diferrable pending timers expiry.
+ *
+ * The function returns true when a cpu unbounded deferrable timer is expired.
+ */
+bool check_pending_deferrable_timers(int cpu)
+{
+	if (cpu == tick_do_timer_cpu ||
+		tick_do_timer_cpu == TICK_DO_TIMER_NONE) {
+		if (time_after_eq(jiffies, tvec_base_deferrable.timer_jiffies)
+			&& !atomic_cmpxchg(&deferrable_pending, 0, 1)) {
+			return true;
+		}
+	}
+	return false;
+}
+#endif
+
 /**
  * get_next_timer_interrupt - return the time (clock mono) of the next timer
  * @basej:	base time jiffies
@@ -1497,6 +1477,8 @@ void update_process_times(int user_tick)
 static void run_timer_softirq(struct softirq_action *h)
 {
 	struct tvec_base *base = this_cpu_ptr(&tvec_bases);
+
+	__run_deferrable_timers();
 
 	if (time_after_eq(jiffies, base->timer_jiffies))
 		__run_timers(base);
@@ -1634,7 +1616,7 @@ signed long __sched schedule_timeout_uninterruptible(signed long timeout)
 }
 EXPORT_SYMBOL(schedule_timeout_uninterruptible);
 
-#ifdef CONFIG_HOTPLUG_CPU
+#if defined(CONFIG_HOTPLUG_CPU)
 static void migrate_timer_list(struct tvec_base *new_base,
 			       struct hlist_head *head, bool remove_pinned)
 {
@@ -1677,7 +1659,7 @@ static void __migrate_timers(int cpu, bool remove_pinned)
 	 * and so everything else can be migrated off.
 	 */
 	if (!cpu_online(cpu))
-		WARN_ON(old_base->running_timer);
+		BUG_ON(old_base->running_timer);
 
 	for (i = 0; i < TVR_SIZE; i++)
 		migrate_timer_list(new_base, old_base->tv1.vec + i,
@@ -1701,7 +1683,7 @@ static void __migrate_timers(int cpu, bool remove_pinned)
 /* Migrate timers from 'cpu' to this_cpu */
 static void migrate_timers(int cpu)
 {
-	WARN_ON(cpu_online(cpu));
+	BUG_ON(cpu_online(cpu));
 	__migrate_timers(cpu, true);
 }
 
@@ -1750,12 +1732,13 @@ static void __init init_timer_cpus(void)
 
 	for_each_possible_cpu(cpu)
 		init_timer_cpu(cpu);
+
+	init_timer_deferrable_global();
 }
 
 void __init init_timers(void)
 {
 	init_timer_cpus();
-	init_timer_stats();
 	timer_register_cpu_notifier();
 	open_softirq(TIMER_SOFTIRQ, run_timer_softirq);
 }
@@ -1789,16 +1772,6 @@ unsigned long msleep_interruptible(unsigned int msecs)
 
 EXPORT_SYMBOL(msleep_interruptible);
 
-static void __sched do_usleep_range(unsigned long min, unsigned long max)
-{
-	ktime_t kmin;
-	u64 delta;
-
-	kmin = ktime_set(0, min * NSEC_PER_USEC);
-	delta = (u64)(max - min) * NSEC_PER_USEC;
-	schedule_hrtimeout_range(&kmin, delta, HRTIMER_MODE_REL);
-}
-
 /**
  * usleep_range - Drop in replacement for udelay where wakeup is flexible
  * @min: Minimum time in usecs to sleep
@@ -1806,7 +1779,14 @@ static void __sched do_usleep_range(unsigned long min, unsigned long max)
  */
 void __sched usleep_range(unsigned long min, unsigned long max)
 {
-	__set_current_state(TASK_UNINTERRUPTIBLE);
-	do_usleep_range(min, max);
+	ktime_t exp = ktime_add_us(ktime_get(), min);
+	u64 delta = (u64)(max - min) * NSEC_PER_USEC;
+
+	for (;;) {
+		__set_current_state(TASK_UNINTERRUPTIBLE);
+		/* Do not return before the requested sleep time has elapsed */
+		if (!schedule_hrtimeout_range(&exp, delta, HRTIMER_MODE_ABS))
+			break;
+	}
 }
 EXPORT_SYMBOL(usleep_range);

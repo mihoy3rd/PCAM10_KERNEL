@@ -5,9 +5,9 @@
   This program can be distributed under the terms of the GNU GPL.
   See the file COPYING.
 */
-#define DEBUG 1
+
 #include "fuse_i.h"
-#include "mtk_fuse.h"
+#include "fuse_passthrough.h"
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -508,25 +508,14 @@ static void __fuse_request_send(struct fuse_conn *fc, struct fuse_req *req)
 	}
 }
 
-void fuse_request_send_ex(struct fuse_conn *fc, struct fuse_req *req,
-	__u32 size)
+void fuse_request_send(struct fuse_conn *fc, struct fuse_req *req)
 {
-	FUSE_IOLOG_INIT(size, req->in.h.opcode);
 	__set_bit(FR_ISREPLY, &req->flags);
-	FUSE_IOLOG_START();
 	if (!test_bit(FR_WAITING, &req->flags)) {
 		__set_bit(FR_WAITING, &req->flags);
 		atomic_inc(&fc->num_waiting);
 	}
 	__fuse_request_send(fc, req);
-	FUSE_IOLOG_END();
-	FUSE_IOLOG_PRINT();
-}
-EXPORT_SYMBOL_GPL(fuse_request_send_ex);
-
-void fuse_request_send(struct fuse_conn *fc, struct fuse_req *req)
-{
-	fuse_request_send_ex(fc, req, 0);
 }
 EXPORT_SYMBOL_GPL(fuse_request_send);
 
@@ -586,9 +575,14 @@ ssize_t fuse_simple_request(struct fuse_conn *fc, struct fuse_args *args)
 	       args->out.numargs * sizeof(struct fuse_arg));
 	fuse_request_send(fc, req);
 	ret = req->out.h.error;
-	if (!ret && args->out.argvar) {
-		BUG_ON(args->out.numargs != 1);
-		ret = req->out.args[0].size;
+	if (!ret) {
+		if (args->out.argvar) {
+			BUG_ON(args->out.numargs != 1);
+			ret = req->out.args[0].size;
+		}
+
+		if (req->passthrough_filp != NULL)
+			args->out.passthrough_filp = req->passthrough_filp;
 	}
 	fuse_put_request(fc, req);
 
@@ -612,51 +606,28 @@ void fuse_request_send_background_locked(struct fuse_conn *fc,
 	fc->num_background++;
 	if (fc->num_background == fc->max_background)
 		fc->blocked = 1;
-
-	if (req->in.h.opcode == FUSE_INIT)
-		pr_info("FUSE_INIT: fuse_request_send_background_locked() -> set_bdi_congested()\n");
-
 	if (fc->num_background == fc->congestion_threshold &&
 	    fc->bdi_initialized) {
 		set_bdi_congested(&fc->bdi, BLK_RW_SYNC);
 		set_bdi_congested(&fc->bdi, BLK_RW_ASYNC);
 	}
 	list_add_tail(&req->list, &fc->bg_queue);
-	if (req->in.h.opcode == FUSE_INIT)
-		pr_info("FUSE_INIT: fuse_request_send_background_locked() -> flush_bg_queue() start\n");
 	flush_bg_queue(fc);
-	if (req->in.h.opcode == FUSE_INIT)
-		pr_info("FUSE_INIT: fuse_request_send_background_locked() -> flush_bg_queue() end\n");
 }
 
-void fuse_request_send_background_ex(struct fuse_conn *fc, struct fuse_req *req,
-	__u32 size)
+void fuse_request_send_background(struct fuse_conn *fc, struct fuse_req *req)
 {
-	FUSE_IOLOG_INIT(size, req->in.h.opcode);
 	BUG_ON(!req->end);
-	FUSE_IOLOG_START();
 	spin_lock(&fc->lock);
 	if (fc->connected) {
-		if (req->in.h.opcode == FUSE_INIT)
-			pr_info("FUSE_INIT: fuse_request_send_background_ex(): Connected, send request\n");
 		fuse_request_send_background_locked(fc, req);
 		spin_unlock(&fc->lock);
 	} else {
-		if (req->in.h.opcode == FUSE_INIT)
-			pr_info("FUSE_INIT: fuse_request_send_background_ex(): Not connected, return -ENOTCONN\n");
 		spin_unlock(&fc->lock);
 		req->out.h.error = -ENOTCONN;
 		req->end(fc, req);
 		fuse_put_request(fc, req);
 	}
-	FUSE_IOLOG_END();
-	FUSE_IOLOG_PRINT();
-}
-EXPORT_SYMBOL_GPL(fuse_request_send_background_ex);
-
-void fuse_request_send_background(struct fuse_conn *fc, struct fuse_req *req)
-{
-	fuse_request_send_background_ex(fc, req, 0);
 }
 EXPORT_SYMBOL_GPL(fuse_request_send_background);
 
@@ -1983,6 +1954,7 @@ static ssize_t fuse_dev_do_write(struct fuse_dev *fud,
 	}
 	fuse_copy_finish(cs);
 
+	fuse_setup_passthrough(fc, req);
 	spin_lock(&fpq->lock);
 	clear_bit(FR_LOCKED, &req->flags);
 	if (!fpq->connected)

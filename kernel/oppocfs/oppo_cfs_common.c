@@ -1,5 +1,17 @@
-#ifdef VENDOR_EDIT
-// Liujie.Xie@TECH.Kernel.Sched, 2019/05/22, add for ui first
+/**********************************************************************************
+* Copyright (c), 2008-2019 , Guangdong OPPO Mobile Comm Corp., Ltd.
+* VENDOR_EDIT
+* File: oppo_cfs_common.c
+* Description: UI First
+* Version: 2.0
+* Date: 2019-10-01
+* Author: Liujie.Xie@TECH.BSP.Kernel.Sched
+* ------------------------------ Revision History: --------------------------------
+* <version>           <date>                <author>                            <desc>
+* Revision 1.0        2019-05-22       Liujie.Xie@TECH.BSP.Kernel.Sched      Created for UI First
+* Revision 2.0        2019-10-01       Liujie.Xie@TECH.BSP.Kernel.Sched      Add for UI First 2.0
+***********************************************************************************/
+
 #include <linux/version.h>
 #include <linux/sched.h>
 #include <linux/list.h>
@@ -7,14 +19,11 @@
 #include <trace/events/sched.h>
 #include <../sched/sched.h>
 
-#include <linux/fs.h>
-#include <linux/proc_fs.h>
-#include <asm/uaccess.h>
-#include <linux/module.h>
-
+#include <linux/oppocfs/oppo_cfs_common.h>
 
 int ux_min_sched_delay_granularity;     /*ux thread delay upper bound(ms)*/
-int ux_max_dynamic_granularity = 32;    /*ux dynamic max exist time(ms)*/
+int ux_max_dynamic_exist = 1000;        /*ux dynamic max exist time(ms)*/
+int ux_max_dynamic_granularity = 32;
 int ux_min_migration_delay = 10;        /*ux min migration delay time(ms)*/
 int ux_max_over_thresh = 2000; /* ms */
 #define S2NS_T 1000000
@@ -31,6 +40,26 @@ static int entity_over(struct sched_entity *a,
 	return (s64)(a->vruntime - b->vruntime) > (s64)ux_max_over_thresh * S2NS_T;
 }
 
+extern const struct sched_class fair_sched_class;
+/* return true: this task can be treated as a ux task, which means it will be sched first and so on */
+inline bool test_task_ux(struct task_struct *task)
+{
+    u64 now = 0;
+
+    if (task && task->sched_class != &fair_sched_class)
+        return false;
+
+    if (task && task->static_ux)
+        return true;
+
+    now = jiffies_to_nsecs(jiffies);
+    if (task && atomic64_read(&task->dynamic_ux) &&
+        (now - task->dynamic_ux_start) <= (u64)ux_max_dynamic_granularity * S2NS_T)
+        return true;
+
+    return false;
+}
+
 void enqueue_ux_thread(struct rq *rq, struct task_struct *p)
 {
 	struct list_head *pos, *n;
@@ -40,7 +69,7 @@ void enqueue_ux_thread(struct rq *rq, struct task_struct *p)
 		return;
 	}
 	p->enqueue_time = rq->clock;
-	if (p->static_ux || atomic64_read(&p->dynamic_ux)) {
+	if (test_task_ux(p)) {
 		list_for_each_safe(pos, n, &rq->ux_thread_list) {
 			if (pos == &p->ux_entry) {
 				exist = true;
@@ -56,7 +85,7 @@ void enqueue_ux_thread(struct rq *rq, struct task_struct *p)
 
 void dequeue_ux_thread(struct rq *rq, struct task_struct *p)
 {
-	struct list_head *pos, *n;
+    struct list_head *pos, *n;
 	u64 now =  jiffies_to_nsecs(jiffies);
 
 	if (!rq || !p) {
@@ -64,10 +93,8 @@ void dequeue_ux_thread(struct rq *rq, struct task_struct *p)
 	}
 	p->enqueue_time = 0;
 	if (!list_empty(&p->ux_entry)) {
-		list_for_each_safe(pos, n, &rq->ux_thread_list) {
-			if (atomic64_read(&p->dynamic_ux) && (now - p->dynamic_ux_start) > (u64)ux_max_dynamic_granularity * S2NS_T) {
-				atomic64_set(&p->dynamic_ux, 0);
-			}
+		if (atomic64_read(&p->dynamic_ux) && (now - p->dynamic_ux_start) > (u64)ux_max_dynamic_exist * S2NS_T) {
+			atomic64_set(&p->dynamic_ux, 0);
 		}
 		list_for_each_safe(pos, n, &rq->ux_thread_list) {
 			if (pos == &p->ux_entry) {
@@ -90,10 +117,13 @@ static struct task_struct *pick_first_ux_thread(struct rq *rq)
 		temp = list_entry(pos, struct task_struct, ux_entry);
 		/*ensure ux task in current rq cpu otherwise delete it*/
 		if (unlikely(task_cpu(temp) != rq->cpu)) {
-			printk(KERN_WARNING "task(%s,%d,%d) does not belong to cpu%d", temp->comm, task_cpu(temp), temp->policy, rq->cpu);
+			//ux_warn("task(%s,%d,%d) does not belong to cpu%d", temp->comm, task_cpu(temp), temp->policy, rq->cpu);
 			list_del_init(&temp->ux_entry);
 			continue;
 		}
+        if (!test_task_ux(temp)) {
+            continue;
+        }
 		if (leftmost_task == NULL) {
 			leftmost_task = temp;
 		} else if (entity_before(&temp->se, &leftmost_task->se)) {
@@ -213,7 +243,6 @@ void dynamic_ux_dequeue(struct task_struct *task, int type)
 	__dynamic_ux_dequeue(task, type);
 }
 
-extern const struct sched_class fair_sched_class;
 static void __dynamic_ux_enqueue(struct task_struct *task, int type, int depth)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,9,0)
@@ -225,12 +254,14 @@ static void __dynamic_ux_enqueue(struct task_struct *task, int type, int depth)
 	struct rq *rq = NULL;
 
 	rq = task_rq_lock(task, &flags);
+/*
 	if (task->sched_class != &fair_sched_class) {
 		task_rq_unlock(rq, task, &flags);
 		return;
 	}
+*/
 	if (unlikely(!list_empty(&task->ux_entry))) {
-		printk(KERN_WARNING "task(%s,%d,%d) is already in another list", task->comm, task->pid, task->policy);
+		//ux_warn("task(%s,%d,%d) is already in another list", task->comm, task->pid, task->policy);
 		task_rq_unlock(rq, task, &flags);
 		return;
 	}
@@ -238,7 +269,7 @@ static void __dynamic_ux_enqueue(struct task_struct *task, int type, int depth)
 	dynamic_ux_inc(task, type);
 	task->dynamic_ux_start = jiffies_to_nsecs(jiffies);
 	task->ux_depth = task->ux_depth > depth + 1 ? task->ux_depth : depth + 1;
-	if (task->state == TASK_RUNNING) {
+	if (task->state == TASK_RUNNING && task->sched_class == &fair_sched_class) {
 		exist = test_task_exist(task, &rq->ux_thread_list);
 		if (!exist) {
 			get_task_struct(task);
@@ -256,11 +287,6 @@ void dynamic_ux_enqueue(struct task_struct *task, int type, int depth)
 	__dynamic_ux_enqueue(task, type, depth);
 }
 
-inline bool test_task_ux(struct task_struct *task)
-{
-	return task && (task->static_ux || atomic64_read(&task->dynamic_ux));
-}
-
 inline bool test_task_ux_depth(int ux_depth)
 {
 	return ux_depth < UX_DEPTH_MAX;
@@ -268,7 +294,8 @@ inline bool test_task_ux_depth(int ux_depth)
 
 inline bool test_set_dynamic_ux(struct task_struct *tsk)
 {
-	return test_task_ux(tsk) && test_task_ux_depth(tsk->ux_depth);
+    return tsk && (tsk->static_ux || atomic64_read(&tsk->dynamic_ux)) &&
+        test_task_ux_depth(tsk->ux_depth);
 }
 
 static struct task_struct *check_ux_delayed(struct rq *rq)
@@ -281,7 +308,7 @@ static struct task_struct *check_ux_delayed(struct rq *rq)
 
 	list_for_each_safe(pos, n, ux_thread_list) {
 		tsk = list_entry(pos, struct task_struct, ux_entry);
-		if (tsk && (rq->clock - tsk->enqueue_time) >= (u64)ux_min_migration_delay * S2NS_T)
+		if (tsk && test_task_ux(tsk) && (rq->clock - tsk->enqueue_time) >= (u64)ux_min_migration_delay * S2NS_T)
 			return tsk;
 	}
 	return NULL;
@@ -431,4 +458,53 @@ void ux_init_rq_data(struct rq *rq)
 	rq->active_ux_balance = 0;
 	INIT_LIST_HEAD(&rq->ux_thread_list);
 }
-#endif /* VENDOR_EDIT */
+
+int ux_prefer_cpu[NR_CPUS] = {0};
+void ux_init_cpu_data(void) {
+    int i = 0;
+    int min_cpu = 0, ux_cpu = 0;
+
+    for (; i < NR_CPUS; ++i) {
+        ux_prefer_cpu[i] = -1;
+    }
+
+    ux_cpu = cpumask_weight(topology_core_cpumask(min_cpu));
+    if (ux_cpu == 0) {
+        ux_warn("failed to init ux cpu data\n");
+        return;
+    }
+
+    for (i = 0; i < NR_CPUS && ux_cpu < NR_CPUS; ++i) {
+        ux_prefer_cpu[i] = ux_cpu++;
+    }
+}
+
+bool test_ux_task_cpu(int cpu) {
+    return (cpu >= ux_prefer_cpu[0]);
+}
+
+void find_ux_task_cpu(struct task_struct *tsk, int *target_cpu) {
+    int i = 0;
+    int temp_cpu = 0;
+    struct rq *rq = NULL;
+
+    for (i = (NR_CPUS - 1); i >= 0; --i) {
+        temp_cpu = ux_prefer_cpu[i];
+        if (temp_cpu <= 0 || temp_cpu >= NR_CPUS)
+            continue;
+
+        rq = cpu_rq(temp_cpu);
+        if (!rq)
+            continue;
+
+        if (rq->curr->prio <= MAX_RT_PRIO)
+            continue;
+
+        if (!test_task_ux(rq->curr) && cpu_online(temp_cpu) && !cpu_isolated(temp_cpu)
+                && cpumask_test_cpu(temp_cpu, &tsk->cpus_allowed)) {
+            *target_cpu = temp_cpu;
+            return;
+        }
+    }
+    return;
+}

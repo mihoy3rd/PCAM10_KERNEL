@@ -8,7 +8,6 @@
  *
  */
 
-#define DEBUG 1
 #define pr_fmt(fmt) fmt
 
 #include <linux/workqueue.h>
@@ -28,8 +27,6 @@
 #include <asm/setup.h>
 
 #include "trace_output.h"
-
-#include "mtk_ftrace.h"
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM "TRACE_SYSTEM"
@@ -290,14 +287,15 @@ static void output_printk(struct trace_event_buffer *fbuffer)
 	spin_unlock_irqrestore(&tracepoint_iter_lock, flags);
 }
 
-void trace_event_buffer_commit(struct trace_event_buffer *fbuffer)
+void trace_event_buffer_commit(struct trace_event_buffer *fbuffer,
+			       unsigned long len)
 {
 	if (tracepoint_printk)
 		output_printk(fbuffer);
 
 	event_trigger_unlock_commit(fbuffer->trace_file, fbuffer->buffer,
 				    fbuffer->event, fbuffer->entry,
-				    fbuffer->flags, fbuffer->pc);
+				    fbuffer->flags, fbuffer->pc, len);
 }
 EXPORT_SYMBOL_GPL(trace_event_buffer_commit);
 
@@ -368,10 +366,6 @@ static int __ftrace_event_enable_disable(struct trace_event_file *file,
 	struct trace_array *tr = file->tr;
 	int ret = 0;
 	int disable;
-
-	if (call->name && ((file->flags & EVENT_FILE_FL_ENABLED) ^ enable))
-		pr_debug("[ftrace]event '%s' is %s\n", trace_event_name(call),
-			 enable ? "enabled" : "disabled");
 
 	switch (enable) {
 	case 0:
@@ -757,12 +751,7 @@ static int __ftrace_set_clr_event(struct trace_array *tr, const char *match,
 	return ret;
 }
 
-#ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/13, export the ftrace interface
 int ftrace_set_clr_event(struct trace_array *tr, char *buf, int set)
-#else
-static int ftrace_set_clr_event(struct trace_array *tr, char *buf, int set)
-#endif /* VENDOR_EDIT */
 {
 	char *event = NULL, *sub = NULL, *match;
 	int ret;
@@ -800,9 +789,9 @@ static int ftrace_set_clr_event(struct trace_array *tr, char *buf, int set)
 	return ret;
 }
 #ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/13, export the ftrace interface
+//fangpan@Swdp.shanghai, 2016/06/30, export the ftrace interface
 EXPORT_SYMBOL(ftrace_set_clr_event);
-#endif /* VENDOR_EDIT */
+#endif
 
 /**
  * trace_set_clr_event - enable or disable an event
@@ -860,15 +849,13 @@ ftrace_event_write(struct file *file, const char __user *ubuf,
 		parser.buffer[parser.idx] = 0;
 
 		ret = ftrace_set_clr_event(tr, parser.buffer + !set, set);
-		if (ret) {
-			pr_debug("[ftrace]fail to %s event '%s'\n",
-				 set ? "enable" : "disable",
-				 parser.buffer + !set);
-		}
+		if (ret)
+			goto out_put;
 	}
 
 	ret = read;
 
+ out_put:
 	trace_parser_put(&parser);
 
 	return ret;

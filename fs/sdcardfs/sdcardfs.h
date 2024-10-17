@@ -654,12 +654,7 @@ static inline bool str_n_case_eq(const char *s1, const char *s2, size_t len)
 
 static inline bool qstr_case_eq(const struct qstr *q1, const struct qstr *q2)
 {
-#ifdef VENDOR_EDIT
-//Jiemin.Zhu@PSW.Android.SdcardFs, 2018/04/13, Add for avoid creating cases-sensitive duplicate entries
 	return q1->len == q2->len && str_n_case_eq(q1->name, q2->name, q2->len);
-#else
-	return q1->len == q2->len && str_case_eq(q1->name, q2->name);
-#endif /* VENDOR_EDIT */
 }
 
 #define QSTR_LITERAL(string) QSTR_INIT(string, sizeof(string)-1)

@@ -1,5 +1,16 @@
-#ifdef VENDOR_EDIT
-// Liujie.Xie@TECH.Kernel.Sched, 2019/05/22, add for ui first
+/**********************************************************************************
+* Copyright (c), 2008-2019 , Guangdong OPPO Mobile Comm Corp., Ltd.
+* VENDOR_EDIT
+* File: oppo_cfs_rwsem.c
+* Description: UI First
+* Version: 2.0
+* Date: 2019-10-01
+* Author: Liujie.Xie@TECH.BSP.Kernel.Sched
+* ------------------------------ Revision History: --------------------------------
+* <version>           <date>                <author>                            <desc>
+* Revision 1.0        2019-05-22       Liujie.Xie@TECH.BSP.Kernel.Sched      Created for UI First
+* Revision 2.0        2019-10-01       Liujie.Xie@TECH.BSP.Kernel.Sched      Add for UI First 2.0
+***********************************************************************************/
 
 #include <linux/sched.h>
 #include <linux/list.h>
@@ -43,11 +54,11 @@ static void rwsem_list_add_ux(struct list_head *entry, struct list_head *head)
 
 void rwsem_list_add(struct task_struct *tsk, struct list_head *entry, struct list_head *head)
 {
-	bool is_vip = test_set_dynamic_ux(tsk);
+	bool is_ux = test_task_ux(tsk);
 	if (!entry || !head) {
 		return;
 	}
-	if (is_vip) {
+	if (is_ux) {
 		rwsem_list_add_ux(entry, head);
 	} else {
 		list_add_tail(entry, head);
@@ -73,5 +84,3 @@ void rwsem_dynamic_ux_dequeue(struct rw_semaphore *sem, struct task_struct *tsk)
 		sem->ux_dep_task = NULL;
 	}
 }
-
-#endif

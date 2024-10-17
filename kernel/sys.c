@@ -516,10 +516,6 @@ SYSCALL_DEFINE2(setreuid, uid_t, ruid, uid_t, euid)
 	if (retval < 0)
 		goto error;
 
-#ifdef CONFIG_MTK_ROOT_TRACE
-	sec_trace_root(old, new);
-#endif
-
 	return commit_creds(new);
 
 error:
@@ -572,10 +568,6 @@ SYSCALL_DEFINE1(setuid, uid_t, uid)
 	retval = security_task_fix_setuid(new, old, LSM_SETID_ID);
 	if (retval < 0)
 		goto error;
-
-#ifdef CONFIG_MTK_ROOT_TRACE
-	sec_trace_root(old, new);
-#endif
 
 	return commit_creds(new);
 
@@ -646,10 +638,6 @@ SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
 	retval = security_task_fix_setuid(new, old, LSM_SETID_RES);
 	if (retval < 0)
 		goto error;
-
-#ifdef CONFIG_MTK_ROOT_TRACE
-	sec_trace_root(old, new);
-#endif
 
 	return commit_creds(new);
 

@@ -617,11 +617,8 @@ void tracing_start_cmdline_record(void);
 void tracing_stop_cmdline_record(void);
 int register_tracer(struct tracer *type);
 int is_tracing_stopped(void);
-
-loff_t tracing_lseek(struct file *file, loff_t offset, int whence);
-
 #ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
+//fangpan@Swdp.shanghai, 2016/06/30, export the ftrace interface
 /* add more interface for kernel ftrace collect function*/
 extern int trace_array_get(struct trace_array *this_tr);
 extern void trace_array_put(struct trace_array *this_tr);
@@ -631,10 +628,10 @@ extern int trace_set_options(struct trace_array *tr, char *option);
 extern int get_system_default_ftrace(struct trace_array ** tr_ret);
 extern ssize_t tracing_resize_ring_buffer(struct trace_array *tr, unsigned long size, int cpu_id);
 extern int tracing_clock_update(struct trace_array *tr, const char *buf);
-extern int new_instance_create(const char *name);
-extern int instance_delete(const char *name);
 extern int ftrace_set_clr_event(struct trace_array *tr, char *buf, int set);
-#endif /* VENDOR_EDIT */
+#endif
+
+loff_t tracing_lseek(struct file *file, loff_t offset, int whence);
 
 extern cpumask_var_t __read_mostly tracing_buffer_mask;
 

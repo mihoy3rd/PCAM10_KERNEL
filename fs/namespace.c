@@ -27,7 +27,6 @@
 #include "pnode.h"
 #include "internal.h"
 
-
 /* Maximum number of mounts in a mount namespace */
 unsigned int sysctl_mount_max __read_mostly = 100000;
 
@@ -1423,7 +1422,7 @@ static void namespace_unlock(void)
 	if (likely(hlist_empty(&head)))
 		return;
 
-	synchronize_rcu_expedited();
+	synchronize_rcu();
 
 	group_pin_kill(&head);
 }
@@ -1620,6 +1619,8 @@ static int do_umount(struct mount *mnt, int flags)
 	}
 	unlock_mount_hash();
 	namespace_unlock();
+	if (retval == -EBUSY)
+		global_filetable_delayed_print(mnt);
 	return retval;
 }
 
@@ -2792,7 +2793,6 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	struct path path;
 	int retval = 0;
 	int mnt_flags = 0;
-
 
 	/* Discard magic */
 	if ((flags & MS_MGC_MSK) == MS_MGC_VAL)

@@ -25,11 +25,16 @@
 #include <linux/posix-timers.h>
 #include <linux/workqueue.h>
 #include <linux/freezer.h>
-#include <linux/ratelimit.h>
+
+#ifdef CONFIG_MSM_PM
+#include "lpm-levels.h"
+#endif
+
 #ifdef VENDOR_EDIT
-//Yunqing.Zeng@BSP.Power.Basic 2017/12/12 add for count alarm times
-#include <linux/fb.h>
-#endif /* VENDOR_EDIT */
+//Fanhong.Kong@ProDrv.CHG,modified 2016.08.13 for 2 minutes may not power up
+#define ALARM_MINIMUM 120
+#define ALARM_DELTA 60
+#endif /*power off alarm timing*/
 
 /**
  * struct alarm_base - Alarm timer bases
@@ -58,6 +63,19 @@ static struct rtc_timer		rtctimer;
 static struct rtc_device	*rtcdev;
 static DEFINE_SPINLOCK(rtcdev_lock);
 
+
+static void alarmtimer_triggered_func(void *p)
+{
+	struct rtc_device *rtc = rtcdev;
+
+	if (!(rtc->irq_data & RTC_AF))
+		return;
+	__pm_wakeup_event(ws, 2 * MSEC_PER_SEC);
+}
+
+static struct rtc_task alarmtimer_rtc_task = {
+	.func = alarmtimer_triggered_func
+};
 /**
  * alarmtimer_get_rtcdev - Return selected rtcdevice
  *
@@ -68,7 +86,7 @@ static DEFINE_SPINLOCK(rtcdev_lock);
 struct rtc_device *alarmtimer_get_rtcdev(void)
 {
 	unsigned long flags;
-	struct rtc_device *ret;
+	struct rtc_device *ret = NULL;
 
 	spin_lock_irqsave(&rtcdev_lock, flags);
 	ret = rtcdev;
@@ -82,24 +100,36 @@ static int alarmtimer_rtc_add_device(struct device *dev,
 				struct class_interface *class_intf)
 {
 	unsigned long flags;
+	int err = 0;
 	struct rtc_device *rtc = to_rtc_device(dev);
-
 	if (rtcdev)
 		return -EBUSY;
-
 	if (!rtc->ops->set_alarm)
-		return -1;
-	if (!device_may_wakeup(rtc->dev.parent))
 		return -1;
 
 	spin_lock_irqsave(&rtcdev_lock, flags);
 	if (!rtcdev) {
+		err = rtc_irq_register(rtc, &alarmtimer_rtc_task);
+		if (err)
+			goto rtc_irq_reg_err;
 		rtcdev = rtc;
 		/* hold a reference so it doesn't go away */
 		get_device(dev);
 	}
+
+rtc_irq_reg_err:
 	spin_unlock_irqrestore(&rtcdev_lock, flags);
-	return 0;
+	return err;
+
+}
+
+static void alarmtimer_rtc_remove_device(struct device *dev,
+				struct class_interface *class_intf)
+{
+	if (rtcdev && dev == &rtcdev->dev) {
+		rtc_irq_unregister(rtcdev, &alarmtimer_rtc_task);
+		rtcdev = NULL;
+	}
 }
 
 static inline void alarmtimer_rtc_timer_init(void)
@@ -109,6 +139,7 @@ static inline void alarmtimer_rtc_timer_init(void)
 
 static struct class_interface alarmtimer_rtc_interface = {
 	.add_dev = &alarmtimer_rtc_add_device,
+	.remove_dev = &alarmtimer_rtc_remove_device,
 };
 
 static int alarmtimer_rtc_interface_setup(void)
@@ -142,18 +173,8 @@ static inline void alarmtimer_rtc_timer_init(void) { }
  */
 static void alarmtimer_enqueue(struct alarm_base *base, struct alarm *alarm)
 {
-	static DEFINE_RATELIMIT_STATE(ratelimit, HZ - 1, 5);
-
 	if (alarm->state & ALARMTIMER_STATE_ENQUEUED)
 		timerqueue_del(&base->timerqueue, &alarm->node);
-
-	if (__ratelimit(&ratelimit)) {
-		ratelimit.begin = jiffies;
-		#if defined(VENDOR_EDIT) && !defined(OPPO_RELEASE_FLAG)
-		/*xing.xiong@BSP.Kernel.Debug, 2018/12/26, Modify for limiting kernel log*/
-		pr_notice("%s, %lld\n", __func__, alarm->node.expires.tv64);
-		#endif
-	}
 
 	timerqueue_add(&base->timerqueue, &alarm->node);
 	alarm->state |= ALARMTIMER_STATE_ENQUEUED;
@@ -177,14 +198,14 @@ static void alarmtimer_dequeue(struct alarm_base *base, struct alarm *alarm)
 	alarm->state &= ~ALARMTIMER_STATE_ENQUEUED;
 }
 
-
 #ifdef VENDOR_EDIT
 //Jingchun.Wang@Kernel.Driver, 2017/04/28,
 //add for count alarm times
 static atomic_t alarm_atomic = ATOMIC_INIT(0);
 static atomic_t alarm_sleep_busy_atomic = ATOMIC_INIT(0);
-static u64 alarm_count = 0;
-static u64 wakeup_source_count_rtc = 0;
+extern u64 alarm_count;
+extern u64 wakeup_source_count_rtc;
+extern enum alarmtimer_restart	(*net_alarm_func)(struct alarm *, ktime_t now);
 #endif /*VENDOR_EDIT*/
 
 /**
@@ -214,9 +235,13 @@ static enum hrtimer_restart alarmtimer_fired(struct hrtimer *timer)
 	#ifdef VENDOR_EDIT
 	//Yunqing.Zeng@BSP.Power.Basic 2017/12/12 add for count alarm times
 	if (alarm->type == ALARM_BOOTTIME) {
-		alarm_count++;
+		if(!((alarm->function) && (alarm->function == net_alarm_func)))    //Yunqing.Zeng@BSP.Power.Basic 2017/12/12 add for filter net alarm
+			alarm_count++;
+
 		if(atomic_read(&alarm_atomic) || atomic_read(&alarm_sleep_busy_atomic)) {
-			wakeup_source_count_rtc++;
+			if(!((alarm->function) && (alarm->function == net_alarm_func))) //Yunqing.Zeng@BSP.Power.Basic 2017/12/12 add for filter net alarm
+				wakeup_source_count_rtc++;
+
 			if(atomic_read(&alarm_sleep_busy_atomic)) {
 				atomic_set(&alarm_sleep_busy_atomic, 0);
 			}
@@ -260,14 +285,15 @@ EXPORT_SYMBOL_GPL(alarm_expires_remaining);
  * set an rtc timer to fire that far into the future, which
  * will wake us from suspend.
  */
+#if defined(CONFIG_RTC_DRV_QPNP) && defined(CONFIG_MSM_PM)
 static int alarmtimer_suspend(struct device *dev)
 {
-	struct rtc_time tm, time;
-	ktime_t min, now, temp;
+	struct rtc_time tm;
+	ktime_t min, now;
 	unsigned long flags;
 	struct rtc_device *rtc;
 	int i;
-	int ret;
+	int ret = 0;
 
 	spin_lock_irqsave(&freezer_delta_lock, flags);
 	min = freezer_delta;
@@ -297,10 +323,8 @@ static int alarmtimer_suspend(struct device *dev)
 		if (!next)
 			continue;
 		delta = ktime_sub(next->expires, base->gettime());
-		if (!min.tv64 || (delta.tv64 < min.tv64)) {
+		if (!min.tv64 || (delta.tv64 < min.tv64))
 			min = delta;
-			temp = next->expires;
-		}
 	}
 	if (min.tv64 == 0)
 		return 0;
@@ -315,19 +339,72 @@ static int alarmtimer_suspend(struct device *dev)
 		return -EBUSY;
 	}
 
+	/* Setup a timer to fire that far in the future */
+	rtc_timer_cancel(rtc, &rtctimer);
+	rtc_read_time(rtc, &tm);
+	now = rtc_tm_to_ktime(tm);
+	now = ktime_add(now, min);
+	if (poweron_alarm) {
+		uint64_t msec = 0;
+
+		msec = ktime_to_ms(min);
+		lpm_suspend_wake_time(msec);
+	} else {
+		/* Set alarm, if in the past reject suspend briefly to handle */
+		ret = rtc_timer_start(rtc, &rtctimer, now, ktime_set(0, 0));
+		if (ret < 0)
+			__pm_wakeup_event(ws, MSEC_PER_SEC);
+	}
+	return ret;
+}
+#else
+static int alarmtimer_suspend(struct device *dev)
+{
+	struct rtc_time tm;
+	ktime_t min, now;
+	unsigned long flags;
+	struct rtc_device *rtc;
+	int i;
+	int ret;
+
+	spin_lock_irqsave(&freezer_delta_lock, flags);
+	min = freezer_delta;
+	freezer_delta = ktime_set(0, 0);
+	spin_unlock_irqrestore(&freezer_delta_lock, flags);
+
+	rtc = alarmtimer_get_rtcdev();
+	/* If we have no rtcdev, just return */
+	if (!rtc)
+		return 0;
+
+	/* Find the soonest timer to expire*/
+	for (i = 0; i < ALARM_NUMTYPE; i++) {
+		struct alarm_base *base = &alarm_bases[i];
+		struct timerqueue_node *next;
+		ktime_t delta;
+
+		spin_lock_irqsave(&base->lock, flags);
+		next = timerqueue_getnext(&base->timerqueue);
+		spin_unlock_irqrestore(&base->lock, flags);
+		if (!next)
+			continue;
+		delta = ktime_sub(next->expires, base->gettime());
+		if (!min.tv64 || (delta.tv64 < min.tv64))
+			min = delta;
+	}
+	if (min.tv64 == 0)
+		return 0;
+
+	if (ktime_to_ns(min) < 2 * NSEC_PER_SEC) {
+		__pm_wakeup_event(ws, 2 * MSEC_PER_SEC);
+		return -EBUSY;
+	}
+
 	/* Setup an rtc timer to fire that far in the future */
 	rtc_timer_cancel(rtc, &rtctimer);
 	rtc_read_time(rtc, &tm);
 	now = rtc_tm_to_ktime(tm);
 	now = ktime_add(now, min);
-
-	time = rtc_ktime_to_tm(now);
-	pr_notice_ratelimited("%s convert %lld to %04d/%02d/%02d %02d:%02d:%02d (now = %04d/%02d/%02d %02d:%02d:%02d)\n",
-			__func__, temp.tv64,
-			time.tm_year+1900, time.tm_mon+1, time.tm_mday,
-			time.tm_hour, time.tm_min, time.tm_sec,
-			tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
-			tm.tm_hour, tm.tm_min, tm.tm_sec);
 
 	/* Set alarm, if in the past reject suspend briefly to handle */
 	ret = rtc_timer_start(rtc, &rtctimer, now, ktime_set(0, 0));
@@ -335,18 +412,33 @@ static int alarmtimer_suspend(struct device *dev)
 		__pm_wakeup_event(ws, MSEC_PER_SEC);
 	return ret;
 }
-
-#ifdef VENDOR_EDIT
-//Yunqing.Zeng@BSP.Power.Basic 2017/12/12 add for count alarm times
+#endif
 static int alarmtimer_resume(struct device *dev)
 {
+	struct rtc_device *rtc;
+
+	#ifdef VENDOR_EDIT
+	//Jingchun.Wang@Kernel.Driver, 2017/04/28,
+	//add for count alarm times
 	atomic_set(&alarm_atomic, 0);
+	#endif /*VENDOR_EDIT*/
+
+	rtc = alarmtimer_get_rtcdev();
+	/* If we have no rtcdev, just return */
+	if (!rtc)
+		return 0;
+	rtc_timer_cancel(rtc, &rtctimer);
+
 	return 0;
 }
-#endif /* VENDOR_EDIT */
 
 #else
 static int alarmtimer_suspend(struct device *dev)
+{
+	return 0;
+}
+
+static int alarmtimer_resume(struct device *dev)
 {
 	return 0;
 }
@@ -880,46 +972,10 @@ out:
 }
 
 
-#ifdef VENDOR_EDIT
-//Yunqing.Zeng@BSP.Power.Basic 2017/12/12 add for count alarm times
-static int alarm_fb_notify_callback(struct notifier_block *nb, unsigned long val, void *data)
-{
-	struct fb_event *evdata = data;
-	unsigned int blank;
-
-	if (val != FB_EVENT_BLANK)
-		return 0;
-
-	if (evdata && evdata->data && val == FB_EVENT_BLANK) {
-		blank = *(int *) (evdata->data);
-		switch (blank) {
-		case FB_BLANK_POWERDOWN: //screen off
-			alarm_count = 0;
-			wakeup_source_count_rtc = 0;
-			break;
-		case FB_BLANK_UNBLANK:   //screen on
-			break;
-		default:
-			break;
-		}
-	}
-	return NOTIFY_OK;
-}
-
-static struct notifier_block alarm_fb_notify_block = {
-	.notifier_call =  alarm_fb_notify_callback,
-};
-#endif /* VENDOR_EDIT */
-
 /* Suspend hook structures */
 static const struct dev_pm_ops alarmtimer_pm_ops = {
 	.suspend = alarmtimer_suspend,
-	#ifdef VENDOR_EDIT
-	#ifdef CONFIG_RTC_CLASS
-	//Yunqing.Zeng@BSP.Power.Basic 2017/12/12 add for count alarm times
 	.resume = alarmtimer_resume,
-	#endif
-	#endif /*VENDOR_EDIT*/
 };
 
 static struct platform_driver alarmtimer_driver = {
@@ -979,15 +1035,6 @@ static int __init alarmtimer_init(void)
 		goto out_drv;
 	}
 	ws = wakeup_source_register("alarmtimer");
-
-	#ifdef VENDOR_EDIT
-	//Yunqing.Zeng@BSP.Power.Basic 2017/12/12 add for count alarm times
-	error = fb_register_client(&alarm_fb_notify_block);
-	if (error) {
-		pr_info("%s error: register notifier failed!\n", __func__);
-	}
-	#endif /* VENDOR_EDIT */
-
 	return 0;
 
 out_drv:

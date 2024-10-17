@@ -115,12 +115,12 @@ EXPORT_SYMBOL(synchronize_irq);
 #ifdef CONFIG_SMP
 cpumask_var_t irq_default_affinity;
 
-static int __irq_can_set_affinity(struct irq_desc *desc)
+static bool __irq_can_set_affinity(struct irq_desc *desc)
 {
 	if (!desc || !irqd_can_balance(&desc->irq_data) ||
 	    !desc->irq_data.chip || !desc->irq_data.chip->irq_set_affinity)
-		return 0;
-	return 1;
+		return false;
+	return true;
 }
 
 /**
@@ -131,6 +131,21 @@ static int __irq_can_set_affinity(struct irq_desc *desc)
 int irq_can_set_affinity(unsigned int irq)
 {
 	return __irq_can_set_affinity(irq_to_desc(irq));
+}
+
+/**
+ * irq_can_set_affinity_usr - Check if affinity of a irq can be set from user space
+ * @irq:	Interrupt to check
+ *
+ * Like irq_can_set_affinity() above, but additionally checks for the
+ * AFFINITY_MANAGED flag.
+ */
+bool irq_can_set_affinity_usr(unsigned int irq)
+{
+	struct irq_desc *desc = irq_to_desc(irq);
+
+	return __irq_can_set_affinity(desc) &&
+		!irqd_affinity_is_managed(&desc->irq_data);
 }
 
 /**
@@ -318,6 +333,9 @@ irq_set_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify)
 	old_notify = desc->affinity_notify;
 	desc->affinity_notify = notify;
 	raw_spin_unlock_irqrestore(&desc->lock, flags);
+
+	if (!notify && old_notify)
+		cancel_work_sync(&old_notify->work);
 
 	if (old_notify)
 		kref_put(&old_notify->kref, old_notify->release);
@@ -1012,6 +1030,13 @@ static int irq_setup_forced_threading(struct irqaction *new)
 	if (new->flags & (IRQF_NO_THREAD | IRQF_PERCPU | IRQF_ONESHOT))
 		return 0;
 
+	/*
+	 * No further action required for interrupts which are requested as
+	 * threaded interrupts already
+	 */
+	if (new->handler == irq_default_primary_handler)
+		return 0;
+
 	new->flags |= IRQF_ONESHOT;
 
 	/*
@@ -1019,7 +1044,7 @@ static int irq_setup_forced_threading(struct irqaction *new)
 	 * thread handler. We force thread them as well by creating a
 	 * secondary action.
 	 */
-	if (new->handler != irq_default_primary_handler && new->thread_fn) {
+	if (new->handler && new->thread_fn) {
 		/* Allocate the secondary action */
 		new->secondary = kzalloc(sizeof(struct irqaction), GFP_KERNEL);
 		if (!new->secondary)
@@ -1744,19 +1769,6 @@ out:
 	irq_put_desc_unlock(desc, flags);
 }
 EXPORT_SYMBOL_GPL(enable_percpu_irq);
-
-void _disable_percpu_irq(unsigned int irq, unsigned int cpu)
-{
-	unsigned long flags;
-	struct irq_desc *desc = irq_get_desc_lock(irq, &flags, IRQ_GET_DESC_CHECK_PERCPU);
-
-	if (!desc)
-		return;
-
-	irq_percpu_disable(desc, cpu);
-	irq_put_desc_unlock(desc, flags);
-}
-EXPORT_SYMBOL_GPL(_disable_percpu_irq);
 
 void disable_percpu_irq(unsigned int irq)
 {

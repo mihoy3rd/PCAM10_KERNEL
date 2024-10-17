@@ -2505,7 +2505,7 @@ static void layout_symtab(struct module *mod, struct load_info *info)
 
 	/* We'll tack temporary mod_kallsyms on the end. */
 	mod->init_size = ALIGN(mod->init_size,
-			       __alignof__(struct mod_kallsyms));
+				      __alignof__(struct mod_kallsyms));
 	info->mod_kallsyms_init_off = mod->init_size;
 	mod->init_size += sizeof(struct mod_kallsyms);
 	mod->init_size = debug_align(mod->init_size);
@@ -2585,7 +2585,13 @@ void * __weak module_alloc(unsigned long size)
 	return vmalloc_exec(size);
 }
 
-#ifdef CONFIG_DEBUG_KMEMLEAK
+#if defined(CONFIG_DEBUG_KMEMLEAK) && defined(CONFIG_DEBUG_MODULE_SCAN_OFF)
+static void kmemleak_load_module(const struct module *mod,
+				 const struct load_info *info)
+{
+	kmemleak_no_scan(mod->module_core);
+}
+#elif defined(CONFIG_DEBUG_KMEMLEAK)
 static void kmemleak_load_module(const struct module *mod,
 				 const struct load_info *info)
 {
@@ -3547,10 +3553,7 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	flush_module_icache(mod);
 
 	/* Now copy in args */
-	if (uargs)
-		mod->args = strndup_user(uargs, ~0UL >> 1);
-	else
-		mod->args = kstrdup("", GFP_KERNEL);
+	mod->args = strndup_user(uargs, ~0UL >> 1);
 	if (IS_ERR(mod->args)) {
 		err = PTR_ERR(mod->args);
 		goto free_arch_cleanup;
@@ -3658,31 +3661,6 @@ SYSCALL_DEFINE3(init_module, void __user *, umod,
 
 	return load_module(&info, uargs, 0);
 }
-
-#ifdef CONFIG_MNTL_SUPPORT
-int init_module_mem(void *buf, int size)
-{
-	int err;
-	struct load_info info = { };
-
-	err = may_init_module();
-	if (err) {
-		pr_debug("may_init_module: err=%d\n", err);
-		return err;
-	}
-	pr_debug("init_module_mem: buf=%p, len=%d\n",
-			buf, size);
-	err = security_kernel_module_from_file(NULL);
-		if (err)
-			return err;
-
-	info.hdr = buf;
-	info.len = size;
-
-	return load_module(&info, NULL, 0);
-}
-EXPORT_SYMBOL(init_module_mem);
-#endif
 
 SYSCALL_DEFINE3(finit_module, int, fd, const char __user *, uargs, int, flags)
 {
@@ -4167,51 +4145,12 @@ void print_modules(void)
 	list_for_each_entry_rcu(mod, &modules, list) {
 		if (mod->state == MODULE_STATE_UNFORMED)
 			continue;
-		pr_cont(" %s %p %p %d %d %s", mod->name, mod->module_core, mod->module_init,
-				mod->core_size, mod->init_size, module_flags(mod, buf));
+		pr_cont(" %s%s", mod->name, module_flags(mod, buf));
 	}
 	preempt_enable();
 	if (last_unloaded_module[0])
 		pr_cont(" [last unloaded: %s]", last_unloaded_module);
 	pr_cont("\n");
-}
-
-int __weak do_translation_fault_preconditioner(unsigned long addr)
-{
-	return -1;
-}
-
-/* MUST ensure called when preempt disabled already */
-int save_modules(char *mbuf, int mbufsize)
-{
-	struct module *mod;
-	char buf[8];
-	/*int off = 0;*/
-	int sz = 0;
-
-	if (mbuf == NULL || mbufsize <= 0) {
-		pr_cont("mrdump: module info buffer wrong(size:%d)\n", mbufsize);
-		return 0;
-	}
-
-	memset(mbuf, '\0', mbufsize);
-	sz += snprintf(mbuf + sz, mbufsize - sz, "Modules linked in:");
-	list_for_each_entry_rcu(mod, &modules, list) {
-		do_translation_fault_preconditioner((unsigned long)mod);
-		if (mod->state == MODULE_STATE_UNFORMED)
-			continue;
-		if (sz >= mbufsize) {
-			pr_cont("mrdump: module info buffer full(size:%d)\n", mbufsize);
-			break;
-		}
-		sz += snprintf(mbuf + sz, mbufsize - sz, " %s %p %p %d %d %s", mod->name, mod->module_core,
-				mod->module_init, mod->core_size, mod->init_size, module_flags(mod, buf));
-	}
-	if (last_unloaded_module[0] && sz < mbufsize)
-		sz += snprintf(mbuf + sz, mbufsize - sz, " [last unloaded: %s]", last_unloaded_module);
-	if (sz < mbufsize)
-		sz += snprintf(mbuf + sz, mbufsize - sz, "\n");
-	return sz;
 }
 
 #ifdef CONFIG_MODVERSIONS

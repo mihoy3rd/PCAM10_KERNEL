@@ -224,7 +224,6 @@ source "fs/pstore/Kconfig"
 source "fs/sysv/Kconfig"
 source "fs/ufs/Kconfig"
 source "fs/exofs/Kconfig"
-source "fs/rawfs/Kconfig"
 
 endif # MISC_FILESYSTEMS
 
@@ -284,6 +283,11 @@ endif # NETWORK_FILESYSTEMS
 
 source "fs/nls/Kconfig"
 source "fs/dlm/Kconfig"
+
+config FILE_TABLE_DEBUG
+	bool "Enable FILE_TABLE_DEBUG"
+	help
+	  This option enables debug of the open files using a global filetable
 
 #ifdef VENDOR_EDIT
 #Xinhua.Song@BSP.Driver, 2015/04/03, Add for exfat filesystem

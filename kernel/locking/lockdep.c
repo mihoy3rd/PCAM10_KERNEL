@@ -25,8 +25,6 @@
  * Thanks to Arjan van de Ven for coming up with the initial idea of
  * mapping lock dependencies runtime.
  */
-#define pr_fmt(fmt)	"lockdep: " fmt
-
 #define DISABLE_BRANCH_PROFILING
 #include <linux/mutex.h>
 #include <linux/sched.h>
@@ -47,22 +45,13 @@
 #include <linux/bitops.h>
 #include <linux/gfp.h>
 #include <linux/kmemcheck.h>
-#include <linux/printk.h>
-#include <mt-plat/aee.h>
 
 #include <asm/sections.h>
 
 #include "lockdep_internals.h"
 
-#ifdef MTK_LOCK_DEBUG
-#include "sched.h"
-#endif
-
 #define CREATE_TRACE_POINTS
 #include <trace/events/lock.h>
-#ifdef CONFIG_PREEMPT_MONITOR
-#include "mtk_sched_mon.h"
-#endif
 
 #ifdef CONFIG_PROVE_LOCKING
 int prove_locking = 1;
@@ -78,29 +67,6 @@ module_param(lock_stat, int, 0644);
 #define lock_stat 0
 #endif
 
-
-static void lockdep_aee(void)
-{
-#ifdef MTK_LOCK_DEBUG
-	char aee_str[40];
-	int cpu;
-	struct rq *rq;
-
-	cpu = raw_smp_processor_id();
-	rq = cpu_rq(cpu);
-
-	if (!raw_spin_is_locked(&rq->lock)) {
-		snprintf(aee_str, 40, "[%s]LockProve Warning", current->comm);
-		#if defined(CONFIG_MTK_AEE_FEATURE)
-		aee_kernel_warning_api(__FILE__, __LINE__,
-			DB_OPT_DUMMY_DUMP | DB_OPT_FTRACE,
-			aee_str, "LockProve Debug\n");
-		#endif
-	}
-#else
-	return;
-#endif
-}
 /*
  * lockdep_lock: protects the lockdep graph, the hashes and the
  *               class/list/hash allocators.
@@ -452,7 +418,6 @@ static int save_trace(struct stack_trace *trace)
 		if (!debug_locks_off_graph_unlock())
 			return 0;
 
-		lockdep_aee();
 		print_lockdep_off("BUG: MAX_STACK_TRACE_ENTRIES too low!");
 		dump_stack();
 
@@ -601,7 +566,7 @@ static void print_lock(struct held_lock *hlock)
 	}
 
 	print_lock_name(lock_classes + class_idx - 1);
-	pr_emerg(", at: ");
+	printk(", at: ");
 	print_ip_sym(hlock->acquire_ip);
 }
 
@@ -613,9 +578,7 @@ static void lockdep_print_held_locks(struct task_struct *curr)
 		printk("no locks held by %s/%d.\n", curr->comm, task_pid_nr(curr));
 		return;
 	}
-	if (curr->state == TASK_RUNNING)
-		pr_emerg("[Caution!] %s/%d is runable state\n", curr->comm, curr->pid);
-	pr_emerg("%d lock%s held by %s/%d:\n",
+	printk("%d lock%s held by %s/%d:\n",
 		depth, depth > 1 ? "s" : "", curr->comm, task_pid_nr(curr));
 
 	for (i = 0; i < depth; i++) {
@@ -891,7 +854,6 @@ static struct lock_list *alloc_list_entry(void)
 		if (!debug_locks_off_graph_unlock())
 			return NULL;
 
-		lockdep_aee();
 		print_lockdep_off("BUG: MAX_LOCKDEP_ENTRIES too low!");
 		dump_stack();
 		return NULL;
@@ -1203,9 +1165,6 @@ print_circular_bug_header(struct lock_list *entry, unsigned int depth,
 	if (debug_locks_silent)
 		return 0;
 
-	/* Add by Mtk */
-	lockdep_aee();
-
 	printk("\n");
 	printk("======================================================\n");
 	printk("[ INFO: possible circular locking dependency detected ]\n");
@@ -1305,11 +1264,11 @@ unsigned long lockdep_count_forward_deps(struct lock_class *class)
 	this.parent = NULL;
 	this.class = class;
 
-	local_irq_save(flags);
+	raw_local_irq_save(flags);
 	arch_spin_lock(&lockdep_lock);
 	ret = __lockdep_count_forward_deps(&this);
 	arch_spin_unlock(&lockdep_lock);
-	local_irq_restore(flags);
+	raw_local_irq_restore(flags);
 
 	return ret;
 }
@@ -1332,11 +1291,11 @@ unsigned long lockdep_count_backward_deps(struct lock_class *class)
 	this.parent = NULL;
 	this.class = class;
 
-	local_irq_save(flags);
+	raw_local_irq_save(flags);
 	arch_spin_lock(&lockdep_lock);
 	ret = __lockdep_count_backward_deps(&this);
 	arch_spin_unlock(&lockdep_lock);
-	local_irq_restore(flags);
+	raw_local_irq_restore(flags);
 
 	return ret;
 }
@@ -1543,9 +1502,6 @@ print_bad_irq_dependency(struct task_struct *curr,
 {
 	if (!debug_locks_off_graph_unlock() || debug_locks_silent)
 		return 0;
-
-	/* Add by Mtk */
-	lockdep_aee();
 
 	printk("\n");
 	printk("======================================================\n");
@@ -1776,9 +1732,6 @@ print_deadlock_bug(struct task_struct *curr, struct held_lock *prev,
 {
 	if (!debug_locks_off_graph_unlock() || debug_locks_silent)
 		return 0;
-
-	/* Add by Mtk */
-	lockdep_aee();
 
 	printk("\n");
 	printk("=============================================\n");
@@ -2284,9 +2237,6 @@ print_usage_bug(struct task_struct *curr, struct held_lock *this,
 	if (!debug_locks_off_graph_unlock() || debug_locks_silent)
 		return 0;
 
-	/* Add by Mtk */
-	lockdep_aee();
-
 	printk("\n");
 	printk("=================================\n");
 	printk("[ INFO: inconsistent lock state ]\n");
@@ -2351,9 +2301,6 @@ print_irq_inversion_bug(struct task_struct *curr,
 
 	if (!debug_locks_off_graph_unlock() || debug_locks_silent)
 		return 0;
-
-	/* Add by Mtk */
-	lockdep_aee();
 
 	printk("\n");
 	printk("=========================================================\n");
@@ -2669,9 +2616,6 @@ EXPORT_SYMBOL(trace_hardirqs_on_caller);
 
 void trace_hardirqs_on(void)
 {
-#ifdef CONFIG_PREEMPT_MONITOR
-	MT_trace_hardirqs_on();
-#endif
 	trace_hardirqs_on_caller(CALLER_ADDR0);
 }
 EXPORT_SYMBOL(trace_hardirqs_on);
@@ -2710,9 +2654,6 @@ EXPORT_SYMBOL(trace_hardirqs_off_caller);
 
 void trace_hardirqs_off(void)
 {
-#ifdef CONFIG_PREEMPT_MONITOR
-	MT_trace_hardirqs_off();
-#endif
 	trace_hardirqs_off_caller(CALLER_ADDR0);
 }
 EXPORT_SYMBOL(trace_hardirqs_off);
@@ -3094,9 +3035,6 @@ print_lock_nested_lock_not_held(struct task_struct *curr,
 	if (debug_locks_silent)
 		return 0;
 
-	/* Add by Mtk */
-	lockdep_aee();
-
 	printk("\n");
 	printk("==================================\n");
 	printk("[ BUG: Nested lock was not taken ]\n");
@@ -3309,9 +3247,6 @@ print_unlock_imbalance_bug(struct task_struct *curr, struct lockdep_map *lock,
 		return 0;
 	if (debug_locks_silent)
 		return 0;
-
-	/* Add by Mtk */
-	lockdep_aee();
 
 	printk("\n");
 	printk("=====================================\n");
@@ -3754,9 +3689,6 @@ print_lock_contention_bug(struct task_struct *curr, struct lockdep_map *lock,
 	if (debug_locks_silent)
 		return 0;
 
-	/* Add by Mtk */
-	lockdep_aee();
-
 	printk("\n");
 	printk("=================================\n");
 	printk("[ BUG: bad contention detected! ]\n");
@@ -4155,9 +4087,6 @@ print_freed_lock_bug(struct task_struct *curr, const void *mem_from,
 	if (debug_locks_silent)
 		return;
 
-	/* Add by Mtk */
-	lockdep_aee();
-
 	printk("\n");
 	printk("=========================\n");
 	printk("[ BUG: held lock freed! ]\n");
@@ -4194,7 +4123,7 @@ void debug_check_no_locks_freed(const void *mem_from, unsigned long mem_len)
 	if (unlikely(!debug_locks))
 		return;
 
-	local_irq_save(flags);
+	raw_local_irq_save(flags);
 	for (i = 0; i < curr->lockdep_depth; i++) {
 		hlock = curr->held_locks + i;
 
@@ -4205,7 +4134,7 @@ void debug_check_no_locks_freed(const void *mem_from, unsigned long mem_len)
 		print_freed_lock_bug(curr, mem_from, mem_from + mem_len, hlock);
 		break;
 	}
-	local_irq_restore(flags);
+	raw_local_irq_restore(flags);
 }
 EXPORT_SYMBOL_GPL(debug_check_no_locks_freed);
 
@@ -4215,9 +4144,6 @@ static void print_held_locks_bug(void)
 		return;
 	if (debug_locks_silent)
 		return;
-
-	/* Add by Mtk */
-	lockdep_aee();
 
 	printk("\n");
 	printk("=====================================\n");
@@ -4318,10 +4244,6 @@ asmlinkage __visible void lockdep_sys_exit(void)
 	if (unlikely(curr->lockdep_depth)) {
 		if (!debug_locks_off())
 			return;
-
-		/* Add by Mtk */
-		lockdep_aee();
-
 		printk("\n");
 		printk("================================================\n");
 		printk("[ BUG: lock held when returning to user space! ]\n");
@@ -4342,10 +4264,6 @@ void lockdep_rcu_suspicious(const char *file, const int line, const char *s)
 		return;
 #endif /* #ifdef CONFIG_PROVE_RCU_REPEATEDLY */
 	/* Note: the following can be executed concurrently, so be careful. */
-
-	/* Add by Mtk */
-	lockdep_aee();
-
 	printk("\n");
 	printk("===============================\n");
 	printk("[ INFO: suspicious RCU usage. ]\n");
@@ -4360,8 +4278,6 @@ void lockdep_rcu_suspicious(const char *file, const int line, const char *s)
 				? "RCU used illegally from idle CPU!\n"
 				: "",
 	       rcu_scheduler_active, debug_locks);
-	pr_info("cpu_id = %d, cpu_is_offline = %ld\n",
-		raw_smp_processor_id(), cpu_is_offline(raw_smp_processor_id()));
 
 	/*
 	 * If a CPU is in the RCU-free window in idle (ie: in the section

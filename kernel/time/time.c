@@ -28,6 +28,7 @@
  */
 
 #include <linux/export.h>
+#include <linux/kernel.h>
 #include <linux/timex.h>
 #include <linux/capability.h>
 #include <linux/timekeeper_internal.h>
@@ -41,7 +42,6 @@
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 
-#include <mt-plat/mtk_ccci_common.h>
 #include <generated/timeconst.h>
 #include "timekeeping.h"
 
@@ -185,7 +185,6 @@ int do_sys_settimeofday(const struct timespec *tv, const struct timezone *tz)
 			if (!tv)
 				warp_clock();
 		}
-		notify_time_update();
 	}
 	if (tv)
 		return do_settimeofday(tv);
@@ -260,9 +259,10 @@ unsigned int jiffies_to_msecs(const unsigned long j)
 	return (j + (HZ / MSEC_PER_SEC) - 1)/(HZ / MSEC_PER_SEC);
 #else
 # if BITS_PER_LONG == 32
-	return (HZ_TO_MSEC_MUL32 * j) >> HZ_TO_MSEC_SHR32;
+	return (HZ_TO_MSEC_MUL32 * j + (1ULL << HZ_TO_MSEC_SHR32) - 1) >>
+	       HZ_TO_MSEC_SHR32;
 # else
-	return (j * HZ_TO_MSEC_NUM) / HZ_TO_MSEC_DEN;
+	return DIV_ROUND_UP(j * HZ_TO_MSEC_NUM, HZ_TO_MSEC_DEN);
 # endif
 #endif
 }
@@ -763,12 +763,4 @@ struct timespec timespec_add_safe(const struct timespec lhs,
 		res.tv_sec = TIME_T_MAX;
 
 	return res;
-}
-
-/*
- * Add dummy API to avoid build error,
- * which happen on ccci not enable project
- */
-void __weak notify_time_update(void)
-{
 }

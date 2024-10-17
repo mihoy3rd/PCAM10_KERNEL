@@ -24,29 +24,13 @@
 #include <linux/init.h>
 #include <linux/nmi.h>
 #include <linux/console.h>
+#include <soc/qcom/minidump.h>
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/exception.h>
 
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
-
-
-#ifdef VENDOR_EDIT
-/* Bin.Li@EXP.BSP.bootloader.bootflow, 2017/05/24, Add for interface reboot reason */
-int is_kernel_panic = 0;
-#endif
-
-#ifdef VENDOR_EDIT
-//Liang.Zhang@PSW.TECH.BOOTUP, 2019/01/22, Add for monitor kernel error
-#ifdef HANG_OPPO_ALL
-int kernel_panic_happened = 0;
-int hwt_happened = 0;
-#endif
-#endif  // VENDOR_EDIT
-
-#ifdef VENDOR_EDIT
-//Zhang Jiashu@PSW.AD.Performance,2019/10/03,Add for flushing device cache before goto dump mode!
-bool is_triggering_panic = false;
-bool is_triggering_hwt = false;
-#endif  /*VENDOR_EDIT*/
 
 int panic_on_oops = CONFIG_PANIC_ON_OOPS_VALUE;
 static unsigned long tainted_mask;
@@ -62,26 +46,6 @@ EXPORT_SYMBOL_GPL(panic_timeout);
 ATOMIC_NOTIFIER_HEAD(panic_notifier_list);
 
 EXPORT_SYMBOL(panic_notifier_list);
-
-#ifdef VENDOR_EDIT
-//Liang.Zhang@PSW.TECH.BOOTUP, 2018/11/12, Add for monitor kernel panic
-#ifdef HANG_OPPO_ALL
-#include <linux/timer.h>
-#include <linux/timex.h>
-#include <linux/rtc.h>
-#include <linux/delay.h>
-#include "op_panic_recovery.h"
-
-extern void log_boot(char *str);
-extern int phx_is_system_boot_completed(void);
-extern int phx_is_phoenix_boot_completed(void);
-// Kun.Hu@PSW.TECH.RELIABILTY, 2018/11/15, add for project phoenix(hang oppo)
-extern void phx_monit(const char *monitor_command);
-extern int write_to_reserve1(struct pon_struct *pon_info, int fatal_error);
-extern int need_recovery(struct pon_struct *pon_info);
-extern int set_fatal_err_to_recovery(void);
-#endif  //HANG_OPPO_ALL
-#endif
 
 static long no_blink(int state)
 {
@@ -101,59 +65,28 @@ void __weak panic_smp_self_stop(void)
 		cpu_relax();
 }
 
-#ifdef VENDOR_EDIT
-//Liang.Zhang@PSW.TECH.BOOTUP, 2018/11/12, Add for monitor kernel panic
-#ifdef HANG_OPPO_ALL
-void deal_fatal_err(void)
+#ifdef VENDOR_EDIT //yixue.ge@bsp.drv add for dump cpu contex for minidump
+#ifdef CONFIG_QCOM_COMMON_LOG
+static int in_panic = 0;
+int panic_count(void)
 {
-    if(!phx_is_phoenix_boot_completed()) {
-        struct timespec ts;
-        struct rtc_time tm;
-        char err_info[60] = {0};
-
-        getnstimeofday(&ts);
-        rtc_time_to_tm(ts.tv_sec, &tm);
-
-        if(kernel_panic_happened) {
-            sprintf(err_info, "SET_BOOTERROR@ERROR_KERNEL_PANIC@%d-%d-%d %d:%d:%d",
-                tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-        } else if(hwt_happened) {
-            sprintf(err_info, "SET_BOOTERROR@ERROR_HWT@%d-%d-%d %d:%d:%d",
-                tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-        }
-
-        // Kun.Hu@PSW.TECH.RELIABILTY, 2018/11/15, add for project phoenix(hang oppo)
-        phx_monit(err_info);
-    } else {
-        struct timespec ts;
-        struct rtc_time tm;
-        char err_info[60] = {0};
-
-        getnstimeofday(&ts);
-        rtc_time_to_tm(ts.tv_sec, &tm);
-
-        sprintf(err_info, "panic after bootup @%d-%d-%d %d:%d:%d",
-                tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-        pr_err("panic after bootup @%d-%d-%d %d:%d:%d\n",
-               tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-    }
+	return in_panic;
 }
-#endif
-#endif  /*VENDOR_EDIT*/
+EXPORT_SYMBOL(panic_count);
+extern void dumpcpuregs(struct pt_regs *pt_regs);
+#else
+void dumpcpuregs(struct pt_regs *pt_regs){}
+#endif /*CONFIG_QCOM_COMMON_LOG*/
+#endif /*VENDOR_EDIT*/
 
 #ifdef VENDOR_EDIT
-//Zhang Jiashu@PSW.AD.Performance,2019/10/03,Add for flushing device cache before goto dump mode!
+/*yanwu@TECH.Storage.FS, 2019-08-27, flush device cache before goto dump mode*/
 extern int panic_flush_device_cache(int timeout);
-void flush_cache_on_panic(void){
-#if defined(CONFIG_OPPO_SPECIAL_BUILD) || !defined(OPPO_RELEASE_FLAG)
-    pr_err("In full dump mode!\n");
-#else
-    pr_err("In mini dump mode and start flushing the devices cache!\n");
-    panic_flush_device_cache(2000);
-#endif
-}
 #endif  /*VENDOR_EDIT*/
-
+#ifdef VENDOR_EDIT
+/*yanghao@BSP.Kernel.Stability, 2019-9-5*/
+extern int get_download_mode(void);
+#endif  /*VENDOR_EDIT*/
 
 /**
  *	panic - halt the system
@@ -170,6 +103,15 @@ void panic(const char *fmt, ...)
 	va_list args;
 	long i, i_next = 0;
 	int state = 0;
+
+#ifdef VENDOR_EDIT //yixue.ge@bsp.drv add for dump cpu contex for minidump
+#ifdef CONFIG_QCOM_COMMON_LOG
+	in_panic++;
+	dumpcpuregs(NULL);
+
+#endif /*CONFIG_QCOM_COMMON_LOG*/
+#endif /*VENDOR_EDIT*/
+	trace_kernel_panic(0);
 
 	/*
 	 * Disable local interrupts. This will prevent panic_smp_self_stop
@@ -197,6 +139,13 @@ void panic(const char *fmt, ...)
 	va_start(args, fmt);
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
+	dump_stack_minidump(0);
+#ifdef VENDOR_EDIT
+	/*yanwu@TECH.Storage.FS, 2019-08-27, flush device cache before goto dump mode*/
+	/*yanghao@BSP.Kernel.Stability, 2019-9-5*/
+	if(!get_download_mode())
+	    panic_flush_device_cache(2000);
+#endif
 	pr_emerg("Kernel panic - not syncing: %s\n", buf);
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	/*
@@ -256,11 +205,6 @@ void panic(const char *fmt, ...)
 	if (!panic_blink)
 		panic_blink = no_blink;
 
-#ifdef VENDOR_EDIT
-	/* Bin.Li@EXP.BSP.bootloader.bootflow, 2017/05/24, Modify for add interface reboot reason */
-	is_kernel_panic = 1;
-#endif
-
 	if (panic_timeout > 0) {
 		/*
 		 * Delay timeout seconds before rebooting the machine.
@@ -277,6 +221,9 @@ void panic(const char *fmt, ...)
 			mdelay(PANIC_TIMER_STEP);
 		}
 	}
+
+	trace_kernel_panic_late(0);
+
 	if (panic_timeout != 0) {
 		/*
 		 * This will not be a clean reboot, with everything
@@ -486,11 +433,6 @@ int oops_may_print(void)
  */
 void oops_enter(void)
 {
-#ifdef VENDOR_EDIT
-	/* Bin.Li@EXP.BSP.bootloader.bootflow, 2017/05/24, Modify for add interface reboot reason */
-	is_kernel_panic = 1;
-#endif
-
 	tracing_off();
 	/* can't trust the integrity of the kernel anymore: */
 	debug_locks_off();
@@ -607,11 +549,8 @@ EXPORT_SYMBOL(warn_slowpath_null);
  */
 __visible void __stack_chk_fail(void)
 {
-/*
 	panic("stack-protector: Kernel stack is corrupted in: %p\n",
 		__builtin_return_address(0));
-*/
-	BUG();
 }
 EXPORT_SYMBOL(__stack_chk_fail);
 

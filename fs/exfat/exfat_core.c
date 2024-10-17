@@ -180,11 +180,10 @@ s32 ffsMountVol(struct super_block *sb)
 		sb_set_blocksize(sb, p_bd->sector_size);
 
 	/* read Sector 0 */
-	if (sector_read(sb, 0, &tmp_bh, 1) != FFS_SUCCESS) {
+	if (sector_read(sb, 0, &tmp_bh, 1) != FFS_SUCCESS)
 		return FFS_MEDIAERR;
-	}
 
-	p_fs->PBR_sector = 0;
+		p_fs->PBR_sector = 0;
 
 	p_pbr = (PBR_SECTOR_T *) tmp_bh->b_data;
 
@@ -3843,16 +3842,8 @@ s32 exfat_find_dir_entry(struct super_block *sb, CHAIN_T *p_dir, UNI_NAME_T *p_u
 
 						if ((++order) == 2)
 							uniname = p_uniname->name;
-#ifndef VENDOR_EDIT
-/* Fuchun.Liao@BSP.CHG.Basic 2018/06/11 modify for uniname null pointer */
 						else
 							uniname += 15;
-#else
-						else if (uniname == NULL)
-							return -2;
-						else
-							uniname += 15;
-#endif /* VENDOR_EDIT */
 
 						len = extract_uni_name_from_name_entry(name_ep, entry_uniname, order);
 

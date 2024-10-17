@@ -11,9 +11,6 @@
  *  Copyright (C) 2004-2006 Ingo Molnar
  *  Copyright (C) 2004 Nadia Yvette Chambers
  */
-
-#define DEBUG 1
-
 #include <linux/ring_buffer.h>
 #include <generated/utsrelease.h>
 #include <linux/stacktrace.h>
@@ -44,16 +41,11 @@
 #include <linux/nmi.h>
 #include <linux/fs.h>
 #include <linux/sched/rt.h>
+#include <linux/coresight-stm.h>
 
 #include "trace.h"
 #include "trace_output.h"
 
-#ifdef CONFIG_MTK_SCHED_TRACERS
-#include "mtk_ftrace.h"
-#define CREATE_TRACE_POINTS
-#include <trace/events/mtk_events.h>
-EXPORT_TRACEPOINT_SYMBOL(gpu_freq);
-#endif
 /*
  * On boot up, the ring buffer is set to the minimum size, so that
  * we do not waste memory on systems that are not using tracing.
@@ -304,7 +296,7 @@ int trace_array_get(struct trace_array *this_tr)
 	return ret;
 }
 #ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
+//fangpan@Swdp.shanghai, 2016/06/30, export the ftrace interface
 EXPORT_SYMBOL(trace_array_get);
 #endif
 
@@ -321,7 +313,7 @@ void trace_array_put(struct trace_array *this_tr)
 	mutex_unlock(&trace_types_lock);
 }
 #ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
+//fangpan@Swdp.shanghai, 2016/06/30, export the ftrace interface
 EXPORT_SYMBOL(trace_array_put);
 #endif
 
@@ -402,18 +394,9 @@ int tracing_is_enabled(void)
  * to not have to wait for all that output. Anyway this can be
  * boot time and run time configurable.
  */
-#ifdef CONFIG_MTK_FTRACE_DEFAULT_ENABLE
-#define TRACE_BUF_SIZE_DEFAULT	4194304UL
-#else
 #define TRACE_BUF_SIZE_DEFAULT	1441792UL /* 16384 * 88 (sizeof(entry)) */
-#endif
 
 static unsigned long		trace_buf_size = TRACE_BUF_SIZE_DEFAULT;
-
-void update_buf_size(unsigned long size)
-{
-	trace_buf_size = size;
-}
 
 /* trace_types holds a link list of available tracers. */
 static struct tracer		*trace_types __read_mostly;
@@ -529,12 +512,7 @@ static inline void ftrace_trace_stack(struct trace_array *tr,
 
 #endif
 
-#ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
 void tracer_tracing_on(struct trace_array *tr)
-#else
-static void tracer_tracing_on(struct trace_array *tr)
-#endif
 {
 	if (tr->trace_buffer.buffer)
 		ring_buffer_record_on(tr->trace_buffer.buffer);
@@ -551,7 +529,7 @@ static void tracer_tracing_on(struct trace_array *tr)
 	smp_wmb();
 }
 #ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
+//fangpan@Swdp.shanghai, 2016/06/30, export the ftrace interface
 EXPORT_SYMBOL(tracer_tracing_on);
 #endif
 
@@ -564,9 +542,6 @@ EXPORT_SYMBOL(tracer_tracing_on);
 void tracing_on(void)
 {
 	tracer_tracing_on(&global_trace);
-#ifdef CONFIG_MTK_SCHED_TRACERS
-	trace_tracing_on(1, CALLER_ADDR0);
-#endif
 }
 EXPORT_SYMBOL_GPL(tracing_on);
 
@@ -611,8 +586,11 @@ int __trace_puts(unsigned long ip, const char *str, int size)
 	if (entry->buf[size - 1] != '\n') {
 		entry->buf[size] = '\n';
 		entry->buf[size + 1] = '\0';
-	} else
+		stm_log(OST_ENTITY_TRACE_PRINTK, entry->buf, size + 2);
+	} else {
 		entry->buf[size] = '\0';
+		stm_log(OST_ENTITY_TRACE_PRINTK, entry->buf, size + 1);
+	}
 
 	__buffer_unlock_commit(buffer, event);
 	ftrace_trace_stack(&global_trace, buffer, irq_flags, 4, pc, NULL);
@@ -653,6 +631,7 @@ int __trace_bputs(unsigned long ip, const char *str)
 	entry = ring_buffer_event_data(event);
 	entry->ip			= ip;
 	entry->str			= str;
+	stm_log(OST_ENTITY_TRACE_PRINTK, entry->str, strlen(entry->str)+1);
 
 	__buffer_unlock_commit(buffer, event);
 	ftrace_trace_stack(&global_trace, buffer, irq_flags, 4, pc, NULL);
@@ -807,12 +786,7 @@ void tracing_snapshot_alloc(void)
 EXPORT_SYMBOL_GPL(tracing_snapshot_alloc);
 #endif /* CONFIG_TRACER_SNAPSHOT */
 
-#ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
 void tracer_tracing_off(struct trace_array *tr)
-#else
-static void tracer_tracing_off(struct trace_array *tr)
-#endif
 {
 	if (tr->trace_buffer.buffer)
 		ring_buffer_record_off(tr->trace_buffer.buffer);
@@ -829,7 +803,7 @@ static void tracer_tracing_off(struct trace_array *tr)
 	smp_wmb();
 }
 #ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
+//fangpan@Swdp.shanghai, 2016/06/30, export the ftrace interface
 EXPORT_SYMBOL(tracer_tracing_off);
 #endif
 
@@ -843,9 +817,6 @@ EXPORT_SYMBOL(tracer_tracing_off);
  */
 void tracing_off(void)
 {
-#ifdef CONFIG_MTK_SCHED_TRACERS
-	trace_tracing_on(0, CALLER_ADDR0);
-#endif
 	tracer_tracing_off(&global_trace);
 }
 EXPORT_SYMBOL_GPL(tracing_off);
@@ -1139,6 +1110,12 @@ update_max_tr(struct trace_array *tr, struct task_struct *tsk, int cpu)
 
 	arch_spin_lock(&tr->max_lock);
 
+	/* Inherit the recordable setting from trace_buffer */
+	if (ring_buffer_record_is_set_on(tr->trace_buffer.buffer))
+		ring_buffer_record_on(tr->max_buffer.buffer);
+	else
+		ring_buffer_record_off(tr->max_buffer.buffer);
+
 	buf = tr->trace_buffer.buffer;
 	tr->trace_buffer.buffer = tr->max_buffer.buffer;
 	tr->max_buffer.buffer = buf;
@@ -1363,7 +1340,7 @@ void tracing_reset(struct trace_buffer *buf, int cpu)
 	/* Make sure all commits have finished */
 	synchronize_sched();
 	ring_buffer_reset_cpu(buffer, cpu);
-	pr_debug("[ftrace]cpu %d trace reset\n", cpu);
+
 	ring_buffer_record_enable(buffer);
 }
 
@@ -1385,7 +1362,6 @@ void tracing_reset_online_cpus(struct trace_buffer *buf)
 	for_each_online_cpu(cpu)
 		ring_buffer_reset_cpu(buffer, cpu);
 
-	pr_debug("[ftrace]all cpu trace reset\n");
 	ring_buffer_record_enable(buffer);
 }
 
@@ -1404,7 +1380,6 @@ void tracing_reset_all_online_cpus(void)
 
 #define SAVED_CMDLINES_DEFAULT 128
 #define NO_CMDLINE_MAP UINT_MAX
-
 static arch_spinlock_t trace_cmdline_lock = __ARCH_SPIN_LOCK_UNLOCKED;
 struct saved_cmdlines_buffer {
 	unsigned map_pid_to_cmdline[PID_MAX_DEFAULT+1];
@@ -1460,6 +1435,7 @@ static int allocate_cmdlines_buffer(unsigned int val,
 	       val * sizeof(*s->map_cmdline_to_pid));
 	memset(s->map_cmdline_to_tgid, NO_CMDLINE_MAP,
 	       val * sizeof(*s->map_cmdline_to_tgid));
+
 	return 0;
 }
 
@@ -1496,7 +1472,6 @@ void tracing_start(void)
 {
 	struct ring_buffer *buffer;
 	unsigned long flags;
-	bool reset_ftrace = false;
 
 	if (tracing_disabled)
 		return;
@@ -1507,12 +1482,9 @@ void tracing_start(void)
 			/* Someone screwed up their debugging */
 			WARN_ON_ONCE(1);
 			global_trace.stop_count = 0;
-			reset_ftrace = true;
 		}
 		goto out;
-	} else
-		reset_ftrace = true;
-
+	}
 
 	/* Prevent the buffers from switching */
 	arch_spin_lock(&global_trace.max_lock);
@@ -1531,12 +1503,6 @@ void tracing_start(void)
 
  out:
 	raw_spin_unlock_irqrestore(&global_trace.start_lock, flags);
-
-#ifdef CONFIG_MTK_SCHED_TRACERS
-	/* reset ring buffer when all readers left */
-	if (reset_ftrace == true && global_trace.stop_count == 0)
-		tracing_reset_online_cpus(&global_trace.trace_buffer);
-#endif
 }
 
 static void tracing_start_tr(struct trace_array *tr)
@@ -2194,8 +2160,7 @@ void trace_printk_init_buffers(void)
 	pr_warning("**********************************************************\n");
 
 	/* Expand the buffers to set size */
-	/* M: avoid to expand buffer because of trace_printk in kernel */
-	/* tracing_update_buffers(); */
+	tracing_update_buffers();
 
 	buffers_allocated = 1;
 
@@ -2288,6 +2253,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(trace_vbprintk);
 
+__printf(3, 0)
 static int
 __trace_array_vprintk(struct ring_buffer *buffer,
 		      unsigned long ip, const char *fmt, va_list args)
@@ -2328,6 +2294,7 @@ __trace_array_vprintk(struct ring_buffer *buffer,
 
 	memcpy(&entry->buf, tbuffer, len + 1);
 	if (!call_filter_check_discard(call, entry, buffer, event)) {
+		stm_log(OST_ENTITY_TRACE_PRINTK, entry->buf, len + 1);
 		__buffer_unlock_commit(buffer, event);
 		ftrace_trace_stack(&global_trace, buffer, flags, 6, pc, NULL);
 	}
@@ -2338,12 +2305,14 @@ __trace_array_vprintk(struct ring_buffer *buffer,
 	return len;
 }
 
+__printf(3, 0)
 int trace_array_vprintk(struct trace_array *tr,
 			unsigned long ip, const char *fmt, va_list args)
 {
 	return __trace_array_vprintk(tr->trace_buffer.buffer, ip, fmt, args);
 }
 
+__printf(3, 0)
 int trace_array_printk(struct trace_array *tr,
 		       unsigned long ip, const char *fmt, ...)
 {
@@ -2359,6 +2328,7 @@ int trace_array_printk(struct trace_array *tr,
 	return ret;
 }
 
+__printf(3, 4)
 int trace_array_printk_buf(struct ring_buffer *buffer,
 			   unsigned long ip, const char *fmt, ...)
 {
@@ -2374,6 +2344,7 @@ int trace_array_printk_buf(struct ring_buffer *buffer,
 	return ret;
 }
 
+__printf(2, 0)
 int trace_vprintk(unsigned long ip, const char *fmt, va_list args)
 {
 	return trace_array_vprintk(&global_trace, ip, fmt, args);
@@ -2681,9 +2652,6 @@ static void print_event_info(struct trace_buffer *buf, struct seq_file *m)
 	get_total_entries(buf, &total, &entries);
 	seq_printf(m, "# entries-in-buffer/entries-written: %lu/%lu   #P:%d\n",
 		   entries, total, num_online_cpus());
-#ifdef CONFIG_MTK_SCHED_TRACERS
-	print_enabled_events(buf, m);
-#endif
 	seq_puts(m, "#\n");
 }
 
@@ -3317,7 +3285,6 @@ static int tracing_release(struct inode *inode, struct file *file)
 	if (iter->trace && iter->trace->close)
 		iter->trace->close(iter);
 
-	pr_debug("[ftrace]end reading trace file\n");
 	if (!iter->snapshot)
 		/* reenable tracing if it was previously enabled */
 		tracing_start_tr(tr);
@@ -3378,7 +3345,6 @@ static int tracing_open(struct inode *inode, struct file *file)
 	}
 
 	if (file->f_mode & FMODE_READ) {
-		pr_debug("[ftrace]start reading trace file\n");
 		iter = __tracing_open(inode, file, false);
 		if (IS_ERR(iter))
 			ret = PTR_ERR(iter);
@@ -3714,12 +3680,7 @@ int set_tracer_flag(struct trace_array *tr, unsigned int mask, int enabled)
 	return 0;
 }
 
-#ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
 int trace_set_options(struct trace_array *tr, char *option)
-#else
-static int trace_set_options(struct trace_array *tr, char *option)
-#endif
 {
 	char *cmp;
 	int neg = 0;
@@ -3759,7 +3720,7 @@ static int trace_set_options(struct trace_array *tr, char *option)
 	return ret;
 }
 #ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
+//fangpan@Swdp.shanghai, 2016/06/30, export the ftrace interface
 EXPORT_SYMBOL(trace_set_options);
 
 int get_system_default_ftrace(struct trace_array ** tr_ret)
@@ -4546,7 +4507,7 @@ out:
 	return ret;
 }
 #ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
+//fangpan@Swdp.shanghai, 2016/06/30, export the ftrace interface
 EXPORT_SYMBOL(tracing_resize_ring_buffer);
 #endif
 
@@ -4719,7 +4680,6 @@ tracing_set_trace_write(struct file *filp, const char __user *ubuf,
 	for (i = cnt - 1; i > 0 && isspace(buf[i]); i--)
 		buf[i] = 0;
 
-	pr_debug("[ftrace]set current_tracer to '%s'\n", buf);
 	err = tracing_set_tracer(tr, buf);
 	if (err)
 		return err;
@@ -5261,7 +5221,6 @@ tracing_entries_write(struct file *filp, const char __user *ubuf,
 	struct inode *inode = file_inode(filp);
 	struct trace_array *tr = inode->i_private;
 	unsigned long val;
-	bool do_drop_cache = false;
 	int ret;
 
 	ret = kstrtoul_from_user(ubuf, cnt, 10, &val);
@@ -5274,13 +5233,8 @@ tracing_entries_write(struct file *filp, const char __user *ubuf,
 
 	/* value is in KB */
 	val <<= 10;
-resize_ring_buffer:
 	ret = tracing_resize_ring_buffer(tr, val, tracing_get_cpu(inode));
-	if (ret == -ENOMEM && !do_drop_cache) {
-		do_drop_cache = true;
-		/* drop_pagecache(); */
-		goto resize_ring_buffer;
-	} else if (ret < 0)
+	if (ret < 0)
 		return ret;
 
 	*ppos += cnt;
@@ -5429,8 +5383,11 @@ tracing_mark_write(struct file *filp, const char __user *ubuf,
 	if (entry->buf[cnt - 1] != '\n') {
 		entry->buf[cnt] = '\n';
 		entry->buf[cnt + 1] = '\0';
-	} else
+		stm_log(OST_ENTITY_TRACE_MARKER, entry->buf, cnt + 2);
+	} else {
 		entry->buf[cnt] = '\0';
+		stm_log(OST_ENTITY_TRACE_MARKER, entry->buf, cnt + 1);
+	}
 
 	__buffer_unlock_commit(buffer, event);
 
@@ -5463,7 +5420,7 @@ static int tracing_clock_show(struct seq_file *m, void *v)
 }
 
 #ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
+//fangpan@Swdp.shanghai, 2016/06/30, export the ftrace interface
 int tracing_clock_update(struct trace_array *tr, const char *buf)
 {
 	const char *clockstr = buf;
@@ -6775,25 +6732,13 @@ rb_simple_write(struct file *filp, const char __user *ubuf,
 	if (ret)
 		return ret;
 
-#ifdef CONFIG_MTK_SCHED_TRACERS
-	if (boot_ftrace_check(val))
-		return -EPERM;
-#endif
 	if (buffer) {
-		if (ring_buffer_record_is_on(buffer) ^ val)
-			pr_debug("[ftrace]tracing_on is toggled to %lu\n", val);
 		mutex_lock(&trace_types_lock);
 		if (val) {
 			tracer_tracing_on(tr);
-#ifdef CONFIG_MTK_SCHED_TRACERS
-			trace_tracing_on(val, CALLER_ADDR0);
-#endif
 			if (tr->current_trace->start)
 				tr->current_trace->start(tr);
 		} else {
-#ifdef CONFIG_MTK_SCHED_TRACERS
-			trace_tracing_on(val, CALLER_ADDR0);
-#endif
 			tracer_tracing_off(tr);
 			if (tr->current_trace->stop)
 				tr->current_trace->stop(tr);
@@ -6858,7 +6803,6 @@ static int allocate_trace_buffers(struct trace_array *tr, int size)
 	ret = allocate_trace_buffer(tr, &tr->max_buffer,
 				    allocate_snapshot ? size : 1);
 	if (WARN_ON(ret)) {
-		pr_debug("[ftrace]allocate_trace_buffers size %d\n", size);
 		ring_buffer_free(tr->trace_buffer.buffer);
 		tr->trace_buffer.buffer = NULL;
 		free_percpu(tr->trace_buffer.data);
@@ -6922,12 +6866,7 @@ static void update_tracer_options(struct trace_array *tr)
 	mutex_unlock(&trace_types_lock);
 }
 
-#ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
-int instance_mkdir(const char *name)
-#else
 static int instance_mkdir(const char *name)
-#endif
 {
 	struct trace_array *tr;
 	int ret;
@@ -7000,17 +6939,8 @@ static int instance_mkdir(const char *name)
 	return ret;
 
 }
-#ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
-EXPORT_SYMBOL(instance_mkdir);
-#endif
 
-#ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
-int instance_rmdir(const char *name)
-#else
 static int instance_rmdir(const char *name)
-#endif
 {
 	struct trace_array *tr;
 	int found = 0;
@@ -7057,10 +6987,6 @@ static int instance_rmdir(const char *name)
 
 	return ret;
 }
-#ifdef VENDOR_EDIT
-//cuixiaogang@Swdp.shanghai, 2017/12/11, export the ftrace interface
-EXPORT_SYMBOL(instance_rmdir);
-#endif
 
 static __init void create_trace_instances(struct dentry *d_tracer)
 {
@@ -7632,9 +7558,6 @@ void __init trace_init(void)
 		if (WARN_ON(!tracepoint_print_iter))
 			tracepoint_printk = 0;
 	}
-#ifdef CONFIG_MTK_USE_RESERVED_EXT_MEM
-	extmem_init();
-#endif
 	tracer_alloc_buffers();
 	trace_event_init();
 }

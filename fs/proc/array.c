@@ -172,15 +172,15 @@ static inline void task_state(struct seq_file *m, struct pid_namespace *ns,
 	seq_printf(m,
 		"State:\t%s\n"
 		"Tgid:\t%d\n"
-		"Ngid:\t%d\n"
 		"Pid:\t%d\n"
 		"PPid:\t%d\n"
 		"TracerPid:\t%d\n"
 		"Uid:\t%d\t%d\t%d\t%d\n"
 		"Gid:\t%d\t%d\t%d\t%d\n"
+		"Ngid:\t%d\n"
 		"FDSize:\t%d\nGroups:\t",
 		get_task_state(p),
-		tgid, ngid, pid_nr_ns(pid, ns), ppid, tpid,
+		tgid, pid_nr_ns(pid, ns), ppid, tpid,
 		from_kuid_munged(user_ns, cred->uid),
 		from_kuid_munged(user_ns, cred->euid),
 		from_kuid_munged(user_ns, cred->suid),
@@ -189,7 +189,7 @@ static inline void task_state(struct seq_file *m, struct pid_namespace *ns,
 		from_kgid_munged(user_ns, cred->egid),
 		from_kgid_munged(user_ns, cred->sgid),
 		from_kgid_munged(user_ns, cred->fsgid),
-		max_fds);
+		ngid, max_fds);
 
 	group_info = cred->group_info;
 	for (g = 0; g < group_info->ngroups; g++)
@@ -397,6 +397,26 @@ int proc_pid_status(struct seq_file *m, struct pid_namespace *ns,
 	task_context_switch_counts(m, task);
 	return 0;
 }
+
+#if defined(VENDOR_EDIT) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+/* Kui.Zhang@PSW.TEC.KERNEL.Performance, 2019/03/18,
+ * show the task's reserved area info
+ */
+int proc_pid_reserve_area(struct seq_file *m, struct pid_namespace *ns,
+			struct pid *pid, struct task_struct *task)
+{
+	struct mm_struct *mm = get_task_mm(task);
+
+	if (mm) {
+		seq_printf(m, "%#lx\t%#lx\t%d\n",
+			mm->backed_vm_base, mm->backed_vm_size,
+			mm->reserve_map_count);
+		mmput(mm);
+	}
+	return 0;
+
+}
+#endif /* defined(VENDOR_EDIT) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY) */
 
 static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 			struct pid *pid, struct task_struct *task, int whole)

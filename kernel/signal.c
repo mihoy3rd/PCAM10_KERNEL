@@ -798,10 +798,8 @@ static bool prepare_signal(int sig, struct task_struct *p, bool force)
 	sigset_t flush;
 
 	if (signal->flags & (SIGNAL_GROUP_EXIT | SIGNAL_GROUP_COREDUMP)) {
-		if (signal->flags & SIGNAL_GROUP_COREDUMP) {
-			pr_debug("[%d:%s] is in the middle of doing coredump so skip sig %d\n", p->pid, p->comm, sig);
-			return 0;
-		}
+		if (!(signal->flags & SIGNAL_GROUP_EXIT))
+			return sig == SIGKILL;
 		/*
 		 * The process is in the middle of dying, nothing to do.
 		 */
@@ -1044,6 +1042,13 @@ static int __send_signal(int sig, struct siginfo *info, struct task_struct *t,
 	assert_spin_locked(&t->sighand->siglock);
 
 	result = TRACE_SIGNAL_IGNORED;
+#if defined(VENDOR_EDIT) && defined(CONFIG_DEATH_HEALER)
+	/*fanhui@PhoneSW.BSP, 2016-06-21, DeathHealer, record the SIGSTOP sender*/
+	if (sig == SIGSTOP && (!strncmp(t->comm,"main", TASK_COMM_LEN) ||
+		!strncmp(t->comm,"system_server", TASK_COMM_LEN) || !strncmp(t->comm,"surfaceflinger", TASK_COMM_LEN)))
+		snprintf(last_stopper_comm, 64, "%s[%d]", current->comm, current->pid);
+#endif
+
 #ifdef VENDOR_EDIT
 //Li.Liu@PSW.AD.Stability.Crash.1054829, 2016/10/08, Add for merging fangpan@oppo.com modify for the sender who kill system_server
         if(1) {
@@ -1054,12 +1059,6 @@ static int __send_signal(int sig, struct siginfo *info, struct task_struct *t,
         }
 #endif
 
-#if defined(VENDOR_EDIT) && defined(CONFIG_DEATH_HEALER) && !defined(CONFIG_OPPO_SPECIAL_BUILD)
-/*fanhui@PhoneSW.BSP, 2016-06-21, DeathHealer, record the SIGSTOP sender*/
-	if (sig == SIGSTOP && (!strncmp(t->comm,"main", TASK_COMM_LEN) ||
-		!strncmp(t->comm,"system_server", TASK_COMM_LEN) || !strncmp(t->comm,"surfaceflinger", TASK_COMM_LEN)))
-		snprintf(last_stopper_comm, 64, "%s[%d]", current->comm, current->pid);
-#endif
 
 #if defined(VENDOR_EDIT) && defined(CONFIG_ELSA_STUB)
 //zhoumingjun@Swdp.shanghai, 2017/05/18, notify userspace when kill cgroup frozen tasks
@@ -1339,10 +1338,9 @@ struct sighand_struct *__lock_task_sighand(struct task_struct *tsk,
 	return sighand;
 }
 #ifdef VENDOR_EDIT
-//jie.cheng@Swdp.shanghai, 2017/06/02, export kernel symbol
+//fangpan@Swdp.shanghai, 2015/11/26, add interface for resmon module
 EXPORT_SYMBOL(__lock_task_sighand);
 #endif
-
 /*
  * send signal info to all the members of a group
  */

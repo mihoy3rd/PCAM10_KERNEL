@@ -23,11 +23,8 @@ static struct workqueue_struct *autosleep_wq;
 static DEFINE_MUTEX(autosleep_lock);
 static struct wakeup_source *autosleep_ws;
 
-#ifdef VENDOR_EDIT
-/* ChaoYing.Chen@BSP.Power.Basic, 2017/12/9, Add for print wakeup source,
-** Interval(Seconds) of wakeup source printk. */
-#define WS_PRINTK_INTERVAL (60)
-
+#ifdef VENDOR_EDIT 
+//Shu.Liu@OnlineRd.Driver, 2014/03/4, modified for sleep debug
 static void wakelock_printk(struct work_struct *work);
 static struct workqueue_struct *wakelock_printk_work_queue = NULL;
 static DECLARE_DELAYED_WORK(wakelock_printk_work, wakelock_printk);
@@ -37,7 +34,7 @@ static void wakelock_printk(struct work_struct *work)
 	queue_delayed_work(wakelock_printk_work_queue, &wakelock_printk_work, msecs_to_jiffies(60*1000));
 }
 
-void wakelock_printk_control(int on)
+void wakelock_printk_control(int on) 
 {
 	if (wakelock_printk_work_queue == NULL) {
 		printk(KERN_INFO"%s: wakelock_printk_work_queue is NULL, do nothing\n", __func__);
@@ -122,10 +119,10 @@ int pm_autosleep_set_state(suspend_state_t state)
 		return -EINVAL;
 #endif
 
-	#ifdef VENDOR_EDIT
-	/* ChaoYing.Chen@BSP.Power.Basic, 2017/12/9, Add for print wakeup source */
+#ifdef VENDOR_EDIT 
+//Shu.Liu@OnlineRd.Driver, 2014/03/4, modified for sleep debug
 	wakelock_printk_control(0);
-	#endif /* VENDOR_EDIT */
+#endif /* VENDOR_EDIT */
 
 	__pm_stay_awake(autosleep_ws);
 
@@ -144,23 +141,23 @@ int pm_autosleep_set_state(suspend_state_t state)
 
 	mutex_unlock(&autosleep_lock);
 
-	#ifdef VENDOR_EDIT
-	/* ChaoYing.Chen@BSP.Power.Basic, 2017/12/9, Add for print wakeup source */
-	wakelock_printk_control(1);
-	#endif /* VENDOR_EDIT */
+#ifdef VENDOR_EDIT 
+//Shu.Liu@OnlineRd.Driver, 2014/03/4, modified for sleep debug
+	wakelock_printk_control(1); 
+#endif /* VENDOR_EDIT */
 
 	return 0;
 }
 
 int __init pm_autosleep_init(void)
 {
-	#ifdef VENDOR_EDIT
-	/* ChaoYing.Chen@BSP.Power.Basic, 2017/12/9, Add for print wakeup source */
+#ifdef VENDOR_EDIT 
+//Shu.Liu@OnlineRd.Driver, 2014/03/4, modified for sleep debug
 	wakelock_printk_work_queue = create_singlethread_workqueue("wakelock_printk");
 	if (wakelock_printk_work_queue == NULL)
 		printk(KERN_INFO "%s: failed to create work queue\n", __func__);
 	wakelock_printk_control(1);
-	#endif /* VENDOR_EDIT */
+#endif /* VENDOR_EDIT */
 
 	autosleep_ws = wakeup_source_register("autosleep");
 	if (!autosleep_ws)

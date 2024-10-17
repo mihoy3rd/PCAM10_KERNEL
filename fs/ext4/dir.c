@@ -99,24 +99,6 @@ int __ext4_check_dir_entry(const char *function, unsigned int line,
 	return 1;
 }
 
-static void ext4_d_invalidate_if_negative(struct dentry *dir, const char *name, int len)
-{
-	struct dentry *dentry;
-	struct qstr fname = { .name = name, .len = len};
-
-	if (!dir)
-		return;
-
-	dentry = d_hash_and_lookup(dir, &fname);
-	if (IS_ERR_OR_NULL(dentry))
-		return;
-
-	if (!dentry->d_inode)
-		d_invalidate(dentry);
-	else
-		dput(dentry);
-}
-
 static int ext4_readdir(struct file *file, struct dir_context *ctx)
 {
 	unsigned int offset;
@@ -128,7 +110,6 @@ static int ext4_readdir(struct file *file, struct dir_context *ctx)
 	struct buffer_head *bh = NULL;
 	int dir_has_error = 0;
 	struct ext4_str fname_crypto_str = {.name = NULL, .len = 0};
-	struct dentry *dentry = NULL;
 
 	if (ext4_encrypted_inode(inode)) {
 		err = ext4_get_encryption_info(inode);
@@ -162,7 +143,6 @@ static int ext4_readdir(struct file *file, struct dir_context *ctx)
 						     &fname_crypto_str);
 		if (err < 0)
 			return err;
-		dentry = d_find_alias(inode);
 	}
 
 	offset = ctx->pos & (sb->s_blocksize - 1);
@@ -276,9 +256,6 @@ static int ext4_readdir(struct file *file, struct dir_context *ctx)
 					fname_crypto_str.len = save_len;
 					if (err < 0)
 						goto errout;
-
-					ext4_d_invalidate_if_negative(dentry, fname_crypto_str.name, err);
-
 					if (!dir_emit(ctx,
 					    fname_crypto_str.name, err,
 					    le32_to_cpu(de->inode),
@@ -301,7 +278,6 @@ errout:
 #ifdef CONFIG_EXT4_FS_ENCRYPTION
 	ext4_fname_crypto_free_buffer(&fname_crypto_str);
 #endif
-	dput(dentry);
 	brelse(bh);
 	return err;
 }

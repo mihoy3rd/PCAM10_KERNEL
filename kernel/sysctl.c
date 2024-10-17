@@ -132,20 +132,21 @@ static int __maybe_unused neg_one = -1;
 static int zero;
 static int __maybe_unused one = 1;
 static int __maybe_unused two = 2;
+static int __maybe_unused three = 3;
 static int __maybe_unused four = 4;
 static unsigned long one_ul = 1;
 static int one_hundred = 100;
-static int one_thousand = 1000;
-#ifdef CONFIG_MTK_GMO_RAM_OPTIMIZE
-static int two_hundred = 200;
-#endif
 
 #ifdef VENDOR_EDIT //yixue.ge@PSW.BSP.Kernel.Driver 20170720 add for add direct_vm_swappiness
 extern int direct_vm_swappiness;
-#ifndef CONFIG_MTK_GMO_RAM_OPTIMIZE
 static int two_hundred = 200;
 #endif
-#endif /*VENDOR_EDIT*/
+
+
+#ifdef VENDOR_EDIT
+/*yanwu@TECH.Storage.FS, 2019-07-15, add control f2fs fsync nobarrier*/
+unsigned int sysctl_f2fs_fsync_nobarrier = 0;
+#endif
 
 #ifdef VENDOR_EDIT
 /*Huacai.Zhou@PSW.BSP.Kernel.Performance, 2018-04-28, add foreground task io opt*/
@@ -153,20 +154,19 @@ unsigned int sysctl_fg_io_opt = 1;
 #endif /*VENDOR_EDIT*/
 #ifdef VENDOR_EDIT
 /*jason.tang@TECH.BSP.Kernel.Storage, 2019-05-20, add control ext4 fsync*/
-#ifdef CONFIG_EXT4_FSYNC
 unsigned int sysctl_ext4_fsync_enable = 1;
-#else
-unsigned int sysctl_ext4_fsync_enable = 0;
-#endif
 unsigned int ext4_fsync_enable_status = 0;
 #endif /*VENDOR_EDIT*/
 #ifdef VENDOR_EDIT
 /*jason.tang@TECH.BSP.Kernel.Storage, 2019-05-20, add to count flush*/
 unsigned long sysctl_blkdev_issue_flush_count = 0;
 #endif /*VENDOR_EDIT*/
-
 #ifdef CONFIG_PRINTK
 static int ten_thousand = 10000;
+#endif
+#ifdef CONFIG_SCHED_HMP
+static int one_thousand = 1000;
+static int max_freq_reporting_policy = FREQ_REPORT_INVALID_POLICY - 1;
 #endif
 static int max_kswapd_threads = MAX_KSWAPD_THREADS;
 
@@ -183,10 +183,6 @@ static const int cap_last_cap = CAP_LAST_CAP;
 /*this is needed for proc_doulongvec_minmax of sysctl_hung_task_timeout_secs */
 #ifdef CONFIG_DETECT_HUNG_TASK
 static unsigned long hung_task_timeout_max = (LONG_MAX/HZ);
-#if defined(VENDOR_EDIT) && defined(CONFIG_DEATH_HEALER)
-/* Wen.Luo@BSP.Kernel.Stability, 2019/01/12, DeathHealer , Foreground background optimization,change max io count */
-static int five = 5;
-#endif
 #endif
 
 #ifdef CONFIG_INOTIFY_USER
@@ -318,10 +314,6 @@ static int max_sched_tunable_scaling = SCHED_TUNABLESCALING_END-1;
 #ifdef VENDOR_EDIT
 // Liujie.Xie@TECH.Kernel.Sched, 2019/05/22, add for ui first
 int sysctl_uifirst_enabled = 1;
-#endif /* VENDOR_EDIT */
-
-#ifdef VENDOR_EDIT
-// Nian.Sun@TECH.Kernel.Sched, 2019/05/22, add for ui first launcher boost
 int sysctl_launcher_boost_enabled = 0;
 #endif /* VENDOR_EDIT */
 
@@ -338,16 +330,244 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
-#ifdef VENDOR_EDIT
-/*Huacai.Zhou@PSW.BSP.Kernel.Performance, 2018-04-28, add foreground task io opt*/
+#if defined(CONFIG_PREEMPT_TRACER) || defined(CONFIG_IRQSOFF_TRACER)
 	{
-		.procname	= "fg_io_opt",
-		.data	= &sysctl_fg_io_opt,
-		.maxlen	= sizeof(int),
+		.procname       = "preemptoff_tracing_threshold_ns",
+		.data           = &sysctl_preemptoff_tracing_threshold_ns,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec,
+	},
+	{
+		.procname       = "irqsoff_tracing_threshold_ns",
+		.data           = &sysctl_irqsoff_tracing_threshold_ns,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec,
+	},
+#endif
+#ifdef CONFIG_SCHED_HMP
+	{
+		.procname	= "sched_freq_reporting_policy",
+		.data		= &sysctl_sched_freq_reporting_policy,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &max_freq_reporting_policy,
+	},
+	{
+		.procname	= "sched_freq_inc_notify",
+		.data		= &sysctl_sched_freq_inc_notify,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &zero,
+	},
+	{
+		.procname	= "sched_freq_dec_notify",
+		.data		= &sysctl_sched_freq_dec_notify,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &zero,
+	},
+	{
+		.procname       = "sched_cpu_high_irqload",
+		.data           = &sysctl_sched_cpu_high_irqload,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec,
+	},
+	{
+		.procname       = "sched_ravg_hist_size",
+		.data           = &sysctl_sched_ravg_hist_size,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = sched_window_update_handler,
+	},
+	{
+		.procname       = "sched_window_stats_policy",
+		.data           = &sysctl_sched_window_stats_policy,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = sched_window_update_handler,
+	},
+	{
+		.procname	= "sched_spill_load",
+		.data		= &sysctl_sched_spill_load_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
+	},
+	{
+		.procname	= "sched_spill_nr_run",
+		.data		= &sysctl_sched_spill_nr_run,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &zero,
+	},
+	{
+		.procname	= "sched_upmigrate",
+		.data		= &sysctl_sched_upmigrate_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
+	},
+	{
+		.procname	= "sched_downmigrate",
+		.data		= &sysctl_sched_downmigrate_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
+	},
+	{
+		.procname	= "sched_group_upmigrate",
+		.data		= &sysctl_sched_group_upmigrate_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+	},
+	{
+		.procname	= "sched_group_downmigrate",
+		.data		= &sysctl_sched_group_downmigrate_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+	},
+	{
+		.procname	= "sched_init_task_load",
+		.data		= &sysctl_sched_init_task_load_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
+	},
+	{
+		.procname	= "sched_select_prev_cpu_us",
+		.data		= &sysctl_sched_select_prev_cpu_us,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler   = sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+	},
+	{
+		.procname	= "sched_restrict_cluster_spill",
+		.data		= &sysctl_sched_restrict_cluster_spill,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &one,
+	},
+	{
+		.procname	= "sched_small_wakee_task_load",
+		.data		= &sysctl_sched_small_wakee_task_load_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler   = sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
+	},
+	{
+		.procname	= "sched_big_waker_task_load",
+		.data		= &sysctl_sched_big_waker_task_load_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler   = sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
+	},
+	{
+		.procname	= "sched_prefer_sync_wakee_to_waker",
+		.data		= &sysctl_sched_prefer_sync_wakee_to_waker,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &one,
+	},
+	{
+		.procname       = "sched_enable_thread_grouping",
+		.data           = &sysctl_sched_enable_thread_grouping,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec,
+	},
+	{
+		.procname	= "sched_pred_alert_freq",
+		.data		= &sysctl_sched_pred_alert_freq,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &zero,
+	},
+	{
+		.procname       = "sched_freq_aggregate",
+		.data           = &sysctl_sched_freq_aggregate,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = sched_window_update_handler,
+	},
+	{
+		.procname	= "sched_freq_aggregate_threshold",
+		.data		= &sysctl_sched_freq_aggregate_threshold_pct,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		/*
+		 * Special handling for sched_freq_aggregate_threshold_pct
+		 * which can be greater than 100. Use 1000 as an upper bound
+		 * value which works for all practical use cases.
+		 */
+		.extra2		= &one_thousand,
+	},
+	{
+		.procname	= "sched_boost",
+		.data		= &sysctl_sched_boost,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_boost_handler,
+		.extra1         = &zero,
+		.extra2		= &three,
+	},
+	{
+		.procname	= "sched_short_burst_ns",
+		.data		= &sysctl_sched_short_burst,
+		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
+	{
+		.procname       = "sched_short_sleep_ns",
+		.data           = &sysctl_sched_short_sleep,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec,
+	},
+#endif	/* CONFIG_SCHED_HMP */
+#ifdef VENDOR_EDIT
+/*Huacai.Zhou@PSW.BSP.Kernel.Performance, 2018-04-28, add foreground task io opt*/
+{
+		.procname	= "fg_io_opt",
+		.data		= &sysctl_fg_io_opt,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+},
 #endif
+
 #ifdef VENDOR_EDIT
 /*jason.tang@TECH.BSP.Kernel.Storage, 2019-05-20, add control ext4 fsync*/
 {
@@ -389,52 +609,15 @@ static struct ctl_table kern_table[] = {
 		.extra2		= &max_sched_granularity_ns,
 	},
 	{
-		.procname	= "sched_cstate_aware",
-		.data		= &sysctl_sched_cstate_aware,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-	},
-	{
-		.procname       = "sched_isolation_hint",
-		.data           = &sysctl_sched_isolation_hint_enable,
-		.maxlen         = sizeof(unsigned int),
-		.mode           = 0644,
-		.proc_handler   = proc_dointvec,
-	},
-#ifdef CONFIG_SCHED_WALT
-	{
-		.procname	= "sched_use_walt_cpu_util",
-		.data		= &sysctl_sched_use_walt_cpu_util,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-	},
-	{
-		.procname	= "sched_use_walt_task_util",
-		.data		= &sysctl_sched_use_walt_task_util,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-	},
-	{
-		.procname	= "sched_walt_init_task_load_pct",
-		.data		= &sysctl_sched_walt_init_task_load_pct,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-	},
-	{
-		.procname	= "sched_walt_cpu_high_irqload",
-		.data		= &sysctl_sched_walt_cpu_high_irqload,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-	},
-#endif
-	{
 		.procname	= "sched_sync_hint_enable",
 		.data		= &sysctl_sched_sync_hint_enable,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "sched_cstate_aware",
+		.data		= &sysctl_sched_cstate_aware,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
@@ -478,7 +661,7 @@ static struct ctl_table kern_table[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= &one
+		.extra1		= &one,
 	},
 	{
 		.procname	= "sched_shares_window_ns",
@@ -1223,17 +1406,6 @@ static struct ctl_table kern_table[] = {
 		.proc_handler	= proc_dostring,
 	},
 #endif
-#if defined(VENDOR_EDIT) && defined(CONFIG_DEATH_HEALER)
-/* Wen.Luo@BSP.Kernel.Stability, 2019/01/12, DeathHealer , Foreground background optimization,change max io count */
-	{
-		.procname	= "hung_task_maxiowait_count",
-		.data		= &sysctl_hung_task_maxiowait_count,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= &five,
-	},
-#endif
 #endif
 #ifdef CONFIG_COMPAT
 	{
@@ -1347,6 +1519,23 @@ static struct ctl_table kern_table[] = {
 		.extra2		= &one,
 	},
 #endif
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
+	{
+		.procname	= "boot_reason",
+		.data		= &boot_reason,
+		.maxlen		= sizeof(int),
+		.mode		= 0444,
+		.proc_handler	= proc_dointvec,
+	},
+
+	{
+		.procname	= "cold_boot",
+		.data		= &cold_boot,
+		.maxlen		= sizeof(int),
+		.mode		= 0444,
+		.proc_handler	= proc_dointvec,
+	},
+#endif
 #ifdef VENDOR_EDIT
 // Liujie.Xie@TECH.Kernel.Sched, 2019/05/22, add for ui first
 	{
@@ -1364,7 +1553,10 @@ static struct ctl_table kern_table[] = {
 		.proc_handler = proc_dointvec,
 	},
 #endif /* VENDOR_EDIT */
-
+/*
+ * NOTE: do not add new entries to this table unless you have read
+ * Documentation/sysctl/ctl_unnumbered.txt
+ */
 	{ }
 };
 
@@ -1485,34 +1677,6 @@ static struct ctl_table vm_table[] = {
 		.mode           = 0444 /* read-only */,
 		.proc_handler   = pdflush_proc_obsolete,
 	},
-#ifdef CONFIG_MEMCG
-	{
-		.procname	= "vmpressure_level_med",
-		.data		= &vmpressure_level_med,
-		.maxlen		= sizeof(vmpressure_level_med),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= &zero,
-		.extra2		= &vmpressure_level_critical,
-	},
-	{
-		.procname	= "vmpressure_level_critical",
-		.data		= &vmpressure_level_critical,
-		.maxlen		= sizeof(vmpressure_level_critical),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= &vmpressure_level_med,
-		.extra2		= &one_hundred,
-	},
-	{
-		.procname	= "vmpressure_win",
-		.data		= &vmpressure_win,
-		.maxlen		= sizeof(vmpressure_win),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= &zero,
-	},
-#endif
 	{
 		.procname	= "swappiness",
 		.data		= &vm_swappiness,
@@ -1520,14 +1684,10 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= &zero,
-#ifndef CONFIG_MTK_GMO_RAM_OPTIMIZE
 #ifdef VENDOR_EDIT //yixue.ge@PSW.BSP.Kernel.Driver 20170720 add for add direct_vm_swappiness
 		.extra2		= &two_hundred,
 #else
 		.extra2		= &one_hundred,
-#endif /*VENDOR_EDIT*/
-#else
-		.extra2		= &two_hundred,
 #endif
 	},
 #ifdef VENDOR_EDIT //yixue.ge@PSW.BSP.Kernel.Driver 20170720 add for add direct_vm_swappiness
@@ -1653,15 +1813,6 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= min_free_kbytes_sysctl_handler,
 		.extra1		= &zero,
-	},
-	{
-		.procname	= "watermark_scale_factor",
-		.data		= &watermark_scale_factor,
-		.maxlen		= sizeof(watermark_scale_factor),
-		.mode		= 0644,
-		.proc_handler	= watermark_scale_factor_sysctl_handler,
-		.extra1		= &one,
-		.extra2		= &one_thousand,
 	},
 	{
 		.procname	= "percpu_pagelist_fraction",
@@ -1861,6 +2012,23 @@ static struct ctl_table vm_table[] = {
 		.extra2		= (void *)&mmap_rnd_compat_bits_max,
 	},
 #endif
+#ifdef CONFIG_SWAP
+	{
+		.procname	= "swap_ratio",
+		.data		= &sysctl_swap_ratio,
+		.maxlen		= sizeof(sysctl_swap_ratio),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+	},
+	{
+		.procname	= "swap_ratio_enable",
+		.data		= &sysctl_swap_ratio_enable,
+		.maxlen		= sizeof(sysctl_swap_ratio_enable),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+	},
+#endif
+
 	{ }
 };
 
@@ -2330,15 +2498,7 @@ static int do_proc_dointvec_conv(bool *negp, unsigned long *lvalp,
 				 int write, void *data)
 {
 	if (write) {
-		if (*negp) {
-			if (*lvalp > (unsigned long) INT_MAX + 1)
-				return -EINVAL;
-			*valp = -*lvalp;
-		} else {
-			if (*lvalp > (unsigned long) INT_MAX)
-				return -EINVAL;
-			*valp = *lvalp;
-		}
+		*valp = *negp ? -*lvalp : *lvalp;
 	} else {
 		int val = *valp;
 		if (val < 0) {
@@ -2388,6 +2548,18 @@ static int __do_proc_dointvec(void *tbl_data, struct ctl_table *table,
 		*lenp = 0;
 		return 0;
 	}
+
+#ifdef VENDOR_EDIT
+//Jingchun.Wang@bsp.drv, 2017/04/19,
+//add for disable user to write proc printk
+#ifndef CONFIG_OPPO_DAILY_BUILD
+	if((oem_get_uartlog_status() == true) && (table->procname != NULL)) {
+		if((write == 1) && (strncmp(table->procname, "printk", 6) == 0)) {
+			return 0;
+		}
+	}
+#endif
+#endif /*VENDOR_EDIT*/
 
 	i = (int *) tbl_data;
 	vleft = table->maxlen / sizeof(*i);
@@ -2597,7 +2769,7 @@ int proc_do_print_tcpinfo(struct ctl_table *table, int write,
 				//Fix bug1102870: tcp_get_info cause APPS Crash
 				sock_hold(sk);
 
-				if ((sk->sk_state == TCP_TIME_WAIT) || (sk->sk_state == TCP_NEW_SYN_RECV)){
+				if ((sk->sk_state == TCP_TIME_WAIT) || (sk->sk_state == TCP_NEW_SYN_RECV)) {
 					__sock_put(sk);
 					continue;
 				}
@@ -2641,9 +2813,12 @@ put_return:
 	*lenp -= left_count;
 	*ppos += left_count;
 
+
+
 	return 0;
 }
 #endif /* VENDOR_EDIT */
+
 /**
  * proc_douintvec - read a vector of unsigned integers
  * @table: the sysctl table

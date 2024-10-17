@@ -20,7 +20,6 @@
 #include <linux/blkdev.h>
 #include <linux/backing-dev.h>
 #include <asm/unaligned.h>
-#include <mt-plat/mtk_blocktag.h>
 #include "fat.h"
 
 #ifndef CONFIG_FAT_DEFAULT_IOCHARSET
@@ -217,7 +216,6 @@ static int fat_write_begin(struct file *file, struct address_space *mapping,
 	err = cont_write_begin(file, mapping, pos, len, flags,
 				pagep, fsdata, fat_get_block,
 				&MSDOS_I(mapping->host)->mmu_private);
-	mtk_btag_pidlog_set_pid(*pagep);
 	if (err < 0)
 		fat_write_failed(mapping, pos + len);
 	return err;
@@ -770,8 +768,9 @@ retry:
 	fat_get_blknr_offset(sbi, i_pos, &blocknr, &offset);
 	bh = sb_bread(sb, blocknr);
 	if (!bh) {
-		fat_msg(sb, KERN_ERR, "unable to read inode block "
-		       "for updating (i_pos %lld)", i_pos);
+		fat_msg_ratelimit(sb, KERN_ERR,
+			"unable to read inode block for updating (i_pos %lld)",
+			i_pos);
 		return -EIO;
 	}
 	spin_lock(&sbi->inode_hash_lock);

@@ -42,7 +42,6 @@
 
 #include <linux/kthread.h>
 #include <linux/freezer.h>
-#include <linux/hie.h>
 
 #include "ext4.h"
 #include "ext4_extents.h"	/* Needed for trace points definition */
@@ -50,12 +49,6 @@
 #include "xattr.h"
 #include "acl.h"
 #include "mballoc.h"
-
-#ifdef CONFIG_MTK_UFS_SUPPORT
-#include "ufs-mtk-dbg.h"
-#else
-#define ufs_mtk_dbg_hang_detect_dump(...)
-#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ext4.h>
@@ -86,6 +79,10 @@ static int ext4_feature_set_ok(struct super_block *sb, int readonly);
 static void ext4_destroy_lazyinit_thread(void);
 static void ext4_unregister_li_request(struct super_block *sb);
 static void ext4_clear_request_list(void);
+#if defined(VENDOR_EDIT) && defined(CONFIG_EXT4_ASYNC_DISCARD_SUPPORT)
+static void ext4_umount_begin(struct super_block *sb);
+extern void ext4_stop_discard_thread(struct ext4_sb_info *sbi);
+#endif
 
 #if !defined(CONFIG_EXT2_FS) && !defined(CONFIG_EXT2_FS_MODULE) && defined(CONFIG_EXT4_USE_FOR_EXT2)
 static struct file_system_type ext2_fs_type = {
@@ -395,9 +392,6 @@ static void ext4_handle_error(struct super_block *sb)
 		smp_wmb();
 		sb->s_flags |= MS_RDONLY;
 	}
-
-	ufs_mtk_dbg_hang_detect_dump();
-
 	if (test_opt(sb, ERRORS_PANIC)) {
 		if (EXT4_SB(sb)->s_journal &&
 		  !(EXT4_SB(sb)->s_journal->j_flags & JBD2_REC_ERR))
@@ -599,9 +593,6 @@ void __ext4_abort(struct super_block *sb, const char *function,
 			jbd2_journal_abort(EXT4_SB(sb)->s_journal, -EIO);
 		save_error_info(sb, function, line);
 	}
-
-	ufs_mtk_dbg_hang_detect_dump();
-
 	if (test_opt(sb, ERRORS_PANIC)) {
 		if (EXT4_SB(sb)->s_journal &&
 		  !(EXT4_SB(sb)->s_journal->j_flags & JBD2_REC_ERR))
@@ -803,23 +794,6 @@ static void dump_orphan_list(struct super_block *sb, struct ext4_sb_info *sbi)
 	}
 }
 
-#ifdef CONFIG_QUOTA
-static int ext4_quota_off(struct super_block *sb, int type);
-
-static inline void ext4_quota_off_umount(struct super_block *sb)
-{
-	int type;
-
-	/* Use our quota_off function to clear inode flags etc. */
-	for (type = 0; type < EXT4_MAXQUOTAS; type++)
-		ext4_quota_off(sb, type);
-}
-#else
-static inline void ext4_quota_off_umount(struct super_block *sb)
-{
-}
-#endif
-
 static void ext4_put_super(struct super_block *sb)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
@@ -827,8 +801,12 @@ static void ext4_put_super(struct super_block *sb)
 	int aborted = 0;
 	int i, err;
 
+#if defined(VENDOR_EDIT) && defined(CONFIG_EXT4_ASYNC_DISCARD_SUPPORT)
+//yh@PSW.BSP.Storage.EXT4, 2018-11-26 add for ext4 async discard suppot
+	destroy_discard_cmd_control(sbi);
+#endif
 	ext4_unregister_li_request(sb);
-	ext4_quota_off_umount(sb);
+	dquot_disable(sb, -1, DQUOT_USAGE_ENABLED | DQUOT_LIMITS_ENABLED);
 
 	flush_workqueue(sbi->rsv_conversion_wq);
 	destroy_workqueue(sbi->rsv_conversion_wq);
@@ -1109,6 +1087,7 @@ static int ext4_mark_dquot_dirty(struct dquot *dquot);
 static int ext4_write_info(struct super_block *sb, int type);
 static int ext4_quota_on(struct super_block *sb, int type, int format_id,
 			 struct path *path);
+static int ext4_quota_off(struct super_block *sb, int type);
 static int ext4_quota_on_mount(struct super_block *sb, int type);
 static ssize_t ext4_quota_read(struct super_block *sb, int type, char *data,
 			       size_t len, loff_t off);
@@ -1158,6 +1137,9 @@ static const struct super_operations ext4_sops = {
 	.unfreeze_fs	= ext4_unfreeze,
 	.statfs		= ext4_statfs,
 	.remount_fs	= ext4_remount,
+#if defined(VENDOR_EDIT) && defined(CONFIG_EXT4_ASYNC_DISCARD_SUPPORT)
+	.umount_begin   = ext4_umount_begin,
+#endif
 	.show_options	= ext4_show_options,
 #ifdef CONFIG_QUOTA
 	.quota_read	= ext4_quota_read,
@@ -1192,6 +1174,10 @@ enum {
 	Opt_nomblk_io_submit, Opt_block_validity, Opt_noblock_validity,
 	Opt_inode_readahead_blks, Opt_journal_ioprio,
 	Opt_dioread_nolock, Opt_dioread_lock,
+#if defined(VENDOR_EDIT) && defined(CONFIG_EXT4_ASYNC_DISCARD_SUPPORT)
+//yh@PSW.BSP.Storage.EXT4, 2018-11-26 add for ext4 async discard suppot
+	Opt_async_discard, Opt_noasync_discard,
+#endif
 	Opt_discard, Opt_nodiscard, Opt_init_itable, Opt_noinit_itable,
 	Opt_max_dir_size_kb, Opt_nojournal_checksum,
 };
@@ -1269,8 +1255,11 @@ static const match_table_t tokens = {
 	{Opt_dioread_lock, "dioread_lock"},
 	{Opt_discard, "discard"},
 	{Opt_nodiscard, "nodiscard"},
+#if defined(VENDOR_EDIT) && defined(CONFIG_EXT4_ASYNC_DISCARD_SUPPORT)
+//yh@PSW.BSP.Storage.EXT4, 2018-11-26 add for ext4 async discard suppot
 	{Opt_async_discard, "async_discard"},
 	{Opt_noasync_discard, "noasync_discard"},
+#endif
 	{Opt_init_itable, "init_itable=%u"},
 	{Opt_init_itable, "init_itable"},
 	{Opt_noinit_itable, "noinit_itable"},
@@ -1409,6 +1398,11 @@ static const struct mount_opts {
 	 MOPT_EXT4_ONLY | MOPT_SET},
 	{Opt_dioread_lock, EXT4_MOUNT_DIOREAD_NOLOCK,
 	 MOPT_EXT4_ONLY | MOPT_CLEAR},
+#if defined(VENDOR_EDIT) && defined(CONFIG_EXT4_ASYNC_DISCARD_SUPPORT)
+//yh@PSW.BSP.Storage.EXT4, 2018-11-26 add for ext4 async discard suppot
+	{Opt_async_discard, EXT4_MOUNT_ASYNC_DISCARD, MOPT_SET},
+	{Opt_noasync_discard, EXT4_MOUNT_ASYNC_DISCARD, MOPT_CLEAR},
+#endif
 	{Opt_discard, EXT4_MOUNT_DISCARD, MOPT_SET},
 	{Opt_nodiscard, EXT4_MOUNT_DISCARD, MOPT_CLEAR},
 	{Opt_delalloc, EXT4_MOUNT_DELALLOC,
@@ -2132,7 +2126,7 @@ static int ext4_check_descriptors(struct super_block *sb,
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 	ext4_fsblk_t first_block = le32_to_cpu(sbi->s_es->s_first_data_block);
 	ext4_fsblk_t last_block;
-	ext4_fsblk_t last_bg_block = sb_block + ext4_bg_num_gdb(sb, 0) + 1;
+	ext4_fsblk_t last_bg_block = sb_block + ext4_bg_num_gdb(sb, 0);
 	ext4_fsblk_t block_bitmap;
 	ext4_fsblk_t inode_bitmap;
 	ext4_fsblk_t inode_table;
@@ -2905,14 +2899,8 @@ static ext4_group_t ext4_has_uninit_itable(struct super_block *sb)
 		if (!gdp)
 			continue;
 
-		if (gdp->bg_flags & cpu_to_le16(EXT4_BG_INODE_ZEROED))
-			continue;
-		if (group != 0)
+		if (!(gdp->bg_flags & cpu_to_le16(EXT4_BG_INODE_ZEROED)))
 			break;
-		ext4_error(sb, "Inode table for bg 0 marked as "
-			   "needing zeroing");
-		if (sb->s_flags & MS_RDONLY)
-			return ngroups;
 	}
 
 	return group;
@@ -3419,7 +3407,13 @@ static int ext4_fill_super(struct super_block *sb, void *data, int silent)
 	if (!parse_options((char *) data, sb, &journal_devnum,
 			   &journal_ioprio, 0))
 		goto failed_mount;
-
+#if defined(VENDOR_EDIT) && defined(CONFIG_EXT4_ASYNC_DISCARD_SUPPORT)
+//yh@PSW.BSP.Storage.EXT4, 2019-02-15 add for ext4 async discard suppot
+	if (test_opt(sb, ASYNC_DISCARD)&&test_opt(sb,DISCARD)) {
+        clear_opt(sb, DISCARD);
+        ext4_msg(sb, KERN_WARNING, "mount option discard/async_discard conflict, use async_discard default");        
+    }
+#endif
 	if (test_opt(sb, DATA_FLAGS) == EXT4_MOUNT_JOURNAL_DATA) {
 		printk_once(KERN_WARNING "EXT4-fs: Warning: mounting "
 			    "with data=journal disables delayed "
@@ -3807,13 +3801,13 @@ static int ext4_fill_super(struct super_block *sb, void *data, int silent)
 			goto failed_mount2;
 		}
 	}
+	sbi->s_gdb_count = db_count;
 	if (!ext4_check_descriptors(sb, logical_sb_block, &first_not_zeroed)) {
 		ext4_msg(sb, KERN_ERR, "group descriptors corrupted!");
 		ret = -EFSCORRUPTED;
 		goto failed_mount2;
 	}
 
-	sbi->s_gdb_count = db_count;
 	get_random_bytes(&sbi->s_next_generation, sizeof(u32));
 	spin_lock_init(&sbi->s_next_gen_lock);
 
@@ -4058,7 +4052,7 @@ no_journal:
 	}
 
 	block = ext4_count_free_clusters(sb);
-	ext4_free_blocks_count_set(sbi->s_es,
+	ext4_free_blocks_count_set(sbi->s_es, 
 				   EXT4_C2B(sbi, block));
 	err = percpu_counter_init(&sbi->s_freeclusters_counter, block,
 				  GFP_KERNEL);
@@ -4121,7 +4115,12 @@ no_journal:
 	} else
 		descr = "out journal";
 
-	if (test_opt(sb, DISCARD)) {
+	if (test_opt(sb, DISCARD) 
+#if defined(VENDOR_EDIT) && defined(CONFIG_EXT4_ASYNC_DISCARD_SUPPORT)
+//yh@PSW.BSP.Storage.EXT4, 2019-02-16 add for ext4 async discard suppot
+        || test_opt(sb, ASYNC_DISCARD)
+#endif
+    ) {
 		struct request_queue *q = bdev_get_queue(sb->s_bdev);
 		if (!blk_queue_discard(q))
 			ext4_msg(sb, KERN_WARNING,
@@ -4145,6 +4144,16 @@ no_journal:
 	ratelimit_state_init(&sbi->s_msg_ratelimit_state, 5 * HZ, 10);
 
 	kfree(orig_data);
+#if defined(VENDOR_EDIT) && defined(CONFIG_EXT4_ASYNC_DISCARD_SUPPORT)
+//yh@PSW.BSP.Storage.EXT4, 2018-11-26 add for ext4 async discard suppot
+	if (test_opt(sb, ASYNC_DISCARD)) {
+		sbi->interval_time = DEF_IDLE_INTERVAL;
+		err = create_discard_cmd_control(sbi);
+		if (err)
+			ext4_msg(sb, KERN_ERR, "mount creat async discard thread fail");
+    }
+	ext4_update_time(sbi);
+#endif
 	return 0;
 
 cantfind_ext4:
@@ -4746,6 +4755,21 @@ struct ext4_mount_options {
 #endif
 };
 
+#if defined(VENDOR_EDIT) && defined(CONFIG_EXT4_ASYNC_DISCARD_SUPPORT)
+static void ext4_umount_begin(struct super_block *sb)
+{
+	/*
+	 * this is called at the begin of umount to stop discard thread
+	 */
+
+	if(test_opt(sb, ASYNC_DISCARD))
+	{
+		ext4_msg(sb, KERN_WARNING, "stopping discard thread...");
+		ext4_stop_discard_thread(EXT4_SB(sb));
+	}
+
+}
+#endif
 static int ext4_remount(struct super_block *sb, int *flags, char *data)
 {
 	struct ext4_super_block *es;
@@ -5262,35 +5286,24 @@ static int ext4_quota_off(struct super_block *sb, int type)
 {
 	struct inode *inode = sb_dqopt(sb)->files[type];
 	handle_t *handle;
-	int err;
 
 	/* Force all delayed allocation blocks to be allocated.
 	 * Caller already holds s_umount sem */
 	if (test_opt(sb, DELALLOC))
 		sync_filesystem(sb);
 
-	if (!inode || !igrab(inode))
+	if (!inode)
 		goto out;
 
-	err = dquot_quota_off(sb, type);
-	if (err || ext4_has_feature_quota(sb))
-		goto out_put;
-
-	inode_lock(inode);
 	/* Update modification times of quota files when userspace can
 	 * start looking at them */
 	handle = ext4_journal_start(inode, EXT4_HT_QUOTA, 1);
 	if (IS_ERR(handle))
-		goto out_unlock;
+		goto out;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	ext4_mark_inode_dirty(handle, inode);
 	ext4_journal_stop(handle);
-out_unlock:
-	inode_unlock(inode);
-out_put:
-	lockdep_set_quota_inode(inode, I_DATA_SEM_NORMAL);
-	iput(inode);
-	return err;
+
 out:
 	return dquot_quota_off(sb, type);
 }
@@ -5467,15 +5480,6 @@ static struct file_system_type ext4_fs_type = {
 };
 MODULE_ALIAS_FS("ext4");
 
-#ifdef CONFIG_EXT4_ENCRYPTION
-struct hie_fs ext4_hie = {
-	.name = "ext4",
-	.key_payload = ext4_key_payload,
-	.set_bio_context = ext4_set_bio_crypt_context,
-	.priv = NULL,
-};
-#endif
-
 /* Shared across all ext4 file systems */
 wait_queue_head_t ext4__ioend_wq[EXT4_WQ_HASH_SZ];
 struct mutex ext4__aio_mutex[EXT4_WQ_HASH_SZ];
@@ -5525,10 +5529,6 @@ static int __init ext4_init_fs(void)
 	err = register_filesystem(&ext4_fs_type);
 	if (err)
 		goto out;
-
-#ifdef CONFIG_EXT4_ENCRYPTION
-	hie_register_fs(&ext4_hie);
-#endif
 
 	return 0;
 out:
