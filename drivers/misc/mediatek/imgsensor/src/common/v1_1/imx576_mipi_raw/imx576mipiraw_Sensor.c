@@ -472,7 +472,7 @@ static void write_shutter(kal_uint16 shutter)
 static void set_shutter(kal_uint16 shutter)
 {
 	unsigned long flags;
-	
+
 	spin_lock_irqsave(&imgsensor_drv_lock, flags);
 	imgsensor.shutter = shutter;
 	spin_unlock_irqrestore(&imgsensor_drv_lock, flags);

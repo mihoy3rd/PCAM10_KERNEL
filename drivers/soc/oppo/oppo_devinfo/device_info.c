@@ -58,12 +58,10 @@ struct devinfo_data {
 	int sub_hw_id2;
 	int main_hw_id5;
 	int main_hw_id6;
-	int main_hw_id7;
 	struct pinctrl_state *hw_sub_id_sleep;
 	struct pinctrl_state *hw_sub_id_active;
 	struct pinctrl_state *hw_main_id5_active;
 	struct pinctrl_state *hw_main_id6_active;
-	struct pinctrl_state *hw_main_id7_active;
 	int ant_select_gpio;
 	struct manufacture_info sub_mainboard_info;
 };
@@ -275,7 +273,7 @@ static int mainboard_verify(struct devinfo_data *const devinfo_data)
 static int subboard_init(struct devinfo_data *const devinfo_data) {
 	int ret = 0;
 	struct device_node *np = NULL;
-
+	
 	np = devinfo_data->devinfo->dev.of_node;
 
 	devinfo_data->sub_hw_id1 = of_get_named_gpio(np, "Hw,sub_hwid_1", 0);
@@ -320,7 +318,7 @@ static int subboard_init(struct devinfo_data *const devinfo_data) {
 	}
 
 	snprintf(devinfo_data->sub_mainboard_info.version, INFO_BUF_LEN, "MTK");
-	ret = register_device_proc("audio_mainboard",
+	ret = register_device_proc("audio_mainboard", 
 		devinfo_data->sub_mainboard_info.version,
 		devinfo_data->sub_mainboard_info.manufacture);
 
@@ -375,26 +373,6 @@ static int subboard_verify(struct devinfo_data *const devinfo_data)
 		devinfo_data->sub_hw_id2, id2, operator);
 
 	switch(get_project()) {
-		case OPPO_17331:
-			if ((id1 == 1) && (id2 == 1)
-				&& (operator == OPERATOR_17331_ASIA || operator == OPERATOR_17337_ASIA)) {
-			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
-			} else if ((id1 == 1) && (id2 == 0)
-				&& (operator == OPERATOR_17335_17197_ALL_BAND || operator == OPERATOR_17340_ALL_BAND)) {
-			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
-			} else if ((id1 == 1) && (id2 == 0)
-				&& (operator == OPERATOR_17332_ALL_BAND_HIGH_CONFIG || operator == OPERATOR_17339_ALL_BAND_HIGH_CONFIG)) {
-			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
-			} else if ((id1 == 1) && (id2 == 1) && (operator == OPERATOR_17338_INDIA)) {
-			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
-			} else if ((id1 == 1) && (id2 == 1) && (operator == OPERATOR_17331_EVB)) {
-			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
-			} else if ((id1 == 1) && (id2 == 1) && (operator == OPERATOR_17341_INDIA)) {
-			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
-			} else {
-				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-unmatch");
-			}
-			break;
 		case OPPO_17197:
 			if ((id1 == 1) && (id2 == 1) && (operator == OPERATOR_17335_17197_ALL_BAND)) {
 			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
@@ -406,20 +384,6 @@ static int subboard_verify(struct devinfo_data *const devinfo_data)
 				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-unmatch");
 			}
 			break;
-		case OPPO_17061:
-			if ((id1 == 1) && (id2 == 1) && (operator == OPERATOR_17061_ASIA
-				|| operator == OPERATOR_17065_INDIA || operator == OPERATOR_17066_INDIA_HIGH_CONFIG)) {
-			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
-			} else if ((id1 == 1) && (id2 == 1) && (operator == OPERATOR_17062_ASIA_SIMPLE
-				|| operator == OPERATOR_17067_CHINA)) {
-			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
-			} else if ((id1 == 1) && (id2 == 0) && (operator == OPERATOR_17063_TAIAO)) {
-			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
-			} else {
-				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-unmatch");
-			}
-			break;
-
 		case OPPO_18531:
 			if ((id1 == 1) && (id2 == 1) && (operator == OPERATOR_18531_ASIA ||
 				operator == OPERATOR_18531_ASIA_SIMPLE ||
@@ -441,66 +405,35 @@ static int subboard_verify(struct devinfo_data *const devinfo_data)
 				operator == OPERATOR_18161_MOBILE ||
 				operator == OPERATOR_18161_ALL_MODES ||
 				operator == OPERATOR_18161_ASIA_64G ||
-				operator == OPERATOR_18161_ASIA_128G ||
-				operator == OPERATOR_18161_ASIA_6_128G ||
-				operator == OPERATOR_18161_ASIA_SIMPLE_INDIA)) {
+				operator == OPERATOR_18161_ASIA_128G)) {
 				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
 			} else {
 				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-unmatch");
 			}
 			break;
-		case OPPO_19091:
-			if ((id1 == 0) && (id2 == 0) && (operator == OPERATOR_19091_ASIA)) {
-				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
-			} else {
-				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-unmatch");
-			}
-			break;
-		case OPPO_19391:
-                case OPPO_19531:
-			if ((id1 == 0) && (id2 == 0) && (operator == OPERATOR_19531_ASIA ||
-				operator == OPERATOR_19531_ASIA_SIMPLE ||
-				operator == OPERATOR_19531_All_BAND)) {
-				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
-			} else {
-				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-unmatch");
-			}
-			break;
-			
-         case OPPO_19151:
-			if ((id1 == 1) && (id2 == 1) && (operator == OPERATOR_19151_All_BAND ||
-				operator == OPERATOR_19151_MOBILE)) {
-				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
+			case OPPO_18611:
+				if (((id1 == 1) && (id2 == 1)) && ((operator == OPERATOR_18611_REALME_INDIA) ||(operator == OPERATOR_18611_REALME_INDIA_DDR4))) {
+					snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "audio-match");
+				} else if (((id1 == 0) && (id2 == 0))  && ((operator == OPERATOR_18611_REALME_ALL_BAND) || (operator == OPERATOR_18611_REALME_VIETNAM_ALL_BAND))) {
+					snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "audio-match");
+				} else {
+					snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "audio-unmatch");
+				}
+				break;
+			case OPPO_17061:
+			if ((id1 == 1) && (id2 == 1) && (operator == OPERATOR_17061_ASIA
+				|| operator == OPERATOR_17065_INDIA || operator == OPERATOR_17066_INDIA_HIGH_CONFIG)) {
+			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
+			} else if ((id1 == 1) && (id2 == 1) && (operator == OPERATOR_17062_ASIA_SIMPLE
+				|| operator == OPERATOR_17067_CHINA)) {
+			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
+			} else if ((id1 == 1) && (id2 == 0) && (operator == OPERATOR_17063_TAIAO)) {
+			    snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
 			} else {
 				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-unmatch");
 			}
 			break;
 
-         case OPPO_19350:
-			if (((id1 == 0) && (id2 == 1) && (operator == OPERATOR_19350_ASIA_SIMPLE ||
-			        operator == OPERATOR_19350_ASIA_SIMPLE_INDIA ||
-				operator == OPERATOR_19350_ASIA)) || 
-			    ((id1 == 1) && (id2 == 0) && (operator == OPERATOR_19350_ASIA_CARRIER ||
-				operator == OPERATOR_19350_ASIA_EUROPE))) {
-				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-match");
-			} else {
-				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "rf-unmatch");
-			}
-			break;
-
-		case OPPO_18311:
-			if ((id1 == 0) && (id2 == 0) && (operator == OPERATOR_18313_ASIA_ALL_BAND)) {
-				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "audio-match");
-			} else if ((id1 == 1) && (id2 == 1)
-				&& (operator == OPERATOR_18311_ASIA || operator == OPERATOR_18312_INDIA
-					|| operator == OPERATOR_18317_VIETNAM || operator == OPERATOR_18318_VIETNAM
-					|| operator == OPERATOR_18328_ASIA_SIMPLE_NORMALCHG
-					|| operator == OPERATOR_18311_ASIA_2ND_RESOURCE)) {
-				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "audio-match");
-			} else {
-				snprintf(devinfo_data->sub_mainboard_info.manufacture, INFO_BUF_LEN, "audio-unmatch");
-			}
-			break;
 		default:
 			DEVINFO_ERR("illegal project\n");
 			break;
@@ -515,9 +448,7 @@ static int subboard_verify(struct devinfo_data *const devinfo_data)
 	return ret;
 }
 
-int main_hwid5_val = -1;
-int main_hwid6_val = 0;
-int main_hwid7_val = -1;
+int main_hwid5_val = -1, main_hwid6_val = 0;
 
 static ssize_t main_hwid5_read(struct file *file, char __user *buf,
 		size_t count,loff_t *off)
@@ -583,11 +514,11 @@ static void main_hwid_proc_create(void)
         }
 }
 
-static int main_hwid_init(struct devinfo_data *const devinfo_data)
+static int main_hwid_init(struct devinfo_data *const devinfo_data) 
 {
 	int ret = 0;
 	struct device_node *np = NULL;
-
+	
 	np = devinfo_data->devinfo->dev.of_node;
 
 	devinfo_data->main_hw_id5 = of_get_named_gpio(np, "Hw,main_hwid_5", 0);
@@ -600,7 +531,7 @@ static int main_hwid_init(struct devinfo_data *const devinfo_data)
 		if (ret) {
 			DEVINFO_ERR("unable to request hwid5 gpio [%d]\n",devinfo_data->main_hw_id5);
 			goto err;
-		}
+		} 
 	}
 	devinfo_data->main_hw_id6 = of_get_named_gpio(np, "Hw,main_hwid_6", 0);
 	if(devinfo_data->main_hw_id6 < 0 ) {
@@ -612,20 +543,7 @@ static int main_hwid_init(struct devinfo_data *const devinfo_data)
 		if (ret) {
 			DEVINFO_ERR("unable to request hwid6 gpio [%d]\n",devinfo_data->main_hw_id6);
 			goto err;
-		}
-	}
-
-	devinfo_data->main_hw_id7 = of_get_named_gpio(np, "Hw,main_hwid_7", 0);
-	if (devinfo_data->main_hw_id7 < 0 ) {
-		DEVINFO_ERR("main_hw_id7 not specified\n");
-		//ret = -1;
-		//goto err;
-	} else {
-		ret = gpio_request(devinfo_data->main_hw_id7, "main_hw_id7");
-		if (ret) {
-			DEVINFO_ERR("unable to request hwid6 gpio [%d]\n", devinfo_data->main_hw_id7);
-			//goto err;
-		}
+		} 
 	}
 
 	if (IS_ERR_OR_NULL(devinfo_data->pinctrl)) {
@@ -655,28 +573,15 @@ static int main_hwid_init(struct devinfo_data *const devinfo_data)
 	} else {
 		 pinctrl_select_state(devinfo_data->pinctrl,devinfo_data->hw_main_id6_active);
 	}
-
-	devinfo_data->hw_main_id7_active = pinctrl_lookup_state(devinfo_data->pinctrl, "hw_main_id7_active");
-	if (IS_ERR_OR_NULL(devinfo_data->hw_main_id7_active)) {
-		DEVINFO_ERR("Failed to get hw_main_id7_active\n");
-		//ret = -1;
-		//goto err;
-	} else {
-		pinctrl_select_state(devinfo_data->pinctrl, devinfo_data->hw_main_id7_active);
-	}
-
 	mdelay(5);
 	main_hwid5_val = gpio_get_value(devinfo_data->main_hw_id5);
-	if (get_Operator_Version() == OPERATOR_17199_TAIWAN) {
-		main_hwid5_val = 0;
-	}
+    if (get_Operator_Version() ==OPERATOR_17199_TAIWAN) {
+        main_hwid5_val = 0;
+    }
 	main_hwid6_val = gpio_get_value(devinfo_data->main_hw_id6);
-	main_hwid7_val = gpio_get_value(devinfo_data->main_hw_id7);
-	printk(KERN_ERR "hw_id5[%d]: %d, hw_id6[%d]: %d, hw_id7[%d]: %d\n",
-		devinfo_data->main_hw_id5, main_hwid5_val,
-		devinfo_data->main_hw_id6, main_hwid6_val,
-		devinfo_data->main_hw_id7, main_hwid7_val);
-
+	DEVINFO_ERR("hw_id5[%d]: %d, hw_id6[%d]: %d\n", devinfo_data->main_hw_id5,
+		main_hwid5_val, devinfo_data->main_hw_id6, main_hwid6_val);
+	
 	main_hwid_proc_create();
 
 err:
@@ -685,14 +590,6 @@ err:
 	}
 	if (is_project(OPPO_18561)) {
 		main_hwid5_val = main_hwid6_val;
-	}
-	if (is_project(OPPO_19531) || is_project(OPPO_19151) || is_project(OPPO_19350)) {
-		if (main_hwid6_val == 1 && main_hwid7_val == 0)
-			main_hwid5_val = 2;//ASIC rk826
-		else if (main_hwid6_val == 0 && main_hwid7_val == 1)
-			main_hwid5_val = 3;//ASIC op10
-		else if (main_hwid6_val == 0 && main_hwid7_val == 0)
-			main_hwid5_val = 0;//STM8S
 	}
 
 	return ret;
@@ -764,9 +661,9 @@ static int devinfo_probe(struct platform_device *pdev)
 	}
 
 	main_hwid_init(devinfo_data);
-
+		
 	init_proc_devinfo_modify();
-
+	
 	return ret;
 }
 

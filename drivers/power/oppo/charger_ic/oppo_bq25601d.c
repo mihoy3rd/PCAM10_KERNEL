@@ -21,7 +21,7 @@
 #include <linux/slab.h>
 #include <linux/irq.h>
 #include <linux/miscdevice.h>
-#include <linux/uaccess.h>
+#include <asm/uaccess.h>
 #include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/workqueue.h>
@@ -41,8 +41,7 @@
 #include <mt-plat/mtk_gpio.h>
 
 #include <mt-plat/mtk_rtc.h>
-#elif defined(CONFIG_OPPO_CHARGER_MTK6873)
-#include <linux/module.h>
+
 #else
 #include <mach/mt_typedefs.h>
 #include <mach/mt_gpio.h>
@@ -98,7 +97,7 @@ static DEFINE_MUTEX(bq25601d_i2c_access);
 static int __bq25601d_read_reg(struct chip_bq25601d *chip, int reg, int *returnData)
 {
 #ifdef CONFIG_OPPO_CHARGER_MTK
-#if defined(CONFIG_OPPO_CHARGER_MTK6763) || defined(CONFIG_OPPO_CHARGER_MTK6771) || defined(CONFIG_OPPO_CHARGER_MTK6873)
+#if defined(CONFIG_OPPO_CHARGER_MTK6763) || defined(CONFIG_OPPO_CHARGER_MTK6771)
 	int ret = 0;
 
 	ret = i2c_smbus_read_byte_data(chip->client, reg);
@@ -155,7 +154,7 @@ static int bq25601d_read_reg(struct chip_bq25601d *chip, int reg, int *returnDat
 static int __bq25601d_write_reg(struct chip_bq25601d *chip, int reg, int val)
 {
 #ifdef CONFIG_OPPO_CHARGER_MTK
-#if defined(CONFIG_OPPO_CHARGER_MTK6763) || defined(CONFIG_OPPO_CHARGER_MTK6771) || defined(CONFIG_OPPO_CHARGER_MTK6873)
+#if defined(CONFIG_OPPO_CHARGER_MTK6763) || defined(CONFIG_OPPO_CHARGER_MTK6771)
 	int ret = 0;
 
 	ret = i2c_smbus_write_byte_data(chip->client, reg, val);
@@ -239,7 +238,7 @@ static int chg_vol_mini(int *chg_vol)
 	return chg_vol_temp;
 }
 #endif
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 static int bq25601d_input_current_limit_write(int value)
 {
 	int rc = 0;
@@ -312,7 +311,7 @@ static int bq25601d_input_current_limit_write(int value)
 	j = 6; /* 2000 */
 	rc = bq25601d_config_interface(chip, REG00_BQ25601D_ADDRESS, REG00_BQ25601D_INPUT_CURRENT_LIMIT_2000MA, REG00_BQ25601D_INPUT_CURRENT_LIMIT_MASK);
 	msleep(90);
-#if defined(CONFIG_OPPO_CHARGER_MTK6763) || defined(CONFIG_OPPO_CHARGER_MTK6771) || defined(CONFIG_OPPO_CHARGER_MTK6873)
+#if defined(CONFIG_OPPO_CHARGER_MTK6763) || defined(CONFIG_OPPO_CHARGER_MTK6771)
 	for (i = 0; i < AICL_COUNT; i++) {
 		chg_vol = battery_meter_get_charger_voltage();
 		chg_vol_all[i] = chg_vol;
@@ -377,30 +376,8 @@ aicl_rerun:
 	}
 	return rc;
 }
-#else
-int bq25601d_input_current_limit_write(int value)
-{
-	int rc = 0;
-	struct chip_bq25601d *chip = charger_ic;
 
-	value = value / 1000;
-
-	chg_err("bq25601d_input_current_limit_write: %d\n", value);
-
-	rc = bq25601d_config_interface(chip, REG00_BQ25601D_ADDRESS, (value - 100)/100, REG00_BQ25601D_INPUT_CURRENT_LIMIT_MASK);
-	if (rc < 0) {
-                chg_err("Couldn't config current limit, rc = %d\n", rc);
-        }
-
-	return rc;
-}
-#endif
-
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
 static int bq25601d_charging_current_write_fast(int chg_cur)
-#else
-int bq25601d_charging_current_write_fast(int chg_cur)
-#endif
 {
 	int rc = 0;
 	int value = 0;
@@ -448,7 +425,7 @@ static int bq25601d_set_vindpm_vol(int vol)
 			value, REG06_BQ25601D_VINDPM_MASK);
 	return rc;
 }
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 #ifdef CONFIG_OPPO_SHORT_C_BATT_CHECK
 /* This function is getting the dynamic aicl result/input limited in mA.
  * If charger was suspended, it must return 0(mA).
@@ -479,7 +456,7 @@ static void bq25601d_set_aicl_point(int vbatt)
 		bq25601d_set_vindpm_vol(chip->hw_aicl_point);
 	}
 }
-#endif
+
 static int bq25601d_set_enable_volatile_writes(void)
 {
 	int rc = 0;
@@ -519,11 +496,8 @@ static int bq25601d_set_complete_charge_timeout(int val)
 
 	return rc;
 }
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 static int bq25601d_float_voltage_write(int vfloat_mv)
-#else
-int bq25601d_float_voltage_write(int vfloat_mv)
-#endif
 {
 	int rc = 0;
 	int value = 0;
@@ -638,11 +612,8 @@ static int bq25601d_set_wdt_timer(int reg)
 
 	return rc;
 }
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 static int bq25601d_set_chging_term_disable(void)
-#else
-int bq25601d_set_chging_term_disable(void)
-#endif
 {
 	int rc = 0;
 	struct chip_bq25601d *chip = charger_ic;
@@ -657,11 +628,8 @@ int bq25601d_set_chging_term_disable(void)
 
 	return rc;
 }
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 static int bq25601d_kick_wdt(void)
-#else
-int bq25601d_kick_wdt(void)
-#endif
 {
 	int rc = 0;
 	struct chip_bq25601d *chip = charger_ic;
@@ -734,11 +702,7 @@ static int bq25601d_disable_charging(void)
 	return rc;
 }
 #else /* CONFIG_MTK_PMIC_CHIP_MT6353 */
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
 static int bq25601d_enable_charging(void)
-#else
-int bq25601d_enable_charging(void)
-#endif
 {
 	int rc = 0;
 	struct chip_bq25601d *chip = charger_ic;
@@ -756,11 +720,8 @@ int bq25601d_enable_charging(void)
 
 	return rc;
 }
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 static int bq25601d_disable_charging(void)
-#else
-int bq25601d_disable_charging(void)
-#endif
 {
 	int rc = 0;
 	struct chip_bq25601d *chip = charger_ic;
@@ -821,7 +782,6 @@ static int bq25601d_check_charging_enable(void)
 		return 1;
 }
 #else /* CONFIG_MTK_PMIC_CHIP_MT6353 */
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
 static int bq25601d_check_charging_enable(void)
 {
 	int rc = 0;
@@ -844,9 +804,8 @@ static int bq25601d_check_charging_enable(void)
 
 	return charging_enable;
 }
-#endif
 #endif /*CONFIG_MTK_PMIC_CHIP_MT6353*/
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 static int bq25601d_registers_read_full(void)
 {
 	int rc = 0;
@@ -876,7 +835,7 @@ static int bq25601d_registers_read_full(void)
 	//chg_err("bq25601d_registers_read_full, reg_full = %d, reg_ovp = %d\r\n", reg_full, reg_ovp);
 	return (reg_full || reg_ovp);
 }
-#endif
+
 static int oppo_otg_online = 0;
 
 int bq25601d_otg_enable(void)
@@ -940,11 +899,8 @@ int bq25601d_otg_disable(void)
 
 	return rc;
 }
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 static int bq25601d_suspend_charger(void)
-#else
-int bq25601d_suspend_charger(void)
-#endif
 {
 	int rc = 0;
 	struct chip_bq25601d *chip = charger_ic;
@@ -970,11 +926,8 @@ int bq25601d_suspend_charger(void)
 
 	return rc;
 }
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 static int bq25601d_unsuspend_charger(void)
-#else
-int bq25601d_unsuspend_charger(void)
-#endif
 {
 	int rc = 0;
 	struct chip_bq25601d *chip = charger_ic;
@@ -995,7 +948,7 @@ int bq25601d_unsuspend_charger(void)
 	return rc;
 }
 
-#if defined (CONFIG_MTK_PMIC_CHIP_MT6353) || defined(CONFIG_OPPO_CHARGER_MTK6763) || defined(CONFIG_OPPO_CHARGER_MTK6771) || defined(CONFIG_OPPO_CHARGER_MTK6873)
+#if defined (CONFIG_MTK_PMIC_CHIP_MT6353) || defined(CONFIG_OPPO_CHARGER_MTK6763) || defined(CONFIG_OPPO_CHARGER_MTK6771)
 static int bq25601d_reset_charger(void)
 {
 	int rc = 0;
@@ -1068,7 +1021,7 @@ static int bq25601d_reset_charger(void)
 	return rc;
 }
 #endif /*defined (CONFIG_MTK_PMIC_CHIP_MT6353) || defined(CONFIG_OPPO_CHARGER_MTK6763) || defined(CONFIG_OPPO_CHARGER_MTK6771)*/
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 static bool bq25601d_check_charger_resume(void)
 {
 	struct chip_bq25601d *chip = charger_ic;
@@ -1079,13 +1032,9 @@ static bool bq25601d_check_charger_resume(void)
 		return true;
 	}
 }
-#endif
+
 #define DUMP_REG_LOG_CNT_30S  1
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
 static void bq25601d_dump_registers(void)
-#else
-void bq25601d_dump_registers(void)
-#endif
 {
 	int rc = 0;
 	int addr = 0;
@@ -1139,21 +1088,14 @@ static int bq25601d_check_registers(void)
 
   	return 0;
 }
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 static int bq25601d_get_chg_current_step(void)
 {
 	return 60;
 }
-#endif
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 static int bq25601d_hardware_init(void)
-#else
-int bq25601d_hardware_init(void)
-#endif
 {
-#ifdef CONFIG_OPPO_CHARGER_MTK6873
-	int rc = 0;
-#endif
 	struct chip_bq25601d *chip = charger_ic;
 
 	/* must be before set_vindpm_vol and set_input_current */
@@ -1185,13 +1127,7 @@ int bq25601d_hardware_init(void)
 	bq25601d_set_rechg_voltage(100);
 
 	bq25601d_set_vindpm_vol(chip->hw_aicl_point);
-#ifdef CONFIG_OPPO_CHARGER_MTK6873
-	rc = bq25601d_config_interface(chip, REG06_BQ25601D_ADDRESS,
-		0x80, REG06_BQ25601D_OVP_MASK);
-	if (rc < 0) {
-		chg_err("Couldn't config ovp rc = %d\n", rc);
-	}
-#endif
+
 #ifdef CONFIG_OPPO_CHARGER_MTK
 	if (get_boot_mode() == META_BOOT || get_boot_mode() == FACTORY_BOOT
 			|| get_boot_mode() == ADVMETA_BOOT || get_boot_mode() == ATE_FACTORY_BOOT) {
@@ -1203,14 +1139,11 @@ int bq25601d_hardware_init(void)
 #else /* CONFIG_OPPO_CHARGER_MTK */
 	bq25601d_unsuspend_charger();
 #endif /* CONFIG_OPPO_CHARGER_MTK */
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 	bq25601d_enable_charging();
-#endif
-#ifdef CONFIG_OPPO_CHARGER_MTK6873
-	bq25601d_set_wdt_timer(REG05_BQ25601D_WATCHDOG_TIMER_DISABLE);
-#else
+
 	bq25601d_set_wdt_timer(REG05_BQ25601D_WATCHDOG_TIMER_40S);
-#endif
+
 	return true;
 }
 
@@ -1259,7 +1192,7 @@ close_time:
 	return 0;
 }
 #endif /* CONFIG_OPPO_RTC_DET_SUPPORT */
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 extern bool oppo_chg_get_shortc_hw_gpio_status(void);
 
 struct oppo_chg_operations  bq25601d_chg_ops = {
@@ -1329,7 +1262,7 @@ struct oppo_chg_operations  bq25601d_chg_ops = {
 	.check_rtc_reset = rtc_reset_check,
 #endif
 };
-#endif
+
 static void register_charger_devinfo(void)
 {
 	int ret = 0;
@@ -1343,10 +1276,9 @@ static void register_charger_devinfo(void)
 extern void Charger_Detect_Init(void);
 extern void Charger_Detect_Release(void);
 extern bool is_usb_rdy(void);
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
 static void hw_bc12_init(void)
 {
-	int timeout = 350;
+	int timeout = 400;
 	static bool first_connect = true;
 
 	if (first_connect == true) {
@@ -1369,10 +1301,9 @@ static void hw_bc12_init(void)
 	}
 	Charger_Detect_Init();
 }
-#endif
+
 //static DEVICE_ATTR(bq25601d_access, 0664, show_bq25601d_access, store_bq25601d_access);
 #ifdef VENDOR_EDIT
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
 extern enum charger_type MTK_CHR_Type_num;
 extern unsigned int upmu_get_rgs_chrdet(void);
 
@@ -1440,10 +1371,9 @@ enum charger_type mt_charger_type_detection_bq25601d(void)
 
 	if (val_buf == REG08_BQ25601D_VBUS_STAT_UNKNOWN) {
 		MTK_CHR_Type_num = CHARGER_UNKNOWN;
-	} else if (val_buf == REG08_BQ25601D_VBUS_STAT_SDP) {
+	} else if (val_buf == REG08_BQ25601D_VBUS_STAT_SDP
+			|| val_buf == REG08_BQ25601D_VBUS_STAT_CDP) {
 		MTK_CHR_Type_num = STANDARD_HOST;
-	} else if (val_buf == REG08_BQ25601D_VBUS_STAT_CDP) {
-		MTK_CHR_Type_num = CHARGING_HOST;
 	} else if (val_buf == REG08_BQ25601D_VBUS_STAT_DCP
 			|| val_buf == REG08_BQ25601D_VBUS_STAT_OCP
 			|| val_buf == REG08_BQ25601D_VBUS_STAT_FLOAT) {
@@ -1485,10 +1415,9 @@ enum charger_type mt_charger_type_detection_bq25601d(void)
 		printk("mt_charger_type_detection: 2nd, val_buf=[0x%x]\n", val_buf);
 		if (val_buf == REG08_BQ25601D_VBUS_STAT_UNKNOWN) {
 			MTK_CHR_Type_num = APPLE_2_1A_CHARGER;
-		} else if (val_buf == REG08_BQ25601D_VBUS_STAT_SDP) {
+		} else if (val_buf == REG08_BQ25601D_VBUS_STAT_SDP
+				|| val_buf == REG08_BQ25601D_VBUS_STAT_CDP) {
 			MTK_CHR_Type_num = STANDARD_HOST;
-		} else if (val_buf == REG08_BQ25601D_VBUS_STAT_CDP) {
-			MTK_CHR_Type_num = CHARGING_HOST;
 		} else if (val_buf == REG08_BQ25601D_VBUS_STAT_DCP
 				|| val_buf == REG08_BQ25601D_VBUS_STAT_OCP
 				|| val_buf == REG08_BQ25601D_VBUS_STAT_FLOAT) {
@@ -1611,7 +1540,6 @@ enum charger_type mt_charger_type_detection_bq25601d(void)
 }
 #endif
 #endif
-#endif
 
 /* Qiao.Hu@BSP.BaseDrv.CHG.Basic, 2017/12/12, Add for charger modefy */
 static void do_charger_modefy_work(struct work_struct *data)
@@ -1676,45 +1604,6 @@ static irqreturn_t bq25601d_irq_handler_fn(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-#ifdef CONFIG_OPPO_CHARGER_MTK6873
-static int bq25601d_slave_chg_en_gpio_init(struct chip_bq25601d *chip)
-{
-	if (!chip) {
-		chg_err("chip bq25601d not ready!\n");
-		return -EINVAL;
-	}
-
-	chip->pinctrl = devm_pinctrl_get(chip->dev);
-
-	if (IS_ERR_OR_NULL(chip->pinctrl)) {
-		chg_err("get slave_chg_en_pinctrl fail\n");
-		return -EINVAL;
-	}
-
-	chip->slave_charger_enable = pinctrl_lookup_state(chip->pinctrl, "slave_charger_enable");
-	if (IS_ERR_OR_NULL(chip->slave_charger_enable)) {
-		chg_err("get slave_charger_enable fail\n");
-		return -EINVAL;
-	}
-
-	chip->slave_charger_disable = pinctrl_lookup_state(chip->pinctrl, "slave_charger_disable");
-	if (IS_ERR_OR_NULL(chip->slave_charger_disable)) {
-		chg_err("get slave_charger_disable fail\n");
-		return -EINVAL;
-	}
-
-	if (get_boot_mode() == META_BOOT || get_boot_mode() == FACTORY_BOOT
-			|| get_boot_mode() == ADVMETA_BOOT
-			|| get_boot_mode() == ATE_FACTORY_BOOT) {
-		chg_err("META mode, disable slave charger.\n");
-		pinctrl_select_state(chip->pinctrl, chip->slave_charger_disable);
-	} else {
-		pinctrl_select_state(chip->pinctrl, chip->slave_charger_enable);
-	}
-
-	return 0;
-}
-#endif
 static int bq25601d_parse_dts(void)
 {
 	int ret = 0;
@@ -1745,25 +1634,6 @@ static int bq25601d_parse_dts(void)
 		}
 	}
 	chg_err("chg-irq-gpio[%d]\n", chip->irq_gpio);
-
-#ifdef CONFIG_OPPO_CHARGER_MTK6873
-	chip->slave_chg_en_gpio = of_get_named_gpio(chip->client->dev.of_node, "qcom,slave-chg-en-gpio", 0);
-        if (chip->slave_chg_en_gpio <= 0) {
-                chg_err("Couldn't read slave_chg_en_gpio:%d\n", chip->slave_chg_en_gpio);
-                return -1;
-        } else {
-                if (gpio_is_valid(chip->slave_chg_en_gpio)) {
-                        ret = gpio_request(chip->slave_chg_en_gpio, "slave-chg-en-gpio");
-                        if (ret) {
-                                chg_err("unable to request slave-chg-en-gpio[%d]\n", chip->slave_chg_en_gpio);
-                                chip->slave_chg_en_gpio = -EINVAL;
-                        } else {
-				bq25601d_slave_chg_en_gpio_init(chip);
-                                //gpio_direction_input(chip->irq_gpio);
-                        }
-                }
-        }
-#endif
 	return ret;
 }
 
@@ -1787,9 +1657,8 @@ static int bq25601d_irq_registration(void)
 	}
 	return 0;
 }
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
+
 extern int charger_ic_flag;
-#endif
 static int bq25601d_driver_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int reg = 0;
@@ -1818,9 +1687,8 @@ static int bq25601d_driver_probe(struct i2c_client *client, const struct i2c_dev
 	if (reg < 0) {
 		return -ENODEV;
 	}
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
 	charger_ic_flag = 2;
-#endif
+	
 	INIT_DELAYED_WORK(&bq25601d_irq_delay_work, do_bq25601d_irq_delay_work);
 	bq25601d_parse_dts();
 	bq25601d_irq_registration();

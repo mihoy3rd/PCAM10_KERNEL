@@ -1,6 +1,9 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
  *
+ * Power Delivery Debug Information
+ *
+ * Author: Sakya <jeff_chang@richtek.com>
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.

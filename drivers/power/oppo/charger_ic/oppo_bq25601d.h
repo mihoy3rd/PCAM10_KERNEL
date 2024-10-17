@@ -147,10 +147,7 @@
 
 /* Address:06h */
 #define REG06_BQ25601D_ADDRESS							0x06
-#ifdef CONFIG_OPPO_CHARGER_MTK6873
-#define REG06_BQ25601D_OVP_MASK					BIT(7) | BIT(6)
-#define REG06_BQ25601D_OVP_SHIFT				6
-#endif
+
 #define REG06_BQ25601D_OTG_VLIM_MASK						(BIT(5) | BIT(4))
 #define REG06_BQ25601D_OTG_VLIM_5150MV					BIT(5)
 
@@ -256,12 +253,6 @@ struct chip_bq25601d {
 	int				sw_aicl_point;
 	atomic_t			charger_suspended;
 	int				irq_gpio;
-#ifdef CONFIG_OPPO_CHARGER_MTK6873
-	int slave_chg_en_gpio;
-	struct pinctrl *pinctrl;
-	struct pinctrl_state *slave_charger_enable;
-	struct pinctrl_state *slave_charger_disable;
-#endif
 };
 
 int bq25601d_otg_enable(void);
@@ -269,40 +260,27 @@ int bq25601d_otg_disable(void);
 
 extern volatile bool chargin_hw_init_done_bq25601d;
 
-#ifdef CONFIG_OPPO_CHARGER_MTK6873
-extern int bq25601d_charging_current_write_fast(int chg_cur);
-extern int bq25601d_input_current_limit_write(int value);
-extern int bq25601d_float_voltage_write(int vfloat_mv);
-extern int bq25601d_enable_charging(void);
-extern int bq25601d_disable_charging(void);
-extern void bq25601d_dump_registers(void);
-extern int bq25601d_hardware_init(void);
-extern int bq25601d_unsuspend_charger(void);
-extern int bq25601d_suspend_charger(void);
-#endif
-
 #ifdef CONFIG_OPPO_CHARGER_MTK
 //extern CHARGER_TYPE mt_charger_type_detection(void);
+extern int mt_power_supply_type_check(void);
 extern bool pmic_chrdet_status(void);
+extern int battery_meter_get_charger_voltage(void);
 extern int charger_pretype_get(void);
 
 extern int get_rtc_spare_fg_value(void);
 extern int set_rtc_spare_fg_value(int val);
+extern int get_rtc_spare_oppo_fg_value(void);
+extern int set_rtc_spare_oppo_fg_value(int val);
 
 extern void mt_usb_connect(void);
 extern void mt_usb_disconnect(void);
 
+extern int mt_get_chargerid_volt (void);
+
 //#ifdef CONFIG_MTK_HAFG_20
-#ifndef CONFIG_OPPO_CHARGER_MTK6873
 extern void mt_set_chargerid_switch_val(int value);
 extern int mt_get_chargerid_switch_val(void);
 extern int oppo_usb_switch_gpio_gpio_init(void);
-extern int battery_meter_get_charger_voltage(void);
-extern int mt_power_supply_type_check(void);
-extern int get_rtc_spare_oppo_fg_value(void);
-extern int set_rtc_spare_oppo_fg_value(int val);
-extern int mt_get_chargerid_volt (void);
-#endif
 //#endif /* CONFIG_OPPO_CHARGER_MTK */
 
 #if defined(CONFIG_OPPO_CHARGER_MTK6763) || defined(CONFIG_OPPO_CHARGER_MTK6771)

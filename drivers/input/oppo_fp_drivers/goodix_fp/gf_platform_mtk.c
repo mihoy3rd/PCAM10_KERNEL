@@ -35,11 +35,6 @@ int gf_parse_dts(struct gf_dev* gf_dev)
 
 	struct device_node *node = NULL;
 	struct platform_device *pdev = NULL;
-#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
-        gf_dev->cs_gpio_set = false;
-        gf_dev->pinctrl = NULL;
-        gf_dev->pstate_cs_func = NULL;
-#endif
 
 	node = of_find_compatible_node(NULL, NULL, "goodix,goodix-fp");
 	if (node) {
@@ -60,42 +55,29 @@ int gf_parse_dts(struct gf_dev* gf_dev)
 		return -1;
 	}
 
-        if (get_project() != 17197) {
-                /*get ldo resource*/
+#ifdef CONFIG_MT6771_17331
+	if (get_project() != 17197) {
+		/*get ldo resource*/
+		gf_dev->ldo_gpio = of_get_named_gpio(gf_dev->spi->dev.of_node, "goodix,gpio_ldo", 0);
+		if (!gpio_is_valid(gf_dev->ldo_gpio)) {
+			pr_info("LDO GPIO is invalid.\n");
+			return -1;
+		}
 
-                gf_dev->ldo_gpio = of_get_named_gpio(pdev->dev.of_node, "goodix,gpio_ldo", 0);
-                if (!gpio_is_valid(gf_dev->ldo_gpio)) {
-                        pr_info("LDO GPIO is invalid.\n");
-                        return -1;
-                }
+		rc = gpio_request(gf_dev->ldo_gpio, "gpio_ldo");
+		if (rc) {
+			dev_err(&gf_dev->spi->dev, "Failed to request LDO GPIO. rc = %d\n", rc);
+			return -1;
+		}
 
-                rc = gpio_request(gf_dev->ldo_gpio, "gpio_ldo");
-                if (rc) {
-                        dev_err(&gf_dev->spi->dev, "Failed to request LDO GPIO. rc = %d\n", rc);
-                        return -1;
-                }
-
-                msleep(20);
-                gpio_direction_output(gf_dev->ldo_gpio, 1);
-                msleep(20);
-                gpio_set_value(gf_dev->ldo_gpio, 1);
-        }
-
-#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
-        gf_dev->pinctrl = devm_pinctrl_get(&pdev->dev);
-        if (IS_ERR(gf_dev->pinctrl)) {
-                dev_err(&pdev->dev, "can not get the gf pinctrl");
-                return PTR_ERR(gf_dev->pinctrl);
-        }
-        gf_dev->pstate_cs_func = pinctrl_lookup_state(gf_dev->pinctrl, "gf_cs_func");
-        if (IS_ERR(gf_dev->pstate_cs_func)) {
-                dev_err(&pdev->dev, "Can't find gf_cs_func pinctrl state\n");
-                return PTR_ERR(gf_dev->pstate_cs_func);
-        }
+		msleep(20);
+		gpio_direction_output(gf_dev->ldo_gpio, 1);
+		msleep(20);
+	}
 #endif
 
 	/*get reset resource*/
-	gf_dev->reset_gpio = of_get_named_gpio(pdev->dev.of_node, "goodix,gpio_reset", 0);
+	gf_dev->reset_gpio = of_get_named_gpio(gf_dev->spi->dev.of_node, "goodix,gpio_reset", 0);
 	if (!gpio_is_valid(gf_dev->reset_gpio)) {
 		pr_info("RESET GPIO is invalid.\n");
 		return -1;
@@ -109,24 +91,9 @@ int gf_parse_dts(struct gf_dev* gf_dev)
 
 	gpio_direction_output(gf_dev->reset_gpio, 0);
 	msleep(3);
-#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
-        /*get cs resource*/
-        gf_dev->cs_gpio = of_get_named_gpio(pdev->dev.of_node, "goodix,gpio_cs", 0);
-        if (!gpio_is_valid(gf_dev->cs_gpio)) {
-                pr_info("CS GPIO is invalid.\n");
-                return -1;
-        }
-        rc = gpio_request(gf_dev->cs_gpio, "goodix_cs");
-        if (rc) {
-                dev_err(&gf_dev->spi->dev, "Failed to request CS GPIO. rc = %d\n", rc);
-                return -1;
-        }
-        gpio_direction_output(gf_dev->cs_gpio, 0);
-        gf_dev->cs_gpio_set = true;
-#endif
 
 	/*get irq resourece*/
-	gf_dev->irq_gpio = of_get_named_gpio(pdev->dev.of_node, "goodix,gpio_irq", 0);
+	gf_dev->irq_gpio = of_get_named_gpio(gf_dev->spi->dev.of_node, "goodix,gpio_irq", 0);
 	if (!gpio_is_valid(gf_dev->irq_gpio)) {
 		pr_info("IRQ GPIO is invalid.\n");
 		return -1;
@@ -160,12 +127,6 @@ void gf_cleanup(struct gf_dev* gf_dev)
 		gpio_free(gf_dev->irq_gpio);
 		pr_info("remove irq_gpio success\n");
 	}
-#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
-        if (gpio_is_valid(gf_dev->cs_gpio)) {
-                gpio_free(gf_dev->cs_gpio);
-                pr_info("remove cs_gpio success\n");
-        }
-#endif
 	if (gpio_is_valid(gf_dev->reset_gpio))
 	{
 		gpio_free(gf_dev->reset_gpio);
@@ -177,11 +138,12 @@ int gf_power_on(struct gf_dev* gf_dev)
 {
 	int rc = 0;
 
+#ifdef CONFIG_MT6771_17331
 	if (get_project() != 17197) {
 		gpio_set_value(gf_dev->ldo_gpio, 1);
 		msleep(10);
 	}
-
+#endif
 	pr_info("---- power on ok ----\n");
 
 	return rc;
@@ -205,14 +167,6 @@ int gf_hw_reset(struct gf_dev *gf_dev, unsigned int delay_ms)
 	gpio_set_value(gf_dev->reset_gpio, 0);
 	mdelay(20);
 	gpio_set_value(gf_dev->reset_gpio, 1);
-#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
-        if (gf_dev->cs_gpio_set) {
-                pr_info("---- pull CS up and set CS from gpio to func ----");
-                gpio_set_value(gf_dev->cs_gpio, 1);
-                pinctrl_select_state(gf_dev->pinctrl, gf_dev->pstate_cs_func);
-                gf_dev->cs_gpio_set = false;
-        }
-#endif
 	mdelay(delay_ms);
 	return 0;
 }

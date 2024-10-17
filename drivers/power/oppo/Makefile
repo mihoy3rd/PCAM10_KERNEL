@@ -1,9 +1,6 @@
 ifeq ($(CONFIG_OPPO_CHARGER_MTK),y)
 subdir-ccflags-y += -Werror
 subdir-ccflags-y += -Wno-unused-variable
-ifeq ($(CONFIG_OPPO_CHARGER_MTK6779Q),y)
-subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include
-endif
 endif
 
 obj-y      += charger_ic/

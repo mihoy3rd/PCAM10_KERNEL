@@ -28,33 +28,13 @@
  **  Bangxiong.wu   2019/01/24     add for 18073 silead_optical_fp
  **  Long.Liu       2019/02/01     add for 18561 GOODIX GF5658_FP
  **  Ziqing.Guo     2019/02/12     fix coverity error 64261,64267 to avoid buffer overflow
- **  Dongnan.Wu     2019/01/28     add for 18073 goodix optical fingerprint
- **  Bangxiong.wu   2019/02/24     add for 18593 silead_optical_fp
- **  Qing.Guan      2019/04/01     add for egis et711 fp
- **  Hongyu.lu      2019/04/18     add for 19021 fpc1511
- **  Hongyu.lu      2019/04/18     add for 19321 19026 fpc1511
- **  Long.Liu       2019/05/08     add for 17085(android P) fp_id
- **  Qing.Guan      2019/05/08     add for 18081 silead fp O to P
- **  Bangxiong.Wu   2019/05/10     add for SM7150 (MSM_19031 MSM_19331)
- **  Bangxiong.Wu   2019/05/16     enable optical GF irq handle for SM7150(MSM_19031 MSM_19331)
- **  Dongnan.Wu     2019/05/21     add for 19011&19301 platform
- **  Hongyu.lu      2019/05/24     add for 19328 platform
- **  Bangxiong.Wu   2019/06/03     add for MSM_19111 MSM_19513
- **  Qijia.Zhou     2019/06/12     add for 19531 platform
- **  Qijia.Zhou     2019/10/02     add for 19151 19350
- ##  oujinrong      2019/10/08     add for 19053
- **  Qijia.Zhou     2019/11/14     add for 19151&19350 egis et713 fp
  ************************************************************************************/
 
 #include <linux/module.h>
 #include <linux/proc_fs.h>
-#if CONFIG_OPPO_FINGERPRINT_PLATFORM == 6763 || CONFIG_OPPO_FINGERPRINT_PLATFORM == 6771 || CONFIG_OPPO_FINGERPRINT_PLATFORM == 6779
 #include <sec_boot_lib.h>
-#elif CONFIG_OPPO_FINGERPRINT_PLATFORM == 855 || CONFIG_OPPO_FINGERPRINT_PLATFORM == 6125 || CONFIG_OPPO_FINGERPRINT_PLATFORM == 7150
+
 #include <linux/uaccess.h>
-#else
-#include <soc/qcom/smem.h>
-#endif
 #include <soc/oppo/oppo_project.h>
 #include <linux/slab.h>
 #include <linux/seq_file.h>
@@ -74,7 +54,6 @@
 #define CHIP_GOODIX     "G"
 #define CHIP_FPC        "F"
 #define CHIP_SILEAD     "S"
-#define CHIP_EGIS		"E"
 
 #define CHIP_UNKNOWN    "unknown"
 
@@ -90,7 +69,6 @@
 #define ENGINEER_MENU_GOODIX_5228   "-1,-1"
 #define ENGINEER_MENU_GOODIX_OPTICAL   "-1,-1"
 #define ENGINEER_MENU_SILEAD_OPTICAL   "-1,-1"
-#define ENGINEER_MENU_EGIS_OPTICAL  "-1,-1"
 #define ENGINEER_MENU_GOODIX_5298   "-1,-1"
 #define ENGINEER_MENU_GOODIX_5658   "-1,-1"
 #define ENGINEER_MENU_DEFAULT  "-1,-1"
@@ -104,90 +82,17 @@ static char fp_manu[FP_ID_MAX_LENGTH] = CHIP_UNKNOWN; /* the length of this stri
 
 static struct fp_data *fp_data_ptr = NULL;
 char g_engineermode_menu_config[ENGINEER_MENU_SELECT_MAXLENTH] = ENGINEER_MENU_DEFAULT;
-
-#ifdef CONFIG_OPTICAL_GF_IRQ_HANDLER
-extern int gf_opticalfp_irq_handler(struct fp_underscreen_info* tp_info);
-#endif
 #ifdef CONFIG_OPTICAL_IRQ_HANDLER
 extern int silfp_opticalfp_irq_handler(struct fp_underscreen_info* tp_info);
 extern int gf_opticalfp_irq_handler(struct fp_underscreen_info* tp_info);
-#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18041 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19151 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19350
-extern int egis_opticalfp_irq_handler(struct fp_underscreen_info* tp_info);
 #endif
+#ifdef CONFIG_OPTICAL_IRQ_HANDLER_SILEAD
+extern int silfp_opticalfp_irq_handler(struct fp_underscreen_info* tp_info);
 #endif
-
-#if CONFIG_OPPO_FINGERPRINT_PROJCT == 19021 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19321 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19026 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19328
 fp_module_config_t fp_module_config_list[] = {
-    {{0, -1, -1},  FP_GOODIX_5658, CHIP_GOODIX, ENGINEER_MENU_GOODIX_5658},
-    {{1, -1, -1},  FP_FPC_1511, CHIP_FPC, ENGINEER_MENU_FPC1511},
+    {{1, -1, -1},  FP_FPC_1028_COATING, CHIP_FPC, ENGINEER_MENU_DEFAULT},
+    {{0, -1, -1},  FP_FPC_1511_COATING, CHIP_FPC, ENGINEER_MENU_DEFAULT},
 };
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18151 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
-fp_module_config_t fp_module_config_list[] = {
-    //{{0, -1, -1},  FP_FPC_1023_GLASS,    	CHIP_FPC,     ENGINEER_MENU_FPC1023},
-    {{0, -1, -1},  FP_GOODIX_5658,           CHIP_GOODIX,     ENGINEER_MENU_GOODIX_5658},
-    {{1, -1, -1},  FP_FPC_1511,		CHIP_FPC,	  ENGINEER_MENU_FPC1511},
-};
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 17011 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17015 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17081 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17085
-fp_module_config_t fp_module_config_list[] = {
-    {{0, 0, 0},  FP_FPC_1270, CHIP_FPC, ENGINEER_MENU_FPC1270},
-    {{0, 1, 0},  FP_FPC_1023, CHIP_FPC, ENGINEER_MENU_FPC1023},
-    {{0, 1, 1},  FP_FPC_1022, CHIP_FPC, ENGINEER_MENU_FPC1022},
-    {{1, 0, 0},  FP_FPC_1023, CHIP_FPC, ENGINEER_MENU_FPC1023},
-    {{1, 0, 1},  FP_GOODIX_3268, CHIP_GOODIX, ENGINEER_MENU_GOODIX_3268},
-    {{1, 1, 0},  FP_GOODIX_5288, CHIP_GOODIX, ENGINEER_MENU_GOODIX_5288},
-    {{1, 1, 1},  FP_FPC_1022, CHIP_FPC, ENGINEER_MENU_FPC1022},
-};
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 18005 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18321 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18323
-fp_module_config_t fp_module_config_list[] = {
-    {{1, 1, 0},  FP_SILEAD_OPTICAL_70,  CHIP_SILEAD,  ENGINEER_MENU_SILEAD_OPTICAL},
-    {{1, 1, 1},  FP_GOODIX_OPTICAL_95,  CHIP_GOODIX,  ENGINEER_MENU_GOODIX_OPTICAL},
-};
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 16051
-fp_module_config_t fp_module_config_list[] = {
-    {{1, 1, 1},  FP_FPC_1140, CHIP_OFILM,  ENGINEER_MENU_FPC1140},
-    {{0, 0, 1},  FP_FPC_1140, CHIP_PRIMAX, ENGINEER_MENU_FPC1140},
-    {{0, 1, 0},  FP_FPC_1140, CHIP_TRULY,  ENGINEER_MENU_FPC1140},
-    {{1, 0, 1},  FP_FPC_1260, CHIP_OFILM,  ENGINEER_MENU_FPC1260},
-    {{0, 0, 0},  FP_FPC_1260, CHIP_PRIMAX, ENGINEER_MENU_FPC1260},
-    {{1, 1, 0},  FP_FPC_1260, CHIP_TRULY,  ENGINEER_MENU_FPC1260},
-    {{1, 0, 0},  FP_FPC_1260, CHIP_QTECH,  ENGINEER_MENU_FPC1260},
-    {{0, 0, -1}, FP_FPC_1140, CHIP_PRIMAX  ENGINEER_MENU_FPC1140},
-    {{0, 1, -1}, FP_FPC_1140, CHIP_TRULY,  ENGINEER_MENU_FPC1140},
-    {{1, 0, -1}, FP_FPC_1140, CHIP_QTECH,  ENGINEER_MENU_FPC1140},
-    {{1, 1, -1}, FP_FPC_1140, CHIP_OFILM,  ENGINEER_MENU_FPC1140},
-};
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 18073 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18593 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19011 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19301 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19531
-fp_module_config_t fp_module_config_list[] = {
-    {{0, -1, -1},FP_SILEAD_OPTICAL_70,  CHIP_SILEAD,  ENGINEER_MENU_SILEAD_OPTICAL},
-    {{1, -1, -1},  FP_GOODIX_OPTICAL_95,    CHIP_GOODIX,     ENGINEER_MENU_GOODIX_OPTICAL},
-};
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 19151 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19350
-fp_module_config_t fp_module_config_list[] = {
-    {{0, -1, -1},  FP_EGIS_OPTICAL_ET713,   CHIP_EGIS,       ENGINEER_MENU_EGIS_OPTICAL},
-    {{1, -1, -1},  FP_GOODIX_OPTICAL_95,    CHIP_GOODIX,     ENGINEER_MENU_GOODIX_OPTICAL},
-};
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 19031 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19331 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19111 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19513
-fp_module_config_t fp_module_config_list[] = {
-    {{1, 1, 0}, FP_GOODIX_OPTICAL_95, CHIP_GOODIX, ENGINEER_MENU_GOODIX_OPTICAL},
-};
-#else
-fp_module_config_t fp_module_config_list[] = {
-    {{0, 0, 1},  FP_FPC_1023_GLASS,    	CHIP_FPC,     ENGINEER_MENU_FPC1023},
-    {{0, 1, 1},  FP_FPC_1022,           CHIP_FPC,     ENGINEER_MENU_FPC1022},
-    {{0, 1, 0},  FP_FPC_1023,           CHIP_FPC,     ENGINEER_MENU_FPC1023},//for EVT
-    //{{1, 0, 1},  FP_GOODIX_5228, 	CHIP_GOODIX,  ENGINEER_MENU_GOODIX_5228},
-    {{1, 0, 1},  FP_GOODIX_5298_GLASS,  CHIP_GOODIX,  ENGINEER_MENU_GOODIX_5298},
-    {{1, 0, 0},  FP_GOODIX_5298,        CHIP_GOODIX,  ENGINEER_MENU_GOODIX_5298},
-#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18041
-    {{-1, 1, 0},  FP_EGIS_OPTICAL_ET713, CHIP_EGIS,    ENGINEER_MENU_EGIS_OPTICAL},
-    {{-1, 1, 1},  FP_GOODIX_OPTICAL_95,  CHIP_GOODIX,  ENGINEER_MENU_GOODIX_OPTICAL},
-#else
-    {{1, 1, 0},  FP_SILEAD_OPTICAL_70,  CHIP_SILEAD,  ENGINEER_MENU_SILEAD_OPTICAL},
-    {{1, 1, 1},  FP_GOODIX_OPTICAL_95, 	CHIP_GOODIX,  ENGINEER_MENU_GOODIX_OPTICAL},//add for T0
-#endif
-
-};
-#endif
 
 static int fp_request_named_gpio(struct fp_data *fp_data,
         const char *label, int *gpio)
@@ -222,77 +127,12 @@ static int fp_gpio_parse_dts(struct fp_data *fp_data)
         goto exit;
     }
 
-#if CONFIG_OPPO_FINGERPRINT_PROJCT == 19021 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19321 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19026 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19328
-    ret = fp_request_named_gpio(fp_data, "oppo,fp-id1",
-            &fp_data->gpio_id0);
-    if (ret) {
-        ret = FP_ERROR_GPIO;
-        goto exit;
-    }
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18151 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161 ||CONFIG_OPPO_FINGERPRINT_PROJCT == 18073 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18593 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19011 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19301 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19151 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19350
     ret = fp_request_named_gpio(fp_data, "oppo,fp-id0",
             &fp_data->gpio_id0);
     if (ret) {
         ret = FP_ERROR_GPIO;
         goto exit;
     }
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 18097 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18099 ||CONFIG_OPPO_FINGERPRINT_PROJCT == 18397 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18181 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18115 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18501 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18503 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18539 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18119 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19061 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19361 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18383 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18041 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19031 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19331 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18081 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19071 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19081 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19053 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19371 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18381 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18385 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19111 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19513
-    ret = fp_request_named_gpio(fp_data, "oppo,fp-id2",
-            &fp_data->gpio_id2);
-    if (ret) {
-        ret = FP_ERROR_GPIO;
-        goto exit;
-    }
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 18005 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18321 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18323
-    ret = fp_request_named_gpio(fp_data, "oppo,fp-id2",
-            &fp_data->gpio_id2);
-    if (ret) {
-        ret = FP_ERROR_GPIO;
-        goto exit;
-    }
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 16051 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17011 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17015 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17081 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17085
-    ret = fp_request_named_gpio(fp_data, "oppo,fp-id1",
-            &fp_data->gpio_id1);
-    if (ret) {
-        ret = FP_ERROR_GPIO;
-        goto exit;
-    }
-
-    ret = fp_request_named_gpio(fp_data, "oppo,fp-id2",
-            &fp_data->gpio_id2);
-    if (ret) {
-        ret = FP_ERROR_GPIO;
-        goto exit;
-    }
-
-    ret = fp_request_named_gpio(fp_data, "oppo,fp-id3"
-            ,&fp_data->gpio_id3);
-    if (ret) {
-        ret = FP_ERROR_GPIO;
-        goto exit;
-    }
-#else
-    ret = fp_request_named_gpio(fp_data, "oppo,fp-id0",
-            &fp_data->gpio_id0);
-    if (ret) {
-        ret = FP_ERROR_GPIO;
-        goto exit;
-    }
-
-    ret = fp_request_named_gpio(fp_data, "oppo,fp-id1",
-            &fp_data->gpio_id1);
-    if (ret) {
-        ret = FP_ERROR_GPIO;
-        goto exit;
-    }
-
-    ret = fp_request_named_gpio(fp_data, "oppo,fp-id2",
-            &fp_data->gpio_id2);
-    if (ret) {
-        ret = FP_ERROR_GPIO;
-        goto exit;
-    }
-#endif
 
 exit:
     return ret;
@@ -423,17 +263,21 @@ static int fp_get_matched_chip_module(struct device *dev, int fp_id1, int fp_id2
                     strncpy(fp_manu, CHIP_FPC, FP_ID_MAX_LENGTH - FP_ID_SUFFIX_MAX_LENGTH);
                     strncat(fp_manu, "_1511", FP_ID_SUFFIX_MAX_LENGTH - 1);
                     strncpy(g_engineermode_menu_config, fp_module_config_list[i].engineermode_menu_config, ENGINEER_MENU_SELECT_MAXLENTH - 1);
-                    return FP_FPC_1511;
-                case FP_GOODIX_5658:
-                    strncpy(fp_manu, CHIP_GOODIX, FP_ID_MAX_LENGTH - FP_ID_SUFFIX_MAX_LENGTH);
-                    strncat(fp_manu, "_5658", FP_ID_SUFFIX_MAX_LENGTH - 1);
+                    return FP_EGIS_520;
+                case FP_SILEAD_6150:
+                    strncpy(fp_manu, CHIP_SILEAD, FP_ID_MAX_LENGTH - FP_ID_SUFFIX_MAX_LENGTH);
+                    strncat(fp_manu, "_6150", FP_ID_SUFFIX_MAX_LENGTH - 1);
+                    return FP_SILEAD_6150;
+                case FP_FPC_1028_COATING:
+                    strncpy(fp_manu, CHIP_FPC, FP_ID_MAX_LENGTH - FP_ID_SUFFIX_MAX_LENGTH);
+                    strncat(fp_manu, "_1028_COATING", FP_ID_SUFFIX_MAX_LENGTH - 1);
                     strncpy(g_engineermode_menu_config, fp_module_config_list[i].engineermode_menu_config, ENGINEER_MENU_SELECT_MAXLENTH - 1);
-                    return FP_GOODIX_5658;
-                case FP_EGIS_OPTICAL_ET713:
-                    strncpy(fp_manu, CHIP_EGIS, FP_ID_MAX_LENGTH - FP_ID_SUFFIX_MAX_LENGTH);
-                    strncat(fp_manu, "_OPTICAL_ET713", FP_ID_SUFFIX_MAX_LENGTH - 1);
+                    return FP_FPC_1028_COATING;
+                case FP_FPC_1511_COATING:
+                    strncpy(fp_manu, CHIP_FPC, FP_ID_MAX_LENGTH - FP_ID_SUFFIX_MAX_LENGTH);
+                    strncat(fp_manu, "_1511_COATING", FP_ID_SUFFIX_MAX_LENGTH - 1);
                     strncpy(g_engineermode_menu_config, fp_module_config_list[i].engineermode_menu_config, ENGINEER_MENU_SELECT_MAXLENTH - 1);
-                    return FP_EGIS_OPTICAL_ET713;
+                    return FP_FPC_1511_COATING;
                 default:
                     dev_err(dev, "gpio ids matched but no matched vendor chip!");
                     return FP_UNKNOWN;
@@ -453,72 +297,33 @@ int opticalfp_irq_handler(struct fp_underscreen_info* tp_info)
         return silfp_opticalfp_irq_handler(tp_info);
     } else if (FP_GOODIX_OPTICAL_95 == fpsensor_type) {
         return gf_opticalfp_irq_handler(tp_info);
-    } 
-#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18041 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19151 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19350
-    else if (FP_EGIS_OPTICAL_ET713 == fpsensor_type) {
-        return egis_opticalfp_irq_handler(tp_info);
-    }
-#endif
-    else {
+    } else {
         return FP_UNKNOWN;
     }
 }
 #endif
-
-#ifdef CONFIG_OPTICAL_GF_IRQ_HANDLER
+#ifdef CONFIG_OPTICAL_IRQ_HANDLER_SILEAD
 int opticalfp_irq_handler(struct fp_underscreen_info* tp_info)
 {
     fp_vendor_t fpsensor_type = get_fpsensor_type();
-    if (FP_GOODIX_OPTICAL_95 == fpsensor_type) {
-        return gf_opticalfp_irq_handler(tp_info);
-    }
-    else {
+    if (FP_SILEAD_OPTICAL_70 == fpsensor_type) {
+        return silfp_opticalfp_irq_handler(tp_info);
+    } else {
         return FP_UNKNOWN;
     }
 }
 #endif
-
 static int fp_register_proc_fs(struct fp_data *fp_data)
 {
     uint32_t fp_id_retry;
     fp_id_retry = 0;
-#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18181 ||  CONFIG_OPPO_FINGERPRINT_PROJCT == 18385 ||  CONFIG_OPPO_FINGERPRINT_PROJCT == 18097 ||  CONFIG_OPPO_FINGERPRINT_PROJCT == 18099 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18397 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18115 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18501 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18503 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18539 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18119 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19061 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19361 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18383 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18081 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19031 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19331  || CONFIG_OPPO_FINGERPRINT_PROJCT == 19071 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19081 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19053 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19371 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18381 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19111 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19513
-    fp_data->fp_id0 = 1;
-    fp_data->fp_id1 = 1;
-    fp_data->fp_id2 = gpio_get_value(fp_data->gpio_id2);
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 18041
-    fp_data->fp_id0 = -1;
-    fp_data->fp_id1 = 1;
-    fp_data->fp_id2 = gpio_get_value(fp_data->gpio_id2);
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 18005 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18321 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18323
-    fp_data->fp_id0 = 1;
-    fp_data->fp_id1 = 1;
-    fp_data->fp_id2 = gpio_get_value(fp_data->gpio_id2);
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18151 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18073 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18593 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19011 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19301 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19151 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19350
     fp_data->fp_id0 = gpio_get_value(fp_data->gpio_id0);
     fp_data->fp_id1 = -1;
     fp_data->fp_id2 = -1;
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 16051 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17011 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17015 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17081 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17085
-    fp_data->fp_id1 = gpio_get_value(fp_data->gpio_id1);
-    fp_data->fp_id2 = gpio_get_value(fp_data->gpio_id2);
-    fp_data->fp_id3 = gpio_get_value(fp_data->gpio_id3);
-#elif CONFIG_OPPO_FINGERPRINT_PROJCT == 19021 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19321 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19026 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19328
-    fp_data->fp_id0 = 1;
-    fp_data->fp_id1 = -1;
-    fp_data->fp_id2 = -1;
-#else
-    fp_data->fp_id0 = gpio_get_value(fp_data->gpio_id0);
-    fp_data->fp_id1 = gpio_get_value(fp_data->gpio_id1);
-    fp_data->fp_id2 = gpio_get_value(fp_data->gpio_id2);
-#endif
 
     dev_err(fp_data->dev, "fp_register_proc_fs check: fp_id0= %d, fp_id1= %d, fp_id2= %d, fp_id3 = %d, fp_id_retry= %d\n", \
             fp_data->fp_id0, fp_data->fp_id1, fp_data->fp_id2, fp_data->fp_id3, fp_id_retry);
-#if CONFIG_OPPO_FINGERPRINT_PROJCT == 16051 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17011 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17015 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17081 || CONFIG_OPPO_FINGERPRINT_PROJCT == 17085
-    fp_data->fpsensor_type = fp_get_matched_chip_module(fp_data->dev, fp_data->fp_id1, fp_data->fp_id2, fp_data->fp_id3);
-#else
     fp_data->fpsensor_type = fp_get_matched_chip_module(fp_data->dev, fp_data->fp_id0, fp_data->fp_id1, fp_data->fp_id2);
-#endif
     /*  make the proc /proc/fp_id  */
     fp_id_dir = proc_create(fp_id_name, 0666, NULL, &fp_id_node_ctrl);
     if (fp_id_dir == NULL) {
@@ -563,9 +368,7 @@ static int oppo_fp_common_probe(struct platform_device *fp_dev)
         goto exit;
     }
 
-#if CONFIG_OPPO_FINGERPRINT_PLATFORM == 6763 || CONFIG_OPPO_FINGERPRINT_PLATFORM == 6771 || CONFIG_OPPO_FINGERPRINT_PLATFORM == 6779
     msleep(20);
-#endif
 
     ret = fp_register_proc_fs(fp_data);
     if (ret) {
@@ -622,7 +425,7 @@ static void __exit oppo_fp_common_exit(void)
     platform_driver_unregister(&oppo_fp_common_driver);
 }
 
-#if ((defined CONFIG_OPTICAL_IRQ_HANDLER) || (defined CONFIG_OPTICAL_GF_IRQ_HANDLER))
+#ifdef CONFIG_OPTICAL_IRQ_HANDLER
 EXPORT_SYMBOL(opticalfp_irq_handler);
 #endif
 subsys_initcall(oppo_fp_common_init);

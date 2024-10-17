@@ -65,10 +65,10 @@
  * only for internal debug
  */
 #define SPM_VCOREFS_TAG	"[VcoreFS] "
-#define spm_vcorefs_err spm_vcorefs_info
-#define spm_vcorefs_warn spm_vcorefs_info
-#define spm_vcorefs_debug spm_vcorefs_info
-#define spm_vcorefs_info(fmt, args...)	pr_notice(SPM_VCOREFS_TAG fmt, ##args)
+#define spm_vcorefs_err(fmt, args...)		pr_err(SPM_VCOREFS_TAG fmt, ##args)
+#define spm_vcorefs_warn(fmt, args...)	pr_warn(SPM_VCOREFS_TAG fmt, ##args)
+#define spm_vcorefs_debug(fmt, args...)	pr_debug(SPM_VCOREFS_TAG fmt, ##args)
+#define spm_vcorefs_info(fmt, args...)	pr_info(SPM_VCOREFS_TAG fmt, ##args)
 
 void __iomem *dvfsrc_base;
 void __iomem *qos_sram_base;
@@ -571,7 +571,8 @@ void dvfsrc_md_scenario_update(bool suspend)
 			spm_write(DVFSRC_EMI_MD2SPM0, 0x0);
 		else
 			spm_write(DVFSRC_EMI_MD2SPM0, 0x38);
-	} else if (spmfw_dram_type == SPMFW_LP4X_2CH_3733) {
+	} else if ((spmfw_dram_type == SPMFW_LP4X_2CH_3733) ||
+		   (spmfw_dram_type == SPMFW_LP4_2CH_2400)) {
 		if (suspend)
 			spm_write(DVFSRC_EMI_MD2SPM0, 0x80C0);
 		else
@@ -694,7 +695,8 @@ static void dvfsrc_init(void)
 		spm_write(DVFSRC_EMI_MD2SPM0, 0x38);
 		spm_write(DVFSRC_EMI_MD2SPM1, 0x80C0);
 		spm_write(DVFSRC_VCORE_MD2SPM0, 0x80C0);
-	} else if (__spm_get_dram_type() == SPMFW_LP4X_2CH_3733) {
+	} else if ((__spm_get_dram_type() == SPMFW_LP4X_2CH_3733) ||
+		   (__spm_get_dram_type() == SPMFW_LP4_2CH_2400)) {
 		/* LP4 2CH 3600 */
 		spm_write(DVFSRC_LEVEL_LABEL_0_1, 0x00100000);
 		spm_write(DVFSRC_LEVEL_LABEL_2_3, 0x00210011);
@@ -843,7 +845,8 @@ void spm_request_dvfs_opp(int id, enum dvfs_opp opp)
 	switch (id) {
 	case 0: /* ZQTX */
 		if (!((__spm_get_dram_type() == SPMFW_LP4X_2CH_3733) ||
-			(__spm_get_dram_type() == SPMFW_LP4X_2CH_3200)))
+			(__spm_get_dram_type() == SPMFW_LP4X_2CH_3200) ||
+			(__spm_get_dram_type() == SPMFW_LP4_2CH_2400)))
 			return;
 		mt_secure_call(MTK_SIP_KERNEL_SPM_VCOREFS_ARGS, VCOREFS_SMC_CMD_2, id, emi_req[opp]);
 		break;

@@ -22,15 +22,12 @@
 #include <linux/fcntl.h>
 #include <linux/mutex.h>
 #include <linux/trusty/trusty_ipc.h>
-#include <linux/trusty/smcall.h>
-#include <linux/trusty/trusty.h>
 #include <kree/system.h>
 #include <kree/mem.h>
 #include <linux/atomic.h>
 #include <linux/vmalloc.h>
 #include <linux/wakelock.h>
 #include <linux/delay.h>
-#include <linux/platform_device.h>
 
 #include <tz_cross/trustzone.h>
 #include <tz_cross/ta_system.h>
@@ -83,8 +80,6 @@ static tipc_k_handle _sys_service_h;
 
 static tipc_k_handle _kree_session_handle_pool[KREE_SESSION_HANDLE_MAX_SIZE];
 static int32_t _kree_session_handle_idx;
-
-static struct platform_device *tz_system_dev;
 
 #define TIPC_RETRY_MAX_COUNT (100)
 #define TIPC_RETRY_WAIT_MS (10)
@@ -866,12 +861,7 @@ static void kree_perf_boost(int enable)
 	/* KREE_ERR("%s %s\n", __func__, enable>0?"enable":"disable"); */
 
 	if (enable) {
-		if (get_gz_bind_cpu() == 1) {
-			KREE_DEBUG("set_cpus_allowed_ptr do+ big_core\n");
-			set_cpus_allowed_ptr(get_current(), &trusty_big_cmask);
-		} else {
-			KREE_DEBUG("set_cpus_allowed_ptr skip+\n");
-		}
+		set_cpus_allowed_ptr(get_current(), &trusty_big_cmask);
 		if (perf_boost_cnt == 0) {
 			/*
 			 * freq_to_set[0].min = cpus_cluster_freq[0].max_freq;
@@ -903,12 +893,7 @@ static void kree_perf_boost(int enable)
 				wake_unlock(&TeeServiceCall_wake_lock);
 			}
 		}
-		if (get_gz_bind_cpu() == 1) {
-			KREE_DEBUG("set_cpus_allowed_ptr do- all_core\n");
-			set_cpus_allowed_ptr(get_current(), &trusty_all_cmask);
-		} else {
-			KREE_DEBUG("set_cpus_allowed_ptr skip-\n");
-		}
+		set_cpus_allowed_ptr(get_current(), &trusty_all_cmask);
 	}
 
 	mutex_unlock(&perf_boost_lock);
@@ -1125,67 +1110,9 @@ u32 KREE_GetSystemCntFrq(void)
 	return freq;
 }
 
-static int tz_system_probe(struct platform_device *pdev)
-{
-	KREE_DEBUG("%s\n", __func__);
-	tz_system_dev = pdev;
-	return 0;
-}
-static int tz_system_remove(struct platform_device *pdev)
-{
-	KREE_DEBUG("%s\n", __func__);
-	return 0;
-}
-
-#define MODULE_NAME "tz_system"
-static const struct of_device_id tz_system_of_match[] = {
-	{ .compatible = "mediatek,tz_system", },
-	{},
-};
-MODULE_DEVICE_TABLE(of, trusty_tz_of_match);
-
-static struct platform_driver tz_system_driver = {
-	.probe = tz_system_probe,
-	.remove = tz_system_remove,
-	.driver	= {
-		.name = MODULE_NAME,
-		.owner = THIS_MODULE,
-		.of_match_table = tz_system_of_match,
-	},
-};
-
-int mtee_sdsp_enable(u32 on)
-{
-	return trusty_std_call32(tz_system_dev->dev.parent,
-				MT_SMC_SC_VPU, on, 0, 0);
-}
-
-int tz_system_std_call32(u32 smcnr, u32 a0, u32 a1, u32 a2)
-{
-	return trusty_std_call32(tz_system_dev->dev.parent,
-				smcnr, a0, a1, a2);
-}
-
-atomic_t get_gz_bind_cpu_allowed = ATOMIC_INIT(0);
-void set_gz_bind_cpu(int state)
-{
-	atomic_set(&get_gz_bind_cpu_allowed, state);
-}
-
-int get_gz_bind_cpu(void)
-{
-	return atomic_read(&get_gz_bind_cpu_allowed);
-}
-
 int gz_get_cpuinfo_thread(void *data)
 {
 	struct cpufreq_policy curr_policy;
-
-	if (platform_driver_register(&tz_system_driver))
-		KREE_ERR("%s driver register fail\n", __func__);
-
-	KREE_DEBUG("%s driver register done\n", __func__);
-
 #ifdef CONFIG_MACH_MT6758
 	msleep(3000);
 #else

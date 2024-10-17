@@ -389,7 +389,7 @@ config XILINX_HWICAP
 
 config R3964
 	tristate "Siemens R3964 line discipline"
-	depends on TTY
+	depends on TTY && BROKEN
 	---help---
 	  This driver allows synchronous communication with devices using the
 	  Siemens R3964 packet protocol. Unless you are dealing with special
@@ -606,6 +606,8 @@ config TILE_SROM
 source "drivers/char/xillybus/Kconfig"
 
 source "drivers/char/rpmb/Kconfig"
+
+source "drivers/char/srandom/Kconfig"
 
 endmenu
 

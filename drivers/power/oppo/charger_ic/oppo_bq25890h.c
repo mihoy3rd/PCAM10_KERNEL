@@ -22,7 +22,7 @@
 #include <linux/slab.h>
 #include <linux/irq.h>
 #include <linux/miscdevice.h>
-#include <linux/uaccess.h>
+#include <asm/uaccess.h>
 #include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/workqueue.h>
@@ -1385,16 +1385,14 @@ extern void Charger_Detect_Release(void);
 extern bool is_usb_rdy(void);
 static void hw_bc12_init(void)
 {
-	int timeout = 350;
+	int timeout = 400;
 	static bool first_connect = true;
 
 	if (first_connect == true) {
 		/* add make sure USB Ready */
 		if (is_usb_rdy() == false) {
 			pr_err("CDP, block\n");
-			while ((is_usb_rdy() == false && timeout > 0)
-					/*keep "Ibus < 200mA" for 1s, so vooc/svooc adapter go into idle and release D+*/
-					|| (is_usb_rdy() == true && timeout > 340)) {
+			while (is_usb_rdy() == false && timeout > 0) {
 				msleep(100);
 				timeout--;
 			}
@@ -1482,10 +1480,8 @@ enum charger_type mt_charger_type_detection_bq25890h(void)
 
 	if (val_buf == 0x0) {
 		MTK_CHR_Type_num = CHARGER_UNKNOWN;
-	} else if (val_buf == 0x20) {
+	} else if (val_buf == 0x40 || val_buf == 0x20) {
 		MTK_CHR_Type_num = STANDARD_HOST;
-	} else if (val_buf == 0x40) {
-		MTK_CHR_Type_num = CHARGING_HOST;
 	} else if (val_buf == 0x60 || val_buf == 0x80 || val_buf == 0xA0 || val_buf == 0xC0) {
 		MTK_CHR_Type_num = APPLE_2_1A_CHARGER;
 	} else {
@@ -1526,10 +1522,8 @@ enum charger_type mt_charger_type_detection_bq25890h(void)
 		printk("mt_charger_type_detection: 2nd, val_buf=[0x%x]\n", val_buf);
 		if (val_buf == 0x0) {
 			MTK_CHR_Type_num = APPLE_2_1A_CHARGER;
-		} else if (val_buf == 0x20) {
+		} else if (val_buf == 0x40 || val_buf == 0x20) {
 			MTK_CHR_Type_num = STANDARD_HOST;
-		} else if (val_buf == 0x40) {
-			MTK_CHR_Type_num = CHARGING_HOST;
 		} else if (val_buf == 0x60 || val_buf == 0x80 || val_buf == 0xA0 || val_buf == 0xC0) {
 			MTK_CHR_Type_num = APPLE_2_1A_CHARGER;
 		} else {

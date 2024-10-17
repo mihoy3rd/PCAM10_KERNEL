@@ -274,7 +274,7 @@ struct pd_country_info {
 
 /* SDB, Status */
 
-#define PD_SDB_SIZE	6
+#define PD_SDB_SIZE	5
 
 #define PD_STATUS_INPUT_EXT_POWER	(1<<1)
 #define PD_STATUS_INPUT_EXT_POWER_FROM_AC	(1<<2)
@@ -296,19 +296,12 @@ struct pd_country_info {
 #define PD_STATUS_TEMP_PTF(raw)	((raw & 0x06) >> 1)
 #define PD_STATUS_TEMP_SET_PTF(val)		((val & 0x03) << 1)
 
-#define PS_STATUS_POWER_LIMIT_CABLE_CURRENT	(1<<1)
-#define PS_STATUS_POWER_LIMIT_OTHER_PORT	(1<<2)
-#define PS_STATUS_POWER_LIMIT_EXTERNAL	(1<<3)
-#define PS_STATUS_POWER_LIMIT_EVENT_FLAG	(1<<4)
-#define PS_STATUS_POWER_LIMIT_TEMPERATURE (1<<5)
-
 struct pd_status {
 	uint8_t internal_temp;	/* 0 means no support */
 	uint8_t present_input;	/* bit filed */
 	uint8_t present_battey_input; /* bit filed */
 	uint8_t event_flags;	/* bit filed */
 	uint8_t temp_status;	/* bit filed */
-	uint8_t power_status;	/* bit filed */
 };
 
 /* PPSSDB, PPSStatus */

@@ -26,8 +26,6 @@ void KREE_SESSION_LOCK(int32_t handle);
 void KREE_SESSION_UNLOCK(int32_t handle);
 
 int gz_get_cpuinfo_thread(void *data);
-void set_gz_bind_cpu(int on);
-int get_gz_bind_cpu(void);
 struct _cpus_cluster_freq {
 	unsigned int max_freq;
 	unsigned int min_freq;

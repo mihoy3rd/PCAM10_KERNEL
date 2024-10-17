@@ -14,6 +14,7 @@
  *
  */
 
+#include <linux/atomic.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/file.h>
@@ -43,11 +44,6 @@
 #include "mtk/mtk_ion.h"
 #include "mtk/ion_drv_priv.h"
 
-#ifdef VENDOR_EDIT
-// wenbin.liu@PSW.BSP.MM, 2018/07/11
-// Add for ion used cnt
-#include <linux/module.h>
-#endif /*VENDOR_EDIT*/
 
 #define DEBUG_HEAP_SHRINKER
 
@@ -107,17 +103,6 @@ static void ion_buffer_add(struct ion_device *dev,
 	rb_link_node(&buffer->node, parent, p);
 	rb_insert_color(&buffer->node, &dev->buffers);
 }
-#ifdef VENDOR_EDIT
-/* Huacai.Zhou@PSW.BSP.Kernel.MM, 2018-06-26, add ion total used account*/
-static atomic_long_t ion_total_size;
-bool ion_cnt_enable = true;
-unsigned long ion_total(void)
-{
-	if (!ion_cnt_enable)
-		return 0;
-	return (unsigned long)atomic_long_read(&ion_total_size);
-}
-#endif /*VENDOR_EDIT*/
 
 /* this function should only be called while dev->lock is held */
 static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
@@ -229,11 +214,6 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 	mutex_lock(&dev->buffer_lock);
 	ion_buffer_add(dev, buffer);
 	mutex_unlock(&dev->buffer_lock);
-#ifdef VENDOR_EDIT
-/* Huacai.Zhou@PSW.BSP.Kernel.MM, 2018-06-26, add ion total used account*/
-	if (ion_cnt_enable)
-		atomic_long_add(buffer->size, &ion_total_size);
-#endif
 	return buffer;
 
 err:
@@ -250,11 +230,6 @@ void ion_buffer_destroy(struct ion_buffer *buffer)
 	if (WARN_ON(buffer->kmap_cnt > 0))
 		buffer->heap->ops->unmap_kernel(buffer->heap, buffer);
 	buffer->heap->ops->unmap_dma(buffer->heap, buffer);
-#ifdef VENDOR_EDIT
-/* Huacai.Zhou@PSW.BSP.Kernel.MM, 2018-06-26, add ion total used account*/
-	if (ion_cnt_enable)
-		atomic_long_sub(buffer->size, &ion_total_size);
-#endif /*VENDOR_EDIT*/
 	buffer->heap->ops->free(buffer);
 	vfree(buffer->pages);
 	kfree(buffer);
@@ -373,6 +348,16 @@ static void ion_handle_get(struct ion_handle *handle)
 	kref_get(&handle->ref);
 }
 
+/* Must hold the client lock */
+static struct ion_handle *ion_handle_get_check_overflow(
+					struct ion_handle *handle)
+{
+	if (atomic_read(&handle->ref.refcount) + 1 == 0)
+		return ERR_PTR(-EOVERFLOW);
+	ion_handle_get(handle);
+	return handle;
+}
+
 static int ion_handle_put_nolock(struct ion_handle *handle)
 {
 	int ret;
@@ -462,9 +447,9 @@ static struct ion_handle *ion_handle_get_by_id_nolock(struct ion_client *client,
 
 	handle = idr_find(&client->idr, id);
 	if (handle)
-		ion_handle_get(handle);
+		return ion_handle_get_check_overflow(handle);
 
-	return handle ? handle : ERR_PTR(-EINVAL);
+	return ERR_PTR(-EINVAL);
 }
 
 struct ion_handle *ion_handle_get_by_id(struct ion_client *client,
@@ -1383,7 +1368,7 @@ struct ion_handle *ion_import_dma_buf(struct ion_client *client, int fd)
 	/* if a handle exists for this buffer just take a reference to it */
 	handle = ion_handle_lookup(client, buffer);
 	if (!IS_ERR(handle)) {
-		ion_handle_get(handle);
+		handle = ion_handle_get_check_overflow(handle);
 		mutex_unlock(&client->lock);
 		goto end;
 	}
@@ -2077,9 +2062,5 @@ file2buf_exit:
 	else
 		return ERR_PTR(-EINVAL);
 }
-#ifdef VENDOR_EDIT
-// wenbin.liu@PSW.BSP.MM, 2018/07/11
-// Add for ion show switch
-module_param_named(ion_cnt_enable, ion_cnt_enable, bool, S_IRUGO | S_IWUSR);
-#endif /*VENDOR_EDIT*/
+
 /* ============================================================================================= */

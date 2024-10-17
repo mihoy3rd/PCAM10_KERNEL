@@ -47,12 +47,7 @@
 #define BAT_VOLTAGE_LOW_BOUND 3400
 #define BAT_VOLTAGE_HIGH_BOUND 3450
 #define LOW_TMP_BAT_VOLTAGE_LOW_BOUND 3200
-#ifndef VENDOR_EDIT
-/* Yichun.Chen  PSW.BSP.CHG  2019-04-13  for bug 1947891 */
 #define SHUTDOWN_TIME 40
-#else
-#define SHUTDOWN_TIME 60
-#endif
 #define AVGVBAT_ARRAY_SIZE 30
 #define INIT_VOLTAGE 3450
 #define BATTERY_SHUTDOWN_TEMPERATURE 90
@@ -226,9 +221,6 @@ enum Fg_kernel_cmds {
 	FG_KERNEL_CMD_UISOC_UPDATE_TYPE,
 	FG_KERNEL_CMD_CHANG_LOGLEVEL,
 	FG_KERNEL_CMD_REQ_ALGO_DATA,
-	FG_KERNEL_CMD_REQ_CHANGE_AGING_DATA,
-	FG_KERNEL_CMD_AG_LOG_TEST,
-	FG_KERNEL_CMD_AGLOG_LATCH_DONE,
 
 	FG_KERNEL_CMD_FROM_USER_NUMBER
 
@@ -322,7 +314,6 @@ enum daemon_cmd_int_data {
 	FG_SET_OCV_mah = FG_SET_ANCHOR + 12,
 	FG_SET_OCV_Vtemp = FG_SET_ANCHOR + 13,
 	FG_SET_OCV_SOC = FG_SET_ANCHOR + 14,
-	FG_SET_AG_ERR = FG_SET_ANCHOR + 15,
 	FG_SET_DATA_MAX,
 };
 
@@ -727,7 +718,6 @@ struct mtk_battery {
 	unsigned int proc_subcmd;
 	unsigned int proc_subcmd_para1;
 	char proc_log[4096];
-	char ag_log[2000];
 
 /*battery interrupt*/
 	int fg_bat_int1_gap;
@@ -763,7 +753,6 @@ struct mtk_battery {
 	int algo_vtemp;
 
 	int aging_factor;
-	int ag_detect_err;
 
 	struct timespec uisoc_oldtime;
 
@@ -920,7 +909,7 @@ extern void fg_bat_temp_int_sw_check(void);
 extern void fg_update_sw_low_battery_check(unsigned int thd);
 extern void fg_sw_bat_cycle_accu(void);
 extern void fg_ocv_query_soc(int ocv);
-extern void fg_int_event(struct gauge_device *gauge_dev, enum gauge_event evt);
+
 /* GM3 simulator */
 extern void gm3_log_init(void);
 extern void gm3_log_notify(unsigned int interrupt);

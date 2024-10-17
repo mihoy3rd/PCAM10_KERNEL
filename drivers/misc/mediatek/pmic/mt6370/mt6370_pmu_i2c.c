@@ -21,10 +21,8 @@
 
 #include "inc/mt6370_pmu.h"
 
-#define MT6370_PMU_I2C_DRV_VERSION	"1.0.3_MTK"
-
 static bool dbg_log_en; /* module param to enable/disable debug log */
-module_param(dbg_log_en, bool, 0644);
+module_param(dbg_log_en, bool, S_IRUGO | S_IWUSR);
 
 static int mt6370_pmu_read_device(void *i2c, u32 addr, int len, void *dst)
 {
@@ -49,18 +47,18 @@ int mt6370_pmu_reg_read(struct mt6370_pmu_chip *chip, u8 addr)
 	int ret = 0;
 
 	mt_dbg(chip->dev, "%s: reg %02x\n", __func__, addr);
-	mutex_lock(&chip->io_lock);
+	rt_mutex_lock(&chip->io_lock);
 	ret = rt_regmap_reg_read(chip->rd, &rrd, addr);
-	mutex_unlock(&chip->io_lock);
+	rt_mutex_unlock(&chip->io_lock);
 	return (ret < 0 ? ret : rrd.rt_data.data_u32);
 #else
 	u8 data = 0;
 	int ret = 0;
 
 	mt_dbg(chip->dev, "%s: reg %02x\n", __func__, addr);
-	mutex_lock(&chip->io_lock);
+	rt_mutex_lock(&chip->io_lock);
 	ret = mt6370_pmu_read_device(chip->i2c, addr, 1, &data);
-	mutex_unlock(&chip->io_lock);
+	rt_mutex_unlock(&chip->io_lock);
 	return (ret < 0 ? ret : data);
 #endif /* #ifdef CONFIG_RT_REGMAP */
 }
@@ -74,18 +72,18 @@ int mt6370_pmu_reg_write(struct mt6370_pmu_chip *chip, u8 addr, u8 data)
 
 	mt_dbg(chip->dev, "%s: reg %02x data %02x\n", __func__,
 		addr, data);
-	mutex_lock(&chip->io_lock);
+	rt_mutex_lock(&chip->io_lock);
 	ret = rt_regmap_reg_write(chip->rd, &rrd, addr, data);
-	mutex_unlock(&chip->io_lock);
+	rt_mutex_unlock(&chip->io_lock);
 	return ret;
 #else
 	int ret = 0;
 
 	mt_dbg(chip->dev, "%s: reg %02x data %02x\n", __func__,
 		addr, data);
-	mutex_lock(&chip->io_lock);
+	rt_mutex_lock(&chip->io_lock);
 	ret = mt6370_pmu_write_device(chip->i2c, addr, 1, &data);
-	mutex_unlock(&chip->io_lock);
+	rt_mutex_unlock(&chip->io_lock);
 	return (ret < 0 ? ret : data);
 #endif /* #ifdef CONFIG_RT_REGMAP */
 }
@@ -101,9 +99,9 @@ int mt6370_pmu_reg_update_bits(struct mt6370_pmu_chip *chip, u8 addr,
 	mt_dbg(chip->dev, "%s: reg %02x data %02x\n", __func__,
 		addr, data);
 	mt_dbg(chip->dev, "%s: mask %02x\n", __func__, mask);
-	mutex_lock(&chip->io_lock);
+	rt_mutex_lock(&chip->io_lock);
 	ret = rt_regmap_update_bits(chip->rd, &rrd, addr, mask, data);
-	mutex_unlock(&chip->io_lock);
+	rt_mutex_unlock(&chip->io_lock);
 	return ret;
 #else
 	u8 orig = 0;
@@ -112,7 +110,7 @@ int mt6370_pmu_reg_update_bits(struct mt6370_pmu_chip *chip, u8 addr,
 	mt_dbg(chip->dev, "%s: reg %02x data %02x\n", __func__,
 		addr, data);
 	mt_dbg(chip->dev, "%s: mask %02x\n", __func__, mask);
-	mutex_lock(&chip->io_lock);
+	rt_mutex_lock(&chip->io_lock);
 	ret = mt6370_pmu_read_device(chip->i2c, addr, 1, &orig);
 	if (ret < 0)
 		goto out_update_bits;
@@ -120,7 +118,7 @@ int mt6370_pmu_reg_update_bits(struct mt6370_pmu_chip *chip, u8 addr,
 	orig |= (data & mask);
 	ret = mt6370_pmu_write_device(chip->i2c, addr, 1, &orig);
 out_update_bits:
-	mutex_unlock(&chip->io_lock);
+	rt_mutex_unlock(&chip->io_lock);
 	return ret;
 #endif /* #ifdef CONFIG_RT_REGMAP */
 }
@@ -134,18 +132,18 @@ int mt6370_pmu_reg_block_read(struct mt6370_pmu_chip *chip, u8 addr,
 
 	mt_dbg(chip->dev, "%s: reg %02x size %d\n", __func__,
 		addr, len);
-	mutex_lock(&chip->io_lock);
+	rt_mutex_lock(&chip->io_lock);
 	ret = rt_regmap_block_read(chip->rd, addr, len, dest);
-	mutex_unlock(&chip->io_lock);
+	rt_mutex_unlock(&chip->io_lock);
 	return ret;
 #else
 	int ret = 0;
 
 	mt_dbg(chip->dev, "%s: reg %02x size %d\n", __func__,
 		addr, len);
-	mutex_lock(&chip->io_lock);
+	rt_mutex_lock(&chip->io_lock);
 	ret = mt6370_pmu_read_device(chip->i2c, addr, len, dest);
-	mutex_unlock(&chip->io_lock);
+	rt_mutex_unlock(&chip->io_lock);
 	return ret;
 #endif /* #ifdef CONFIG_RT_REGMAP */
 }
@@ -159,18 +157,18 @@ int mt6370_pmu_reg_block_write(struct mt6370_pmu_chip *chip, u8 addr,
 
 	mt_dbg(chip->dev, "%s: reg %02x size %d\n", __func__, addr,
 		len);
-	mutex_lock(&chip->io_lock);
+	rt_mutex_lock(&chip->io_lock);
 	ret = rt_regmap_block_write(chip->rd, addr, len, src);
-	mutex_unlock(&chip->io_lock);
+	rt_mutex_unlock(&chip->io_lock);
 	return ret;
 #else
 	int ret = 0;
 
 	mt_dbg(chip->dev, "%s: reg %02x size %d\n", __func__, addr,
 		len);
-	mutex_lock(&chip->io_lock);
+	rt_mutex_lock(&chip->io_lock);
 	ret = mt6370_pmu_write_device(chip->i2c, addr, len, src);
-	mutex_unlock(&chip->io_lock);
+	rt_mutex_unlock(&chip->io_lock);
 	return ret;
 #endif /* #ifdef CONFIG_RT_REGMAP */
 }
@@ -188,8 +186,7 @@ static int mt_parse_dt(struct device *dev,
 		goto out_parse_dt;
 	pdata->intr_gpio = ret;
 #else
-	ret =  of_property_read_u32(np, "mt6370,intr_gpio_num",
-					&pdata->intr_gpio);
+	ret =  of_property_read_u32(np, "mt6370,intr_gpio_num", &pdata->intr_gpio);
 	if (ret < 0)
 		goto out_parse_dt;
 #endif
@@ -204,7 +201,7 @@ static inline void rt_config_of_node(struct device *dev)
 
 	np = of_find_node_by_name(NULL, "mt6370_pmu_dts");
 	if (np) {
-		dev_notice(dev, "find mt6370_pmu_dts node\n");
+		dev_err(dev, "find mt6370_pmu_dts node\n");
 		dev->of_node = np;
 	}
 }
@@ -212,30 +209,15 @@ static inline void rt_config_of_node(struct device *dev)
 static inline int mt6370_pmu_chip_id_check(struct i2c_client *i2c)
 {
 	int ret = 0;
-	int vendor_id = 0;
 
 	ret = i2c_smbus_read_byte_data(i2c, MT6370_PMU_REG_DEVINFO);
 	if (ret < 0)
 		return ret;
 
-	vendor_id = ret & 0xF0;
-
-	switch (vendor_id) {
-	case RT5081_VENDOR_ID:
-	case MT6370_VENDOR_ID:
-	case MT6371_VENDOR_ID:
-	case MT6372_VENDOR_ID:
-	case MT6372C_VENDOR_ID:
-		dev_info(&i2c->dev, "vendor id (0x%02X) match\n", vendor_id);
-		vendor_id = (ret & 0xFF);
-		break;
-	default:
-		dev_notice(&i2c->dev, "vendor id (0x%02X) not match\n",
-				      vendor_id);
-		vendor_id = -ENODEV;
-	}
-
-	return vendor_id;
+	if ((ret & 0xF0) == 0x80 || (ret & 0xF0) == 0xE0 ||
+		(ret & 0xF0) == 0xF0)
+		return (ret & 0xff);
+	return -ENODEV;
 }
 
 static int mt6370_pmu_suspend(struct device *dev)
@@ -244,7 +226,6 @@ static int mt6370_pmu_suspend(struct device *dev)
 
 	mt_dbg(chip->dev, "%s\n", __func__);
 	mt6370_pmu_irq_suspend(chip);
-	disable_irq(chip->irq);
 	return 0;
 }
 
@@ -253,7 +234,6 @@ static int mt6370_pmu_resume(struct device *dev)
 	struct mt6370_pmu_chip *chip = dev_get_drvdata(dev);
 
 	mt_dbg(dev, "%s\n", __func__);
-	enable_irq(chip->irq);
 	mt6370_pmu_irq_resume(chip);
 	return 0;
 }
@@ -270,8 +250,6 @@ static int mt6370_pmu_probe(struct i2c_client *i2c,
 	uint8_t chip_id = 0;
 	int ret = 0;
 
-	pr_info("%s: (%s)\n", __func__, MT6370_PMU_I2C_DRV_VERSION);
-
 	ret = mt6370_pmu_chip_id_check(i2c);
 	if (ret < 0)
 		return ret;
@@ -283,7 +261,7 @@ static int mt6370_pmu_probe(struct i2c_client *i2c,
 			return -ENOMEM;
 		ret = mt_parse_dt(&i2c->dev, pdata);
 		if (ret < 0) {
-			dev_notice(&i2c->dev, "error parse platform data\n");
+			dev_err(&i2c->dev, "error parse platform data\n");
 			devm_kfree(&i2c->dev, pdata);
 			return ret;
 		}
@@ -299,7 +277,7 @@ static int mt6370_pmu_probe(struct i2c_client *i2c,
 	chip->dev = &i2c->dev;
 	chip->chip_rev = chip_id & 0x0f;
 	chip->chip_vid = chip_id & 0xf0;
-	mutex_init(&chip->io_lock);
+	rt_mutex_init(&chip->io_lock);
 	i2c_set_clientdata(i2c, chip);
 
 	pm_runtime_set_active(&i2c->dev);
@@ -369,19 +347,4 @@ module_i2c_driver(mt6370_pmu);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("MediaTek MT6370 PMU");
-MODULE_VERSION(MT6370_PMU_I2C_DRV_VERSION);
-
-/*
- * Version Note
- * 1.0.3_MTK
- * (1) disable_irq()/enable_irq() in suspend()/resume()
- *
- * 1.0.2_MTK
- * (1) Add support for MT6372
-
- * 1.0.1_MTK
- * (1) Replace rt_mutex with mutex
- *
- * 1.0.0_MTK
- * (1) Initial Release
- */
+MODULE_VERSION("1.0.2_G");

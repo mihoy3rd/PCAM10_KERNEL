@@ -710,14 +710,6 @@ typedef struct {
 	unsigned int corner_pattern_height;
 	unsigned int corner_pattern_height_bot;
 #endif
-#ifdef VENDOR_EDIT
-/*
-* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/06/11,
-* modify for support aod state.
-*/
-	unsigned int hbm_en_time;
-	unsigned int hbm_dis_time;
-#endif
 } LCM_PARAMS;
 
 
@@ -889,10 +881,6 @@ typedef struct {
 	/* /////////////////////////CABC backlight related function */
 	void (*set_backlight)(unsigned int level);
 	void (*set_backlight_cmdq)(void *handle, unsigned int level);
-	bool (*get_hbm_state)(void);
-	bool (*get_hbm_wait)(void);
-	bool (*set_hbm_wait)(bool wait);
-	bool (*set_hbm_cmdq)(bool en, void *qhandle);
 	void (*set_pwm)(unsigned int divider);
 	unsigned int (*get_pwm)(unsigned int divider);
 	void (*set_backlight_mode)(unsigned int mode);
@@ -916,14 +904,6 @@ typedef struct {
 	* add for Aod feature
 	*/
 	void (*aod_doze_resume)(void);
-	/*
-	* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/02/14,
-	* modify for support aod state.
-	*/
-	void (*disp_lcm_aod_from_display_on)(void);
-	void (*set_aod_brightness)(void *handle, unsigned int mode);
-	void (*set_safe_mode)(void *handle, unsigned int mode);
-	bool (*set_hbm_wait_ramless)(bool wait, void *qhandle);
 #endif /* VENDOR_EDIT */
 
 	int (*adjust_fps)(void *cmdq, int fps, LCM_PARAMS *params);

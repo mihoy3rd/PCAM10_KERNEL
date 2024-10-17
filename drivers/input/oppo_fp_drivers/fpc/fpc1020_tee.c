@@ -21,7 +21,6 @@
  **  Ziqing.guo                  2018/03/13                  add fix for coverity 21935, 21734 (Uninitialized scalar variable)
  **  Ran.Chen                    2018/06/26                  add for 1023_2060_GLASS
  **  Yang.Tan                    2018/11/09                  add for 18531 fpc1511
- **  Hongyu.Lu                   2019/04/19                  add for SM6125 fpc1511
  ************************************************************************************/
 
 #include <linux/clk.h>
@@ -67,8 +66,8 @@ struct vreg_config {
 };
 
 static const struct vreg_config const vreg_conf[] = {
-        { "vdd_io", 1800000UL, 1800000UL, 10000, },
-        { "vmch", 2960000UL, 2960000UL, 10000, },
+        { "vdd_io", 1800000UL, 1800000UL, 6000, },
+        { "vmch", 2960000UL, 2960000UL, 10000, },			
 };
 
 struct fpc1020_data {
@@ -259,6 +258,7 @@ static ssize_t regulator_enable_set(struct device *dev,
         }
         rc = vreg_setup(fpc1020, "vdd_io", enable);
         rc = vreg_setup(fpc1020, "vmch", enable);
+
         return rc ? rc : count;
 }
 
@@ -448,6 +448,7 @@ static int fpc1020_probe(struct platform_device *pdev)
 
         rc = vreg_setup(fpc1020, "vdd_io", true);
         rc = vreg_setup(fpc1020, "vmch", true);
+
         if (rc) {
                 dev_err(fpc1020->dev,
                                 "vreg_setup failed.\n");
@@ -483,23 +484,7 @@ static struct platform_driver fpc1020_driver = {
         },
         .probe = fpc1020_probe,
 };
-
-static int __init fpc1020_init(void)
-{
-        if(platform_driver_register(&fpc1020_driver) ){
-                pr_err("platform_driver_register fail");
-                return -EINVAL;
-        }
-        return 0;
-}
-
-static void __exit fpc1020_exit(void)
-{
-        platform_driver_unregister(&fpc1020_driver);
-}
-
-late_initcall(fpc1020_init);
-module_exit(fpc1020_exit);
+module_platform_driver(fpc1020_driver);
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Aleksej Makarov");

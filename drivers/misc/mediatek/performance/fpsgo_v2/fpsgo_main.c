@@ -100,10 +100,6 @@ int fpsgo_is_enable(void)
 	FPSGO_LOGI("[FPSGO_CTRL] isenable %d\n", enable);
 	return enable;
 }
-#ifdef VENDOR_EDIT
-//cuixiaogang@swdp.shanghai, 2018/1/9, add to control fpsgov2.0
-EXPORT_SYMBOL(fpsgo_is_enable);
-#endif
 
 static void fpsgo_notifier_wq_cb_dfrc_fps(int dfrc_fps)
 {
@@ -617,11 +613,6 @@ void fpsgo_switch_enable(int enable)
 	INIT_WORK(&vpPush->sWork, fpsgo_notifier_wq_cb);
 	queue_work(g_psNotifyWorkQueue, &vpPush->sWork);
 }
-#ifdef VENDOR_EDIT
-//cuixiaogang@swdp.shanghai, 2018/1/9, add to control fpsgov2.0
-EXPORT_SYMBOL(fpsgo_switch_enable);
-#endif
-
 
 int fpsgo_is_force_enable(void)
 {
@@ -642,10 +633,6 @@ void fpsgo_force_switch_enable(int enable)
 
 	fpsgo_switch_enable(enable?1:0);
 }
-#ifdef VENDOR_EDIT
-//cuixiaogang@swdp.shanghai, 2018/1/9, add to control fpsgov2.0
-EXPORT_SYMBOL(fpsgo_force_switch_enable);
-#endif
 
 /* FSTB control */
 int fpsgo_is_fstb_enable(void)

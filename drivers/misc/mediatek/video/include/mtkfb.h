@@ -388,12 +388,6 @@ struct mtkfb_device {
 
 extern long hdmi_handle_cmd(unsigned int cmd, unsigned long arg);
 
-#ifdef VENDOR_EDIT
-//jie.cheng@Swdp.shanghai, 2017/06/05, Add notifier for fb info
-extern int mtkfb_register_client(struct notifier_block *nb);
-extern int mtkfb_unregister_client(struct notifier_block *nb);
-#endif
-
 #if defined(CONFIG_MACH_MT6797)
 extern unsigned int vramsize;
 #endif

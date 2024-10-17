@@ -263,6 +263,14 @@ static int mmc_decode_scr(struct mmc_card *card)
 
 	if (scr->sda_spec3)
 		scr->cmds = UNSTUFF_BITS(resp, 32, 2);
+
+	/* SD Spec says: any SD Card shall set at least bits 0 and 2 */
+	if (!(scr->bus_widths & SD_SCR_BUS_WIDTH_1) ||
+	    !(scr->bus_widths & SD_SCR_BUS_WIDTH_4)) {
+		pr_err("%s: invalid bus width\n", mmc_hostname(card->host));
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -1150,9 +1158,7 @@ static void mmc_sd_remove(struct mmc_host *host)
 	BUG_ON(!host->card);
 
 	mmc_remove_card(host->card);
-	mmc_claim_host(host);
 	host->card = NULL;
-	mmc_release_host(host);
 }
 
 /*
@@ -1176,17 +1182,7 @@ static void mmc_sd_detect(struct mmc_host *host)
 	BUG_ON(!host);
 	BUG_ON(!host->card);
 
-	/*
-	 * Try to acquire claim host. If failed to get the lock in 2 sec,
-	 * just return; This is to ensure that when this call is invoked
-	 * due to pm_suspend, not to block suspend for longer duration.
-	 */
-	pm_runtime_get_sync(&host->card->dev);
-	if (!mmc_try_claim_host(host, 2000)) {
-		pm_runtime_mark_last_busy(&host->card->dev);
-		pm_runtime_put_autosuspend(&host->card->dev);
-		return;
-	}
+	mmc_get_card(host->card);
 
 	/*
 	 * Just check if our card has been removed.
@@ -1230,17 +1226,15 @@ static int _mmc_sd_suspend(struct mmc_host *host)
 
 	mmc_claim_host(host);
 
-	if (host->card) {
-		if (mmc_card_suspended(host->card))
-			goto out;
+	if (mmc_card_suspended(host->card))
+		goto out;
 
-		if (!mmc_host_is_spi(host))
-			err = mmc_deselect_cards(host);
+	if (!mmc_host_is_spi(host))
+		err = mmc_deselect_cards(host);
 
-		if (!err) {
-			mmc_power_off(host);
-			mmc_card_set_suspended(host->card);
-		}
+	if (!err) {
+		mmc_power_off(host);
+		mmc_card_set_suspended(host->card);
 	}
 
 out:
@@ -1393,14 +1387,6 @@ int mmc_attach_sd(struct mmc_host *host)
 	BUG_ON(!host);
 	WARN_ON(!host->claimed);
 
-#ifdef VENDOR_EDIT
-    //Lycan.Wang@Prd.BasicDrv, 2014-07-10 Add for retry 5 times when new sdcard init error
-	if (!host->detect_change_retry) {
-        pr_err("%s have init error 5 times\n", __func__);
-        return -ETIMEDOUT;
-    }
-#endif /* VENDOR_EDIT */
-    
 	err = mmc_send_app_op_cond(host, 0, &ocr);
 	if (err)
 		return err;
@@ -1420,6 +1406,12 @@ int mmc_attach_sd(struct mmc_host *host)
 			goto err;
 	}
 
+	/*
+	 * Some SD cards claims an out of spec VDD voltage range. Let's treat
+	 * these bits as being in-valid and especially also bit7.
+	 */
+	ocr &= ~0x7FFF;
+
 	rocr = mmc_select_voltage(host, ocr);
 
 	/*
@@ -1434,18 +1426,7 @@ int mmc_attach_sd(struct mmc_host *host)
 	 * Detect and init the card.
 	 */
 #ifdef CONFIG_MMC_PARANOID_SD_INIT
-
-#ifndef VENDOR_EDIT
-    //Lycan.Wang@Prd.BasicDrv, 2014-07-10 Modify for init retry only once when have init error before
-    retries = 5;
-#else /* VENDOR_EDIT */
-    if (host->detect_change_retry < 5) 
-        retries = 1;
-    else
-        retries = 5;
-#endif /* VENDOR_EDIT */
-
-
+	retries = 5;
 	while (retries) {
 		err = mmc_sd_init_card(host, rocr, NULL);
 		if (err) {

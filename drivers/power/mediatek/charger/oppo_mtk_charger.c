@@ -10,7 +10,7 @@
 * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
 */
-
+ 
 /*
  *
  * Filename:
@@ -72,36 +72,6 @@
 #include <musb_core.h>
 #include <pmic.h>
 #include <mtk_gauge_time_service.h>
-
-
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Add for charging */
-#include "../../oppo/oppo_charger.h"
-#include "../../../misc/mediatek/usb_c/tcpc/inc/tcpci.h"
-extern int charger_ic_flag;
-extern int mt6370_check_charging_enable(void);
-extern int mt6370_suspend_charger(bool suspend);
-extern int mt6370_set_rechg_voltage(int rechg_mv);
-extern int mt6370_reset_charger(void);
-extern int mt6370_set_chging_term_disable(bool disable);
-extern int mt6370_aicl_enable(bool enable);
-extern int mt6370_set_register(unsigned char addr, unsigned char mask, unsigned char data);
-extern int battery_meter_get_charger_voltage(void);
-extern bool pmic_chrdet_status(void);
-extern int mt_get_chargerid_volt(void);
-extern void mt_set_chargerid_switch_val(int value);
-extern int mt_get_chargerid_switch_val(void);
-extern bool oppo_chg_get_shortc_hw_gpio_status(void);
-static int oppo_mt6370_reset_charger(void);
-static int oppo_mt6370_enable_charging(void);
-static int oppo_mt6370_disable_charging(void);
-static int oppo_mt6370_float_voltage_write(int vflaot_mv);
-static int oppo_mt6370_suspend_charger(void);
-static int oppo_mt6370_unsuspend_charger(void);
-static int oppo_mt6370_charging_current_write_fast(int chg_curr);
-static int oppo_mt6370_set_termchg_current(int term_curr);
-static int oppo_mt6370_set_rechg_voltage(int rechg_mv);
-#endif /*VENDOR_EDIT && CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 
 static struct charger_manager *pinfo;
 static struct list_head consumer_head = LIST_HEAD_INIT(consumer_head);
@@ -231,10 +201,6 @@ void charger_log_flash(const char *fmt, ...)
 
 void _wake_up_charger(struct charger_manager *info)
 {
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
-	return;
-#else
 	unsigned long flags;
 
 	if (info == NULL)
@@ -246,7 +212,6 @@ void _wake_up_charger(struct charger_manager *info)
 	spin_unlock_irqrestore(&info->slock, flags);
 	info->charger_thread_timeout = true;
 	wake_up(&info->wait_que);
-#endif /* VENDOR_EDIT && CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 }
 
 /* charger_manager ops  */
@@ -416,11 +381,6 @@ int charger_manager_enable_charging(struct charger_consumer *consumer,
 	struct charger_manager *info = consumer->cm;
 	int ret = 0;
 
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
-	return -EBUSY;
-#endif
-
 	mutex_lock(&info->charger_lock);
 	ret = _charger_manager_enable_charging(consumer, idx, en);
 	mutex_unlock(&info->charger_lock);
@@ -431,11 +391,6 @@ int charger_manager_set_input_current_limit(struct charger_consumer *consumer,
 	int idx, int input_current)
 {
 	struct charger_manager *info = consumer->cm;
-
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
-	return -EBUSY;
-#endif
 
 	if (info != NULL) {
 		struct charger_data *pdata;
@@ -462,11 +417,6 @@ int charger_manager_set_charging_current_limit(struct charger_consumer *consumer
 {
 	struct charger_manager *info = consumer->cm;
 
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
-	return -EBUSY;
-#endif
-
 	if (info != NULL) {
 		struct charger_data *pdata;
 
@@ -491,11 +441,6 @@ int charger_manager_get_charger_temperature(struct charger_consumer *consumer,
 	int idx, int *tchg_min,	int *tchg_max)
 {
 	struct charger_manager *info = consumer->cm;
-
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
-	return -EBUSY;
-#endif
 
 	if (info != NULL) {
 		struct charger_data *pdata;
@@ -522,8 +467,6 @@ int charger_manager_get_charger_temperature(struct charger_consumer *consumer,
 	return -EBUSY;
 }
 
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 int charger_manager_force_charging_current(struct charger_consumer *consumer,
 	int idx, int charging_current)
 {
@@ -572,7 +515,6 @@ int charger_manager_get_pe30_input_current_limit(struct charger_consumer *consum
 	}
 	return -EBUSY;
 }
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 
 int charger_manager_get_current_charging_type(struct charger_consumer *consumer)
 {
@@ -617,15 +559,12 @@ int charger_manager_get_zcv(struct charger_consumer *consumer, int idx, u32 *uV)
 int charger_manager_enable_kpoc_shutdown(struct charger_consumer *consumer,
 	bool en)
 {
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 	struct charger_manager *info = consumer->cm;
 
 	if (en)
 		atomic_set(&info->enable_kpoc_shdn, 1);
 	else
 		atomic_set(&info->enable_kpoc_shdn, 0);
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 	return 0;
 }
 
@@ -664,8 +603,6 @@ int unregister_charger_manager_notifier(struct charger_consumer *consumer,
 
 /* user interface end*/
 
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 /* factory mode */
 #define CHARGER_DEVNAME "charger_ftm"
 #define GET_IS_SLAVE_CHARGER_EXIST _IOW('k', 13, int)
@@ -788,7 +725,7 @@ unregister:
 	unregister_chrdev_region(charger_devno, 1);
 }
 /* factory mode end */
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
+
 
 /* internal algorithm common function */
 bool is_dual_charger_supported(struct charger_manager *info)
@@ -819,7 +756,6 @@ int charger_enable_vbus_ovp(struct charger_manager *pinfo, bool enable)
 bool is_typec_adapter(struct charger_manager *info)
 {
 	if (info->pd_type == PD_CONNECT_TYPEC_ONLY_SNK &&
-			tcpm_inquire_typec_remote_rp_curr(info->tcpc) != 500 &&
 			info->chr_type != STANDARD_HOST &&
 			info->chr_type != CHARGING_HOST &&
 			mtk_pe20_get_is_connect(info) == false &&
@@ -832,8 +768,7 @@ bool is_typec_adapter(struct charger_manager *info)
 
 /* internal algorithm common function end */
 
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
+
 /* sw jeita */
 void do_sw_jeita_state_machine(struct charger_manager *info)
 {
@@ -1091,7 +1026,7 @@ static ssize_t store_pdc_max_watt_level(struct device *dev, struct device_attrib
 	return size;
 }
 static DEVICE_ATTR(pdc_max_watt, 0664, show_pdc_max_watt_level, store_pdc_max_watt_level);
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
+
 
 int mtk_get_dynamic_cv(struct charger_manager *info, unsigned int *cv)
 {
@@ -1159,18 +1094,18 @@ int charger_manager_notifier(struct charger_manager *info, int event)
 int notify_battery_full(void)
 {
 	printk("notify_battery_full_is_ok\n");
-
-	if (charger_manager_notifier(pinfo, CHARGER_NOTIFY_EOC)) {
-		printk("notifier fail\n");
-		return 1;
-	} else {
+	if (pinfo == NULL) {
 		return 0;
+	} else {
+		if (charger_manager_notifier(pinfo, CHARGER_NOTIFY_EOC)) {
+		return 1;
+		} else {
+		return 0;
+		}
 	}
 }
 #endif /* VENDOR_EDIT */
 
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 int charger_psy_event(struct notifier_block *nb, unsigned long event, void *v)
 {
 	struct charger_manager *info = container_of(nb, struct charger_manager, psy_nb);
@@ -1194,20 +1129,11 @@ int charger_psy_event(struct notifier_block *nb, unsigned long event, void *v)
 
 	return NOTIFY_DONE;
 }
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/25, sjc Modify for charging */
-void oppo_wake_up_usbtemp_thread(void);
-#endif
 void mtk_charger_int_handler(void)
 {
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 	chr_err("mtk_charger_int_handler\n");
-	if (mt_get_charger_type() != CHARGER_UNKNOWN)
-		oppo_wake_up_usbtemp_thread();
-#else
+
 	if (pinfo == NULL) {
 		chr_err("charger is not rdy ,skip1\n");
 		return;
@@ -1217,12 +1143,10 @@ void mtk_charger_int_handler(void)
 		chr_err("charger is not rdy ,skip2\n");
 		return;
 	}
+	chr_err("wake_up_charger\n");
 	_wake_up_charger(pinfo);
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 }
 
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 static int mtk_charger_plug_in(struct charger_manager *info, enum charger_type chr_type)
 {
 	info->chr_type = chr_type;
@@ -1576,8 +1500,9 @@ void mtk_charger_stop_timer(struct charger_manager *info)
 static int charger_routine_thread(void *arg)
 {
 	struct charger_manager *info = arg;
+	static int i;
 	unsigned long flags;
-	bool is_charger_on;
+	bool curr_sign, is_charger_on;
 	int bat_current, chg_current;
 
 	while (1) {
@@ -1590,10 +1515,13 @@ static int charger_routine_thread(void *arg)
 		spin_unlock_irqrestore(&info->slock, flags);
 
 		info->charger_thread_timeout = false;
+		i++;
+		curr_sign = battery_get_bat_current_sign();
 		bat_current = battery_get_bat_current();
 		chg_current = pmic_get_charging_current();
 		chr_err("Vbat=%d,Ibat=%d,I=%d,VChr=%d,T=%d,Soc=%d:%d,CT:%d:%d hv:%d pd:%d:%d\n",
-			battery_get_bat_voltage(), bat_current, chg_current,
+			battery_get_bat_voltage(),
+			curr_sign ? bat_current : -1 * bat_current, chg_current,
 			battery_get_vbus(), battery_get_bat_temperature(),
 			battery_get_bat_soc(), battery_get_bat_uisoc(),
 			mt_get_charger_type(), info->chr_type, info->enable_hv_charging,
@@ -1630,15 +1558,11 @@ static int charger_routine_thread(void *arg)
 
 	return 0;
 }
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 
 static int mtk_charger_parse_dt(struct charger_manager *info, struct device *dev)
 {
 	struct device_node *np = dev->of_node;
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 	u32 val;
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 
 	chr_err("%s: starts\n", __func__);
 
@@ -1647,8 +1571,6 @@ static int mtk_charger_parse_dt(struct charger_manager *info, struct device *dev
 		return -EINVAL;
 	}
 
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 	if (of_property_read_string(np, "algorithm_name",
 		&info->algorithm_name) < 0) {
 		chr_err("%s: no algorithm_name name\n", __func__);
@@ -1679,12 +1601,8 @@ static int mtk_charger_parse_dt(struct charger_manager *info, struct device *dev
 	info->enable_pe_2 = of_property_read_bool(np, "enable_pe_2");
 	info->enable_pe_3 = of_property_read_bool(np, "enable_pe_3");
 	info->enable_pe_4 = of_property_read_bool(np, "enable_pe_4");
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
-
 	info->enable_type_c = of_property_read_bool(np, "enable_type_c");
 
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 	info->enable_hv_charging = true;
 
 	/* common */
@@ -2166,13 +2084,10 @@ static int mtk_charger_parse_dt(struct charger_manager *info, struct device *dev
 			BIF_CV_UNDER_THRESHOLD2);
 		info->data.bif_cv_under_threshold2 = BIF_CV_UNDER_THRESHOLD2;
 	}
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 
 	info->data.power_path_support = of_property_read_bool(np, "power_path_support");
 	chr_debug("%s: power_path_support: %d\n", __func__, info->data.power_path_support);
 
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 	if (of_property_read_u32(np, "max_charging_time", &val) >= 0) {
 		info->data.max_charging_time = val;
 		chr_debug("%s: max_charging_time: %d\n", __func__, info->data.max_charging_time);
@@ -2182,13 +2097,11 @@ static int mtk_charger_parse_dt(struct charger_manager *info, struct device *dev
 	}
 
 	chr_err("algorithm name:%s\n", info->algorithm_name);
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 
 	return 0;
 }
 
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
+
 static ssize_t show_Pump_Express(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct charger_manager *pinfo = dev->driver_data;
@@ -2226,7 +2139,6 @@ static ssize_t show_Pump_Express(struct device *dev, struct device_attribute *at
 }
 
 static DEVICE_ATTR(Pump_Express, 0444, show_Pump_Express, NULL);
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 
 static ssize_t show_BatteryNotify(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -2256,8 +2168,6 @@ static ssize_t store_BatteryNotify(struct device *dev, struct device_attribute *
 
 static DEVICE_ATTR(BatteryNotify, 0664, show_BatteryNotify, store_BatteryNotify);
 
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 static ssize_t show_input_current(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct charger_manager *pinfo = dev->driver_data;
@@ -2504,15 +2414,11 @@ static ssize_t mtk_charger_en_safety_timer_write(struct file *file, const char *
 PROC_FOPS_RW(current_cmd);
 PROC_FOPS_RW(en_power_path);
 PROC_FOPS_RW(en_safety_timer);
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
-
 
 /* Create sysfs and procfs attributes */
 static int mtk_charger_setup_files(struct platform_device *pdev)
 {
 	int ret = 0;
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 	struct proc_dir_entry *battery_dir = NULL;
 	struct charger_manager *info = platform_get_drvdata(pdev);
 	/* struct charger_device *chg_dev; */
@@ -2526,15 +2432,10 @@ static int mtk_charger_setup_files(struct platform_device *pdev)
 	ret = device_create_file(&(pdev->dev), &dev_attr_pe30);
 	if (ret)
 		goto _out;
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
-
 	/* Battery warning */
 	ret = device_create_file(&(pdev->dev), &dev_attr_BatteryNotify);
 	if (ret)
 		goto _out;
-
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 	ret = device_create_file(&(pdev->dev), &dev_attr_BN_TestMode);
 	if (ret)
 		goto _out;
@@ -2585,7 +2486,6 @@ static int mtk_charger_setup_files(struct platform_device *pdev)
 			&mtk_charger_en_power_path_fops, info);
 	proc_create_data("en_safety_timer", S_IRUGO | S_IWUSR, battery_dir,
 			&mtk_charger_en_safety_timer_fops, info);
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 
 _out:
 	return ret;
@@ -2622,19 +2522,10 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb, unsigned long event,
 		break;
 
 		case PD_CONNECT_PE_READY_SNK:
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/08/08, sjc Modify for PISEN PD3.0 adapter */
-		case PD_CONNECT_PE_READY_SNK_PD30:
-			mutex_lock(&pinfo->charger_pd_lock);
-			chr_err("PD Notify fixe voltage ready\r\n");
-			pinfo->pd_type = noti->pd_state.connected;;
-			mutex_unlock(&pinfo->charger_pd_lock);
-#else
 			mutex_lock(&pinfo->charger_pd_lock);
 			chr_err("PD Notify fixe voltage ready\r\n");
 			pinfo->pd_type = PD_CONNECT_PE_READY_SNK;
 			mutex_unlock(&pinfo->charger_pd_lock);
-#endif /*VENDOR_EDIT*/
 		/* PD is ready */
 		break;
 
@@ -2661,810 +2552,14 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb, unsigned long event,
 	return NOTIFY_OK;
 }
 
-
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Add for charging */
-//====================================================================//
-static void oppo_mt6370_dump_registers(void)
-{
-	struct charger_device *chg = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return;
-	}
-	/*This function runs for more than 400ms, so return when no charger for saving power */
-	if (!pmic_chrdet_status() || oppo_get_chg_powersave() == true) {
-		return;
-	}
-	chg = pinfo->chg1_dev;
-	charger_dev_dump_registers(chg);
-	return;
-}
-
-static int oppo_mt6370_kick_wdt(void)
-{
-	int rc = 0;
-	struct charger_device *chg = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return 0;
-	}
-	chg = pinfo->chg1_dev;
-	rc = charger_dev_kick_wdt(chg);
-	if (rc < 0) {
-		chg_debug("charger_dev_kick_wdt fail\n");
-	}
-	return 0;
-}
-
-static int oppo_mt6370_hardware_init(void)
-{
-	int hw_aicl_point = 4400;
-	//int sw_aicl_point = 4500;
-	struct charger_device *chg = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return 0;
-	}
-	chg = pinfo->chg1_dev;
-
-	oppo_mt6370_reset_charger();
-
-	if (get_boot_mode() == KERNEL_POWER_OFF_CHARGING_BOOT) {
-		oppo_mt6370_disable_charging();
-		oppo_mt6370_float_voltage_write(4400);
-		msleep(100);
-	}
-
-	oppo_mt6370_float_voltage_write(4385);
-
-	//set_complete_charge_timeout(OVERTIME_DISABLED);
-	mt6370_set_register(0x1C, 0xFF, 0xF9);
-
-	//set_prechg_current(300);
-	mt6370_set_register(0x18, 0xF, 0x4);
-
-	oppo_mt6370_charging_current_write_fast(512);
-
-	oppo_mt6370_set_termchg_current(150);
-
-	oppo_mt6370_set_rechg_voltage(100);
-
-	charger_dev_set_mivr(chg, hw_aicl_point * 1000);
-
-#ifdef CONFIG_OPPO_CHARGER_MTK
-	if (get_boot_mode() == META_BOOT || get_boot_mode() == FACTORY_BOOT
-			|| get_boot_mode() == ADVMETA_BOOT || get_boot_mode() == ATE_FACTORY_BOOT) {
-		oppo_mt6370_suspend_charger();
-		oppo_mt6370_disable_charging();
-	} else {
-		oppo_mt6370_unsuspend_charger();
-	}
-#else /* CONFIG_OPPO_CHARGER_MTK */
-	oppo_mt6370_unsuspend_charger();
-#endif /* CONFIG_OPPO_CHARGER_MTK */
-
-	oppo_mt6370_enable_charging();
-
-	//set_wdt_timer(REG05_BQ25601D_WATCHDOG_TIMER_40S);
-	//mt6370_set_register(0x1D, 0x80, 0x80);
-	mt6370_set_register(0x1D, 0x30, 0x10);
-
-	return 0;
-}
-
-static int oppo_mt6370_charging_current_write_fast(int chg_curr)
-{
-	int rc = 0;
-	struct charger_device *chg = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return 0;
-	}
-	chg = pinfo->chg1_dev;
-	rc = charger_dev_set_charging_current(chg, chg_curr * 1000);
-	if (rc < 0) {
-		chg_debug("set fast charge current:%d fail\n", chg_curr);
-	} else {
-		//chg_debug("set fast charge current:%d\n", chg_curr);
-	}
-
-	return 0;
-}
-
-static void oppo_mt6370_set_aicl_point(int vbatt)
-{
-	int rc = 0;
-	static int hw_aicl_point = 4400;
-	struct charger_device *chg = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return;
-	}
-	chg = pinfo->chg1_dev;
-
-	if (hw_aicl_point == 4400 && vbatt > 4100) {
-		hw_aicl_point = 4500;
-		//sw_aicl_point = 4550;
-	} else if (hw_aicl_point == 4500 && vbatt <= 4100) {
-		hw_aicl_point = 4400;
-		//sw_aicl_point = 4500;
-	}
-	rc = charger_dev_set_mivr(chg, hw_aicl_point * 1000);
-	if (rc < 0) {
-		chg_debug("set aicl point:%d fail\n", hw_aicl_point);
-	}
-}
-
-static int usb_icl[] = {
-	300, 500, 900, 1200, 1350, 1500, 2000, 2500, 3000,
-};
-struct oppo_chg_operations mt6370_chg_ops;
-static int oppo_mt6370_input_current_limit_write(int value)
-{
-	int rc = 0;
-	int i = 0;
-	int chg_vol = 0;
-	int aicl_point = 0;
-	int vbus_mv = 0;
-	int ibus_ma = 0;
-	struct charger_device *chg = NULL;
-	union power_supply_propval val = {0, };
-	static struct power_supply *batt_psy = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return 0;
-	}
-	chg_debug("usb input max current limit=%d setting %02x\n", value, i);
-
-	chg = pinfo->chg1_dev;
-
-	//aicl_point_temp = g_oppo_chip->sw_aicl_point;
-	if (mt6370_chg_ops.oppo_chg_get_pd_type) {
-		if (mt6370_chg_ops.oppo_chg_get_pd_type() == true) {
-			rc = oppo_pdc_get(&vbus_mv, &ibus_ma);
-			if (rc >= 0 && ibus_ma >= 500 && ibus_ma < 3000 && value > ibus_ma) {
-				value = ibus_ma;
-				chg_debug("usb input max current limit=%d(pd)\n", value);
-			}
-		}
-	}
-
-	if (batt_psy)
-		batt_psy = power_supply_get_by_name("battery");
-	if (batt_psy && batt_psy->desc->get_property)
-		batt_psy->desc->get_property(batt_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW, &val);
-	if (val.intval > 4100 )
-		aicl_point = 4550;
-	else
-		aicl_point = 4500;
-
-	if (value < 500) {
-		i = 0;
-		goto aicl_end;
-	}
-
-	mt6370_aicl_enable(false);
-
-	i = 1; /* 500 */
-	rc = charger_dev_set_input_current(chg, usb_icl[i] * 1000);
-	msleep(90);
-	chg_vol = battery_meter_get_charger_voltage();
-	if (chg_vol < aicl_point) {
-		chg_debug( "use 500 here\n");
-		goto aicl_end;
-	} else if (value < 900)
-		goto aicl_end;
-
-	i = 2; /* 900 */
-	rc = charger_dev_set_input_current(chg, usb_icl[i] * 1000);
-	msleep(90);
-	chg_vol = battery_meter_get_charger_voltage();
-	if (chg_vol < aicl_point) {
-		i = i - 1;
-		goto aicl_pre_step;
-	} else if (value < 1200)
-		goto aicl_end;
-
-	i = 3; /* 1200 */
-	rc = charger_dev_set_input_current(chg, usb_icl[i] * 1000);
-	msleep(90);
-	chg_vol = battery_meter_get_charger_voltage();
-	if (chg_vol < aicl_point) {
-		i = i - 1;
-		goto aicl_pre_step;
-	}
-
-	i = 4; /* 1350 */
-	rc = charger_dev_set_input_current(chg, usb_icl[i] * 1000);
-	msleep(90);
-	chg_vol = battery_meter_get_charger_voltage();
-	if (chg_vol < aicl_point) {
-		i = i - 2;
-		goto aicl_pre_step;
-	}
-
-	i = 5; /* 1500 */
-	rc = charger_dev_set_input_current(chg, usb_icl[i] * 1000);
-	msleep(90);
-	chg_vol = battery_meter_get_charger_voltage();
-	if (chg_vol < aicl_point) {
-		i = i - 3; //We DO NOT use 1.2A here
-		goto aicl_pre_step;
-	} else if (value < 1500) {
-		i = i - 2; //We use 1.2A here
-		goto aicl_end;
-	} else if (value < 2000)
-		goto aicl_end;
-
-	i = 6; /* 2000 */
-	rc = charger_dev_set_input_current(chg, usb_icl[i] * 1000);
-	msleep(90);
-	chg_vol = battery_meter_get_charger_voltage();
-	if (chg_vol < aicl_point) {
-		i = i - 1;
-		goto aicl_pre_step;
-	} else if (value < 2500)
-		goto aicl_end;
-
-	i = 7; /* 2500 */
-	rc = charger_dev_set_input_current(chg, usb_icl[i] * 1000);
-	msleep(90);
-	chg_vol = battery_meter_get_charger_voltage();
-	if (chg_vol < aicl_point) {
-		i = i - 1;
-		goto aicl_pre_step;
-	} else if (value < 3000)
-		goto aicl_end;
-
-	i = 8; /* 3000 */
-	rc = charger_dev_set_input_current(chg, usb_icl[i] * 1000);
-	msleep(90);
-	chg_vol = battery_meter_get_charger_voltage();
-	if (chg_vol < aicl_point) {
-		i = i - 1;
-		goto aicl_pre_step;
-	} else if (value >= 3000)
-		goto aicl_end;
-
-aicl_pre_step:
-	chg_debug("usb input max current limit aicl chg_vol=%d i[%d]=%d sw_aicl_point:%d aicl_pre_step\n", chg_vol, i, usb_icl[i], aicl_point);
-	rc = charger_dev_set_input_current(chg, usb_icl[i] * 1000);
-	goto aicl_rerun;
-aicl_end:
-	chg_debug("usb input max current limit aicl chg_vol=%d i[%d]=%d sw_aicl_point:%d aicl_end\n", chg_vol, i, usb_icl[i], aicl_point);
-	rc = charger_dev_set_input_current(chg, usb_icl[i] * 1000);
-	goto aicl_rerun;
-aicl_rerun:
-	mt6370_aicl_enable(true);
-	return rc;
-}
-
-static int oppo_mt6370_float_voltage_write(int vfloat_mv)
-{
-	int rc = 0;
-	struct charger_device *chg = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return 0;
-	}
-	chg = pinfo->chg1_dev;
-	rc = charger_dev_set_constant_voltage(chg, vfloat_mv * 1000);
-	if (rc < 0) {
-		chg_debug("set float voltage:%d fail\n", vfloat_mv);
-	} else {
-		//chg_debug("set float voltage:%d\n", vfloat_mv);
-	}
-
-	return 0;
-}
-
-static int oppo_mt6370_set_termchg_current(int term_curr)
-{
-	int rc = 0;
-	struct charger_device *chg = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return 0;
-	}
-	chg = pinfo->chg1_dev;
-	rc = charger_dev_set_eoc_current(chg, term_curr * 1000);
-	if (rc < 0) {
-		//chg_debug("set termchg_current fail\n");
-	}
-	return 0;
-}
-
-static int oppo_mt6370_enable_charging(void)
-{
-	int rc = 0;
-	struct charger_device *chg = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return 0;
-	}
-	chg = pinfo->chg1_dev;
-	rc = charger_dev_enable(chg, true);
-	if (rc < 0) {
-		chg_debug("enable charging fail\n");
-	} else {
-		//chg_debug("enable charging\n");
-	}
-
-	return 0;
-}
-
-static int oppo_mt6370_disable_charging(void)
-{
-	int rc = 0;
-	struct charger_device *chg = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return 0;
-	}
-	chg = pinfo->chg1_dev;
-	rc = charger_dev_enable(chg, false);
-	if (rc < 0) {
-		chg_debug("disable charging fail\n");
-	} else {
-		//chg_debug("disable charging\n");
-	}
-
-	return 0;
-}
-
-static int oppo_mt6370_check_charging_enable(void)
-{
-	return mt6370_check_charging_enable();
-}
-
-static int oppo_mt6370_suspend_charger(void)
-{
-	int rc = 0;
-
-	rc = mt6370_suspend_charger(true);
-	if (rc < 0) {
-		chg_debug("suspend charger fail\n");
-	} else {
-		chg_debug("suspend charger\n");
-	}
-	return 0;
-}
-
-static int oppo_mt6370_unsuspend_charger(void)
-{
-	int rc = 0;
-
-	rc = mt6370_suspend_charger(false);
-	if (rc < 0) {
-		chg_debug("unsuspend charger fail\n");
-	} else {
-		chg_debug("unsuspend charger\n");
-	}
-	return 0;
-}
-
-static int oppo_mt6370_set_rechg_voltage(int rechg_mv)
-{
-	int rc = 0;
-
-	rc = mt6370_set_rechg_voltage(rechg_mv);
-	if (rc < 0) {
-		chg_debug("set rechg voltage fail:%d\n", rechg_mv);
-	}
-	return 0;
-}
-
-static int oppo_mt6370_reset_charger(void)
-{
-	//int rc = 0;
-
-	//rc = mt6370_reset_charger();
-	//if (rc < 0) {
-	//	chg_debug("reset charger fail\n");
-	//}
-	return 0;
-}
-
-static int oppo_mt6370_registers_read_full(void)
-{
-	bool full = false;
-	int rc = 0;
-	struct charger_device *chg = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return 0;
-	}
-	chg = pinfo->chg1_dev;
-	rc = charger_dev_is_charging_done(chg, &full);
-	if (rc < 0) {
-		chg_debug("registers read full  fail\n");
-		full = false;
-	} else {
-		//chg_debug("registers read full\n");
-	}
-
-	return full;
-}
-
-static int oppo_mt6370_otg_enable(void)
-{
-	int rc = 0;
-	struct charger_device *chg = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return 0;
-	}
-	chg = pinfo->chg1_dev;
-	rc =  charger_dev_enable_otg(chg, true);
-	if (rc < 0) {
-		chg_debug("set enable_otg fail\n");
-	}
-	return 0;
-}
-
-static int oppo_mt6370_otg_disable(void)
-{
-	int rc = 0;
-		struct charger_device *chg = NULL;
-	
-		if (!pinfo->chg1_dev) {
-			printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-			return 0;
-		}
-		chg = pinfo->chg1_dev;
-		rc =  charger_dev_enable_otg(chg, false);
-		if (rc < 0) {
-			chg_debug("set enable_otg fail\n");
-		}
-	return 0;
-
-}
-
-static int oppo_mt6370_set_chging_term_disable(void)
-{
-	int rc = 0;
-
-	rc = mt6370_set_chging_term_disable(true);
-	if (rc < 0) {
-		chg_debug("disable chging_term fail\n");
-	}
-	return 0;
-}
-
-static bool oppo_mt6370_check_charger_resume(void)
-{
-	return true;
-}
-
-static int oppo_mt6370_get_chg_current_step(void)
-{
-	return 100;
-}
-
-static int mt_power_supply_type_check(void)
-{
-	int charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
-
-	switch(mt_get_charger_type()) {
-	case CHARGER_UNKNOWN:
-		break;
-	case STANDARD_HOST:
-		charger_type = POWER_SUPPLY_TYPE_USB;
-		break;
-	case CHARGING_HOST:
-		charger_type = POWER_SUPPLY_TYPE_USB_CDP;
-		break;
-	case NONSTANDARD_CHARGER:
-	case STANDARD_CHARGER:
-	case APPLE_2_1A_CHARGER:
-	case APPLE_1_0A_CHARGER:
-	case APPLE_0_5A_CHARGER:
-		charger_type = POWER_SUPPLY_TYPE_USB_DCP;
-		break;
-	default:
-		break;
-	}
-	chg_debug("charger_type[%d]\n", charger_type);
-	return charger_type;
-}
-
-/*static int battery_meter_get_charger_voltage(void)
-{
-	return battery_get_vbus();
-}*/
-
-/*static bool oppo_mt6370_get_vbus_status(void)
-{
-	bool vbus_status = false;
-	static bool pre_vbus_status = false;
-	int ret = 0;
-
-	ret = mt6370_get_vbus_rising();
-	if (ret < 0) {
-		if (g_oppo_chip && g_oppo_chip->unwakelock_chg == 1) {
-			printk(KERN_ERR "[OPPO_CHG][%s]: unwakelock_chg=1, use pre status\n", __func__);
-			return pre_vbus_status;
-		} else {
-			return false;
-		}
-	}
-	if (ret == 0)
-		vbus_status = false;
-	else
-		vbus_status = true;
-	pre_vbus_status = vbus_status;
-	return vbus_status;
-}*/
-
-static int oppo_battery_meter_get_battery_voltage(void)
-{
-	return 4000;
-}
-
-static int get_rtc_spare_oppo_fg_value(void)
-{
-	return 0;
-}
-
-static int set_rtc_spare_oppo_fg_value(int soc)
-{
-	return 0;
-}
-
-static void oppo_mt_power_off(void)
-{
-	union power_supply_propval val = {0, };
-	static struct power_supply *ac_psy = NULL;
-	struct tcpc_device *tcpc_dev = NULL;
-
-	if (ac_psy == NULL)
-		ac_psy = power_supply_get_by_name("ac");
-	if (ac_psy && ac_psy->desc->get_property)
-		ac_psy->desc->get_property(ac_psy, POWER_SUPPLY_PROP_ONLINE, &val);
-
-	if (val.intval != 1) {
-		if (tcpc_dev == NULL)
-			tcpc_dev = tcpc_dev_get_by_name("type_c_port0");
-		if (tcpc_dev) {
-			if (!(tcpc_dev->pd_wait_hard_reset_complete)
-					&& !pmic_chrdet_status()) {
-				mt_power_off();
-			}
-		}
-	} else {
-		printk(KERN_ERR "[OPPO_CHG][%s]: ac_online is true, return!\n", __func__);
-	}
-}
-
-#ifdef CONFIG_OPPO_SHORT_C_BATT_CHECK
-/* This function is getting the dynamic aicl result/input limited in mA.
- * If charger was suspended, it must return 0(mA).
- * It meets the requirements in SDM660 platform.
- */
-static int oppo_mt6370_chg_get_dyna_aicl_result(void)
-{
-	int rc = 0;
-	int aicl_ma = 0;
-	struct charger_device *chg = NULL;
-
-	if (!pinfo->chg1_dev) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: oppo_chip not ready!\n", __func__);
-		return 0;
-	}
-	chg = pinfo->chg1_dev;
-	rc = charger_dev_get_input_current(chg, &aicl_ma);
-	if (rc < 0) {
-		chg_debug("get dyna aicl fail\n");
-		return 500;
-	}
-	return aicl_ma / 1000;
-}
-#endif
-
-#ifdef CONFIG_OPPO_RTC_DET_SUPPORT
-static int rtc_reset_check(void)
-{
-	int rc = 0;
-	struct rtc_time tm;
-	struct rtc_device *rtc;
-
-	rtc = rtc_class_open(CONFIG_RTC_HCTOSYS_DEVICE);
-	if (rtc == NULL) {
-		pr_err("%s: unable to open rtc device (%s)\n",
-			__FILE__, CONFIG_RTC_HCTOSYS_DEVICE);
-		return 0;
-	}
-
-	rc = rtc_read_time(rtc, &tm);
-	if (rc) {
-		pr_err("Error reading rtc device (%s) : %d\n",
-			CONFIG_RTC_HCTOSYS_DEVICE, rc);
-		goto close_time;
-	}
-
-	rc = rtc_valid_tm(&tm);
-	if (rc) {
-		pr_err("Invalid RTC time (%s): %d\n",
-			CONFIG_RTC_HCTOSYS_DEVICE, rc);
-		goto close_time;
-	}
-
-	if ((tm.tm_year == 70) && (tm.tm_mon == 0) && (tm.tm_mday <= 1)) {
-		chg_debug(": Sec: %d, Min: %d, Hour: %d, Day: %d, Mon: %d, Year: %d  @@@ wday: %d, yday: %d, isdst: %d\n",
-			tm.tm_sec, tm.tm_min, tm.tm_hour, tm.tm_mday, tm.tm_mon, tm.tm_year,
-			tm.tm_wday, tm.tm_yday, tm.tm_isdst);
-		rtc_class_close(rtc);
-		return 1;
-	}
-
-	chg_debug(": Sec: %d, Min: %d, Hour: %d, Day: %d, Mon: %d, Year: %d  ###  wday: %d, yday: %d, isdst: %d\n",
-		tm.tm_sec, tm.tm_min, tm.tm_hour, tm.tm_mday, tm.tm_mon, tm.tm_year,
-		tm.tm_wday, tm.tm_yday, tm.tm_isdst);
-
-close_time:
-	rtc_class_close(rtc);
-	return 0;
-}
-#endif /* CONFIG_OPPO_RTC_DET_SUPPORT */
-//====================================================================//
-#endif /* VENDOR_EDIT && CONFIG_OPPO_CHARGER_MT6370_TYPEC */
-
-
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/15, sjc Add for OTG switch */
-//====================================================================//
-void oppo_set_otg_switch_status(bool value)
-{
-	if (pinfo != NULL && pinfo->tcpc != NULL) {
-		printk(KERN_ERR "[OPPO_CHG][%s]: otg switch[%d]\n", __func__, value);
-		tcpm_typec_change_role(pinfo->tcpc, value ? TYPEC_ROLE_DRP : TYPEC_ROLE_SNK);
-	}
-}
-EXPORT_SYMBOL(oppo_set_otg_switch_status);
-
-int oppo_get_typec_cc_orientation(void)
-{
-	int typec_cc_orientation = 0;
-
-	if (pinfo != NULL && pinfo->tcpc != NULL) {
-		if (tcpm_inquire_typec_attach_state(pinfo->tcpc) != TYPEC_UNATTACHED) {
-			typec_cc_orientation = (int)tcpm_inquire_cc_polarity(pinfo->tcpc) + 1;
-		} else {
-			typec_cc_orientation = 0;
-		}
-		if (typec_cc_orientation != 0)
-			printk(KERN_ERR "[OPPO_CHG][%s]: cc[%d]\n", __func__, typec_cc_orientation);
-	} else {
-		typec_cc_orientation = 0;
-	}
-	return typec_cc_orientation;
-}
-EXPORT_SYMBOL(oppo_get_typec_cc_orientation);
-//====================================================================//
-#endif /* VENDOR_EDIT && CONFIG_OPPO_CHARGER_MT6370_TYPEC */
-
-
-//====================================================================//
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/31, sjc Add for PD */
-static bool oppo_mt6370_get_pd_type(void)
-{
-	if (pinfo != NULL) {
-		return mtk_pdc_check_charger(pinfo);
-	}
-	return false;
-}
-
-static int oppo_mt6370_pd_setup(void)
-{
-	int vbus_mv = 0;
-	int ibus_ma = 0;
-	int ret = 0;
-
-	ret = oppo_pdc_setup(&vbus_mv, &ibus_ma);
-	//printk(KERN_ERR "%s: vbus[%d], ibus[%d]\n", __func__, vbus_mv, ibus_ma);
-	return ret;
-}
-#endif /* VENDOR_EDIT && CONFIG_OPPO_CHARGER_MT6370_TYPEC */
-//====================================================================//
-
-
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Add for charging */
-//====================================================================//
-struct oppo_chg_operations  mt6370_chg_ops = {
-	.dump_registers = oppo_mt6370_dump_registers,
-	.kick_wdt = oppo_mt6370_kick_wdt,
-	.hardware_init = oppo_mt6370_hardware_init,
-	.charging_current_write_fast = oppo_mt6370_charging_current_write_fast,
-	.set_aicl_point = oppo_mt6370_set_aicl_point,
-	.input_current_write = oppo_mt6370_input_current_limit_write,
-	.float_voltage_write = oppo_mt6370_float_voltage_write,
-	.term_current_set = oppo_mt6370_set_termchg_current,
-	.charging_enable = oppo_mt6370_enable_charging,
-	.charging_disable = oppo_mt6370_disable_charging,
-	.get_charging_enable = oppo_mt6370_check_charging_enable,
-	.charger_suspend = oppo_mt6370_suspend_charger,
-	.charger_unsuspend = oppo_mt6370_unsuspend_charger,
-	.set_rechg_vol = oppo_mt6370_set_rechg_voltage,
-	.reset_charger = oppo_mt6370_reset_charger,
-	.read_full = oppo_mt6370_registers_read_full,
-	.otg_enable = oppo_mt6370_otg_enable,
-	.otg_disable = oppo_mt6370_otg_disable,
-	.set_charging_term_disable = oppo_mt6370_set_chging_term_disable,
-	.check_charger_resume = oppo_mt6370_check_charger_resume,
-	.get_chg_current_step = oppo_mt6370_get_chg_current_step,
-#ifdef CONFIG_OPPO_CHARGER_MTK
-	.get_charger_type = mt_power_supply_type_check,
-	.get_charger_volt = battery_meter_get_charger_voltage,
-	.check_chrdet_status = (bool (*) (void)) pmic_chrdet_status,
-	.get_instant_vbatt = oppo_battery_meter_get_battery_voltage,
-	.get_boot_mode = (int (*)(void))get_boot_mode,
-	.get_boot_reason = (int (*)(void))get_boot_reason,
-	.get_chargerid_volt = mt_get_chargerid_volt,
-	.set_chargerid_switch_val = mt_set_chargerid_switch_val ,
-	.get_chargerid_switch_val  = mt_get_chargerid_switch_val,
-	.get_rtc_soc = get_rtc_spare_oppo_fg_value,
-	.set_rtc_soc = set_rtc_spare_oppo_fg_value,
-	.set_power_off = oppo_mt_power_off,
-	//.usb_connect = mt_usb_connect,
-	//.usb_disconnect = mt_usb_disconnect,
-#else /* CONFIG_OPPO_CHARGER_MTK */
-	.get_charger_type = qpnp_charger_type_get,
-	.get_charger_volt = qpnp_get_prop_charger_voltage_now,
-	.check_chrdet_status = qpnp_lbc_is_usb_chg_plugged_in,
-	.get_instant_vbatt = qpnp_get_prop_battery_voltage_now,
-	.get_boot_mode = get_boot_mode,
-	.get_rtc_soc = qpnp_get_pmic_soc_memory,
-	.set_rtc_soc = qpnp_set_pmic_soc_memory,
-#endif /* CONFIG_OPPO_CHARGER_MTK */
-
-#ifdef CONFIG_OPPO_SHORT_C_BATT_CHECK
-	.get_dyna_aicl_result = oppo_mt6370_chg_get_dyna_aicl_result,
-#endif
-	.get_shortc_hw_gpio_status = oppo_chg_get_shortc_hw_gpio_status,
-#ifdef CONFIG_OPPO_RTC_DET_SUPPORT
-	.check_rtc_reset = rtc_reset_check,
-#endif
-	.oppo_chg_get_pd_type = oppo_mt6370_get_pd_type,
-	.oppo_chg_pd_setup = oppo_mt6370_pd_setup,
-};
-//====================================================================//
-#endif /* VENDOR_EDIT && CONFIG_OPPO_CHARGER_MT6370_TYPEC */
-
-
 static int mtk_charger_probe(struct platform_device *pdev)
 {
 	struct charger_manager *info = NULL;
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 	struct list_head *pos;
 	struct list_head *phead = &consumer_head;
 	struct charger_consumer *ptr;
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 	int ret;
-
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
-#ifdef VENDOR_EDIT
-/* Qiao.Hu@BSP.CHG.Basic, 2018/8/8,  Add for charging*/
     return 0;
-#endif
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
-
 	chr_err("%s: starts\n", __func__);
 
 	info = devm_kzalloc(&pdev->dev, sizeof(struct charger_manager), GFP_KERNEL);
@@ -3475,26 +2570,10 @@ static int mtk_charger_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, info);
 	info->pdev = pdev;
-
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
-	info->chg1_dev = get_charger_by_name("primary_chg");
-	if (info->chg1_dev) {
-		chr_err("found primary charger [%s]\n",
-			info->chg1_dev->props.alias_name);
-	} else {
-		chr_err("can't find primary charger!\n");
-	}
-	charger_ic_flag = 4;
-#endif /* VENDOR_EDIT && CONFIG_OPPO_CHARGER_MT6370_TYPEC */
-
 	mtk_charger_parse_dt(info, &pdev->dev);
 
 	mutex_init(&info->charger_lock);
 	mutex_init(&info->charger_pd_lock);
-
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 	atomic_set(&info->enable_kpoc_shdn, 1);
 	wake_lock_init(&info->charger_wakelock, WAKE_LOCK_SUSPEND, "charger suspend wakelock");
 	spin_lock_init(&info->slock);
@@ -3526,8 +2605,6 @@ static int mtk_charger_probe(struct platform_device *pdev)
 	//info->psy_nb.notifier_call = charger_psy_event;
 	//power_supply_reg_notifier(&info->psy_nb);
 #endif
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
-
 	srcu_init_notifier_head(&info->evt_nh);
 	ret = mtk_charger_setup_files(pdev);
 	if (ret)
@@ -3541,8 +2618,6 @@ static int mtk_charger_probe(struct platform_device *pdev)
 		chr_err("get PD dev fail\n");
 	}
 
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 	if (mtk_pe_init(info) < 0)
 		info->enable_pe_plus = false;
 
@@ -3554,12 +2629,8 @@ static int mtk_charger_probe(struct platform_device *pdev)
 
 	if (mtk_pe40_init(info) == false)
 		info->enable_pe_4 = false;
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 
 	mtk_pdc_init(info);
-
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 	charger_ftm_init();
 
 	mutex_lock(&consumer_mutex);
@@ -3574,8 +2645,7 @@ static int mtk_charger_probe(struct platform_device *pdev)
 	mutex_unlock(&consumer_mutex);
 	info->chg1_consumer = charger_manager_get_by_name(&pdev->dev, "charger_port1");
 	info->init_done = true;
-	_wake_up_charger(info);
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
+	//_wake_up_charger(info);
 
 	return 0;
 }
@@ -3588,15 +2658,10 @@ static int mtk_charger_remove(struct platform_device *dev)
 static void mtk_charger_shutdown(struct platform_device *dev)
 {
 	struct charger_manager *info = platform_get_drvdata(dev);
-
-#if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Modify for charging */
 #ifdef VENDOR_EDIT
 /* Qiao.Hu@BSP.CHG.Basic, 2018/8/9,  Add for charging*/
     return;
 #endif
-#endif /* VENDOR_EDIT && !CONFIG_OPPO_CHARGER_MT6370_TYPEC */
-
 	if (mtk_pe20_get_is_connect(info) || mtk_pe_get_is_connect(info)) {
 		if (info->chg2_dev)
 			charger_dev_enable(info->chg2_dev, false);
@@ -3626,6 +2691,7 @@ static struct platform_driver charger_driver = {
 		   .of_match_table = mtk_charger_of_match,
 		   },
 };
+
 
 static int __init mtk_charger_init(void)
 {

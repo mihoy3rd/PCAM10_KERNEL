@@ -77,13 +77,7 @@ enum SENINF_RETURN seninf_clk_init(struct SENINF_CLK *pclk)
 #else
 	wake_lock_init(&pclk->seninf_wake_lock, WAKE_LOCK_SUSPEND, "seninf_lock_wakelock");
 #endif
-	#ifdef VENDOR_EDIT
-	/*Henry.Chang@Camera.Drv add for mclk release error 20190508 */
-	mutex_init(&pclk->seninf_clk_mutex);
-	pclk->open_cnt = 0;
-	#else
 	atomic_set(&pclk->wakelock_cnt, 0);
-	#endif
 
 	return SENINF_RETURN_SUCCESS;
 }
@@ -147,65 +141,7 @@ int seninf_clk_set(struct SENINF_CLK *pclk, ACDK_SENSOR_MCLK_STRUCT *pmclk)
 
 	return ret;
 }
-#ifdef VENDOR_EDIT
-/*Henry.Chang@Camera.Drv add for mclk release error 20190508 */
-void seninf_clk_open(struct SENINF_CLK *pclk)
-{
-	MINT32 i;
 
-	PK_DBG("open\n");
-
-	mutex_lock(&pclk->seninf_clk_mutex);
-
-	(pclk->open_cnt)++;
-	if (pclk->open_cnt == 1) {
-		PK_DBG("enable clocks\n");
-#ifdef CONFIG_PM_WAKELOCKS
-		__pm_stay_awake(&pclk->seninf_wake_lock);
-#else
-		wake_lock(&pclk->seninf_wake_lock);
-#endif
-
-		for (i = SENINF_CLK_IDX_SYS_MIN_NUM; i < SENINF_CLK_IDX_SYS_MAX_NUM; i++) {
-			if (clk_prepare_enable(pclk->mclk_sel[i]))
-				PK_PR_ERR("[CAMERA SENSOR] failed sys idx= %d\n", i);
-			else
-				atomic_inc(&pclk->enable_cnt[i]);
-		}
-	}
-
-	mutex_unlock(&pclk->seninf_clk_mutex);
-}
-
-void seninf_clk_release(struct SENINF_CLK *pclk)
-{
-	MINT32 i = SENINF_CLK_IDX_MAX_NUM;
-
-	PK_DBG("release\n");
-
-	mutex_lock(&pclk->seninf_clk_mutex);
-
-	(pclk->open_cnt)--;
-	if (pclk->open_cnt == 0) {
-		PK_DBG("disable clocks\n");
-		do {
-			i--;
-			for (; atomic_read(&pclk->enable_cnt[i]) > 0;) {
-				clk_disable_unprepare(pclk->mclk_sel[i]);
-				atomic_dec(&pclk->enable_cnt[i]);
-			}
-		} while (i);
-
-#ifdef CONFIG_PM_WAKELOCKS
-		__pm_relax(&pclk->seninf_wake_lock);
-#else
-		wake_unlock(&pclk->seninf_wake_lock);
-#endif
-	}
-
-	mutex_unlock(&pclk->seninf_clk_mutex);
-}
-#else
 void seninf_clk_open(struct SENINF_CLK *pclk)
 {
 	MINT32 i;
@@ -250,7 +186,7 @@ void seninf_clk_release(struct SENINF_CLK *pclk)
 #endif
 	}
 }
-#endif
+
 unsigned int seninf_clk_get_meter(struct SENINF_CLK *pclk, unsigned int clk)
 {
 #if !defined(CONFIG_FPGA_EARLY_PORTING)

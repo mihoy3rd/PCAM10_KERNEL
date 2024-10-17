@@ -105,7 +105,13 @@
 */
 #include <soc/oppo/oppo_project.h>
 #include <linux/leds.h>
-extern unsigned int fp_silence_mode;
+/* Ling.Guo@PSW.MM.Display.LCD.Machine, 2018/12/03,add for mm kevent fb. */
+#include <linux/oppo_mm_kevent_fb.h>
+#include <linux/time.h>
+#include <linux/timekeeping.h>
+extern unsigned long HBM_mode;
+struct timespec panel_time_off;
+extern long hbm_on_start;
 #endif /*VENDOR_EDIT*/
 
 #define MMSYS_CLK_LOW (0)
@@ -133,6 +139,9 @@ static int session_mode_backup;
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 static struct switch_dev disp_switch_data;
 #endif
+
+static uint display_framerate_main;
+static uint display_framerate_ext;
 
 #if 0
 /* global variable for idle manager */
@@ -179,21 +188,13 @@ extern unsigned int ffl_set_mode;
 extern unsigned int ffl_backlight_backup;
 #define FFL_START_LEVEL (2)
 #define FFL_END_LEVEL ((LED_FULL) * 23 / 100)
-#define FFL_UPRATE (1)
+#define FFL_UPRATE (4)
 #define FFL_BACKRATE (6)
 #define FFL_EXIT_CONTROL (0)
 #define FFL_TRIGGLE_CONTROL (1)
 #define FFL_EXIT_FULLY_CONTROL (2)
 #define FFL_PENDING_END 120
 static DEFINE_MUTEX(ffl_lock);
-
-
-/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/11/29, add for ramless dc notify */
-static struct task_struct *hbm_notify_task;
-static wait_queue_head_t hbm_notify_task_wq;
-static atomic_t hbm_task_task_wakeup = ATOMIC_INIT(0);
-static void hbm_notify_init(void);
-int ramless_dc_wait = 0;
 #endif
 
 static int decouple_mirror_update_rdma_config_thread(void *data);
@@ -274,24 +275,6 @@ struct display_primary_path_context *_get_context(void)
 
 	return &g_context;
 }
-
-#ifdef VENDOR_EDIT
-/* jie.cheng@swdp.shanghai,2017/06/02,add frame cnt variable to summarize all frame updates on MTK platform */
-unsigned long get_frame_cnt(void)
-{
-	return pgc->frame_cnt;
-}
-EXPORT_SYMBOL(get_frame_cnt);
-
-unsigned int get_display_state(void)
-{
-	if (pgc->state == DISP_ALIVE)
-		return 0;
-	else
-		return 1;
-}
-EXPORT_SYMBOL(get_display_state);
-#endif
 
 void _primary_path_lock(const char *caller)
 {
@@ -547,11 +530,8 @@ enum mtkfb_power_mode primary_display_get_prev_power_mode_nolock(void)
 
 bool primary_is_aod_supported(void)
 {
-#ifdef VENDOR_EDIT
-/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/10/22, add for 19151 fake aod */
-	if ((disp_helper_get_option(DISP_OPT_AOD) && !disp_lcm_is_video_mode(pgc->plcm)) || disp_helper_get_option(DISP_OPT_AOD_RAMLESS))
+	if (disp_helper_get_option(DISP_OPT_AOD) && !disp_lcm_is_video_mode(pgc->plcm))
 		return 1;
-#endif /*VENDOR_EDIT*/
 
 	return 0;
 }
@@ -1051,6 +1031,7 @@ static unsigned int _fps_ctx_get_avg_fps(struct fps_ctx_t *fps_ctx)
 	if (fps_ctx->cur_wnd_sz == 0)
 		return 0;
 	avg_fps = fps_ctx->total / fps_ctx->cur_wnd_sz;
+	display_framerate_main = avg_fps;
 	return avg_fps;
 }
 
@@ -1059,6 +1040,7 @@ static unsigned int _fps_ctx_get_avg_fps_ext(struct fps_ctx_t *fps_ctx, unsigned
 	unsigned int avg_fps;
 
 	avg_fps = (fps_ctx->total + abs_fps) / (fps_ctx->cur_wnd_sz + 1);
+	display_framerate_ext = avg_fps;
 	return avg_fps;
 }
 
@@ -2146,10 +2128,7 @@ static int sec_buf_ion_alloc(int buf_size)
 
 	if (IS_ERR_OR_NULL(sec_ion_handle)) {
 		DISPPR_ERROR("Fatal Error, ion_alloc for size %d failed\n", buf_size);
-		//#ifdef VENDOR_EDIT
-		/* Bin.Li@BSP.Fingerprint.Secure, 2019/07/11, Add for widevine alloc fail free crash issue */
-		//ion_free(ion_client, sec_ion_handle);
-		//#endif /* VENDOR_EDIT */
+		ion_free(ion_client, sec_ion_handle);
 		ion_client_destroy(ion_client);
 		return -1;
 	}
@@ -2689,7 +2668,6 @@ static int _DC_switch_to_DL_fast(int block)
 
 	/* copy ovl config from DC handle to DL handle */
 	memcpy(data_config_dl->ovl_config, data_config_dc->ovl_config, sizeof(data_config_dl->ovl_config));
-
 	memcpy(&data_config_dl->rsz_enable, &data_config_dc->rsz_enable,
 		sizeof(data_config_dc->rsz_enable));
 	memcpy(&data_config_dl->rsz_src_roi, &data_config_dc->rsz_src_roi,
@@ -3375,7 +3353,6 @@ static int _convert_disp_input_to_ovl(struct OVL_CONFIG_STRUCT *dst, struct disp
 
 	if (src->buffer_source == DISP_BUFFER_ALPHA) {
 		dst->source = OVL_LAYER_SOURCE_RESERVED; /* dim layer, constant alpha */
-		dst->dim_color = src->dim_color;
 	} else if (src->buffer_source == DISP_BUFFER_ION || src->buffer_source == DISP_BUFFER_MVA) {
 		dst->source = OVL_LAYER_SOURCE_MEM; /* from memory */
 	} else {
@@ -4418,7 +4395,6 @@ int primary_display_init(char *lcm_name, unsigned int lcm_fps, int is_lcm_inited
 	init_cmdq_slots(&(pgc->dsi_vfp_line), 1, 0);
 	init_cmdq_slots(&(pgc->night_light_params), 17, 0);
 
-
 	pgc->prev_pm = MTKFB_POWER_MODE_UNKNOWN;
 
 	/* init night light related variable */
@@ -5209,6 +5185,10 @@ int force_back_to_full_roi(void)
 int primary_display_suspend(void)
 {
 	enum DISP_STATUS ret = DISP_STATUS_OK;
+	#ifdef VENDOR_EDIT
+	/* Ling.Guo@PSW.MM.Display.LCD.Machine, 2018/12/03,add for mm kevent fb. */
+	unsigned char payload[100] = "";
+	#endif
 
 	DISPCHECK("primary_display_suspend begin\n");
 	#ifdef VENDOR_EDIT
@@ -5217,7 +5197,6 @@ int primary_display_suspend(void)
 	* add for ffl set
 	*/
 	ffl_display_ready = false;
-	fp_silence_mode = 0;
 	#endif
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_suspend, MMPROFILE_FLAG_START, 0, 0);
 	primary_display_idlemgr_kick(__func__, 1);
@@ -5333,25 +5312,12 @@ int primary_display_suspend(void)
 			primary_display_set_lcm_power_state_nolock(LCM_ON_LOW_POWER);
 		}
 		#else
-
-		if (primary_display_get_lcm_power_state_nolock() !=
-		    LCM_ON_LOW_POWER) {
-			if (pgc->plcm->drv->aod)
-				disp_lcm_aod(pgc->plcm, 1);
-
-			primary_display_set_lcm_power_state_nolock(
-							LCM_ON_LOW_POWER);
-		}
-
 		if (primary_display_get_lcm_power_state_nolock() == LCM_ON_LOW_POWER) {
-				mtk_disp_lcm_set_hbm(0, pgc->plcm, NULL);
+			if (pgc->plcm->drv->aod) {
+				disp_lcm_aod(pgc->plcm, 1);
+			}
+			mtkfb_release_present_fence(primary_session_id, gCurrentPresentFenceIndex);
 		}
-
-		mdelay(40);
-
-		DISPDBG("[POWER]primary display path Release Fence[begin]\n");
-		primary_suspend_release_fence();
-		DISPINFO("[POWER]primary display path Release Fence[end]\n");
 		#endif /* VENDOR_EDIT */
 	} else if (primary_display_get_power_mode_nolock() == FB_SUSPEND) {
 		DISPINFO("[POWER]lcm suspend[begin]\n");
@@ -5416,7 +5382,13 @@ done:
 	if (primary_display_get_power_mode_nolock() == FB_SUSPEND) {
 		disp_lcm_poweroff_after_ulps(pgc->plcm);
 	}
-
+	if (HBM_mode > 0) {
+		HBM_mode = 0;
+		get_monotonic_boottime(&panel_time_off);
+		scnprintf(payload, sizeof(payload), "EventID@@%d$$hbm@@hbm state on time = %ld sec",
+			OPPO_MM_DIRVER_FB_EVENT_ID_HBM,(panel_time_off.tv_sec - hbm_on_start));
+		upload_mm_kevent_fb_data(OPPO_MM_DIRVER_FB_EVENT_MODULE_DISPLAY,payload);
+	}
 	#endif /*VENDOR_EDIT*/
 	return ret;
 }
@@ -5496,63 +5468,6 @@ static int check_switch_lcm_mode_for_debug(void)
 	return 1;
 }
 
-#ifdef VENDOR_EDIT
-/*
-* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/06/11,
-* modify for support aod state.
-*/
-int primary_display_lcm_power_on_state(int alive)
-{
-	int skip_update = 0;
-
-	if (primary_display_get_power_mode_nolock() == DOZE) {
-		if (primary_display_get_lcm_power_state_nolock() !=
-			LCM_ON_LOW_POWER) {
-			#ifndef VENDOR_EDIT
-			/*
-			* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/02/14,
-			* modify for support aod state.
-			*/
-			if (pgc->plcm->drv->aod)
-				disp_lcm_aod(pgc->plcm, 1);
-			else if (!alive)
-				disp_lcm_resume(pgc->plcm);
-			#else
-			if (pgc->plcm->drv->aod) {
-				if (primary_display_get_lcm_power_state_nolock() == LCM_ON) {
-					disp_lcm_aod_from_display_on(pgc->plcm);
-				} else {
-					disp_lcm_aod(pgc->plcm, 1);
-				}
-			} else if (!alive)
-				disp_lcm_resume(pgc->plcm);
-			#endif
-
-			primary_display_set_lcm_power_state_nolock(
-				LCM_ON_LOW_POWER);
-		} else {
-			skip_update = 1;
-		}
-	} else if (primary_display_get_power_mode_nolock() == FB_RESUME) {
-		if (primary_display_get_lcm_power_state_nolock() != LCM_ON) {
-			DISPDBG("[POWER]lcm resume[begin]\n");
-
-			if (primary_display_get_lcm_power_state_nolock() !=
-				LCM_ON_LOW_POWER) {
-				disp_lcm_resume(pgc->plcm);
-			} else {
-				disp_lcm_aod(pgc->plcm, 0);
-				skip_update = 1;
-			}
-			DISPCHECK("[POWER]lcm resume[end]\n");
-			primary_display_set_lcm_power_state_nolock(LCM_ON);
-		}
-	}
-
-	return skip_update;
-}
-#endif
-
 int primary_display_resume(void)
 {
 	enum DISP_STATUS ret = DISP_STATUS_OK;
@@ -5567,33 +5482,9 @@ int primary_display_resume(void)
 	DISPCHECK("primary_display_resume begin\n");
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_resume, MMPROFILE_FLAG_START, 0, 0);
 
-	#ifdef VENDOR_EDIT
-	/*
-	* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/06/11,
-	* modify for support aod state.
-	*/
-	if (is_project(OPPO_19531) || is_project(OPPO_19391) \
-		|| is_project(19151) || is_project(19350)) {
-		if ((primary_display_get_power_mode_nolock() == FB_RESUME || primary_display_get_power_mode_nolock() == DOZE)
-			 && (primary_display_get_lcm_power_state_nolock() == LCM_OFF)) {
-			disp_lcm_poweron_before_ulps(pgc->plcm);
-		}
-	}
-	#endif /*VENDOR_EDIT*/
-
 	_primary_path_lock(__func__);
 	if (pgc->state == DISP_ALIVE) {
 		DISPCHECK("primary display path is already resume, skip\n");
-		#ifdef VENDOR_EDIT
-		/*
-		* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/06/11,
-		* modify for support aod state.
-		*/
-		if (is_project(OPPO_19531) || is_project(OPPO_19391) \
-			|| is_project(19151) || is_project(19350)) {
-			primary_display_lcm_power_on_state(1);
-		}
-		#endif
 		goto done;
 	}
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_resume, MMPROFILE_FLAG_PULSE, 0, 1);
@@ -5602,10 +5493,7 @@ int primary_display_resume(void)
 	* liping-m@PSW.MM.Display.LCD.Stability, 2018/07/20,
 	* add power seq api for ulps
 	*/
-	if (!(is_project(OPPO_19531) || is_project(OPPO_19391) \
-		|| is_project(19151) || is_project(19350))) {
-		disp_lcm_poweron_before_ulps(pgc->plcm);
-	}
+	disp_lcm_poweron_before_ulps(pgc->plcm);
 	#endif /*VENDOR_EDIT*/
 
 	/* Register primary session cmdq dump callback */
@@ -5738,46 +5626,35 @@ int primary_display_resume(void)
 	DISPCHECK("[POWER]dpmanager re-init[end]\n");
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_resume, MMPROFILE_FLAG_PULSE, 0, 3);
 
-	#ifdef VENDOR_EDIT
-	if (is_project(OPPO_19531) || is_project(OPPO_19391) \
-		|| is_project(19151) || is_project(19350)) {
-		/*
-		* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/06/11,
-		* modify for support aod state.
-		*/
-		skip_update = primary_display_lcm_power_on_state(0);
-	} else {
-		if (primary_display_get_power_mode_nolock() == DOZE) {
+	if (primary_display_get_power_mode_nolock() == DOZE) {
+		if (primary_display_get_lcm_power_state_nolock() != LCM_ON_LOW_POWER) {
+			#ifndef VENDOR_EDIT
+			/*
+			* Yongpeng.Yi@PSW.MM.Display.LCD.Feature, 2018/01/16,
+			* add for Aod feature
+			*/
+			if (pgc->plcm->drv->aod)
+				disp_lcm_aod(pgc->plcm, 1);
+			else
+				disp_lcm_resume(pgc->plcm);
+			#else
+			disp_lcm_aod_doze_resume(pgc->plcm);
+			#endif /* VENDOR_EDIT */
+			primary_display_set_lcm_power_state_nolock(LCM_ON_LOW_POWER);
+		}
+	} else if (primary_display_get_power_mode_nolock() == FB_RESUME) {
+		if (primary_display_get_lcm_power_state_nolock() != LCM_ON) {
+			DISPDBG("[POWER]lcm resume[begin]\n");
 			if (primary_display_get_lcm_power_state_nolock() != LCM_ON_LOW_POWER) {
-				#ifndef VENDOR_EDIT
-				/*
-				* Yongpeng.Yi@PSW.MM.Display.LCD.Feature, 2018/01/16,
-				* add for Aod feature
-				*/
-				if (pgc->plcm->drv->aod)
-					disp_lcm_aod(pgc->plcm, 1);
-				else
-					disp_lcm_resume(pgc->plcm);
-				#else
-				disp_lcm_aod_doze_resume(pgc->plcm);
-				#endif /* VENDOR_EDIT */
-				primary_display_set_lcm_power_state_nolock(LCM_ON_LOW_POWER);
+				disp_lcm_resume(pgc->plcm);
+			} else {
+				disp_lcm_aod(pgc->plcm, 0);
+				skip_update = 1;
 			}
-		} else if (primary_display_get_power_mode_nolock() == FB_RESUME) {
-			if (primary_display_get_lcm_power_state_nolock() != LCM_ON) {
-				DISPDBG("[POWER]lcm resume[begin]\n");
-				if (primary_display_get_lcm_power_state_nolock() != LCM_ON_LOW_POWER) {
-					disp_lcm_resume(pgc->plcm);
-				} else {
-					disp_lcm_aod(pgc->plcm, 0);
-					skip_update = 1;
-				}
-				DISPCHECK("[POWER]lcm resume[end]\n");
-				primary_display_set_lcm_power_state_nolock(LCM_ON);
-			}
+			DISPCHECK("[POWER]lcm resume[end]\n");
+			primary_display_set_lcm_power_state_nolock(LCM_ON);
 		}
 	}
-	#endif
 
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_resume, MMPROFILE_FLAG_PULSE, 0, 4);
 	if (dpmgr_path_is_busy(pgc->dpmgr_handle)) {
@@ -5867,30 +5744,13 @@ int primary_display_resume(void)
 								   DDP_IRQ_DBI_EXT_TE);
 
 		dpmgr_enable_event(pgc->dpmgr_handle, DISP_PATH_EVENT_IF_VSYNC);
-		#ifdef VENDOR_EDIT
-		/*
-		* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/06/11,
-		* modify for support aod state.
-		*/
-		if (is_project(OPPO_19531) || is_project(OPPO_19391) \
-			|| is_project(19151) || is_project(19350)) {
-			if (((primary_display_get_power_mode_nolock() == FB_RESUME) ||
-				  (primary_display_get_power_mode_nolock() == DOZE)) &&
-				  !skip_update) {
-				/* refresh black picture of ovl bg */
-				_trigger_display_interface(1, NULL, 0);
-				DISPINFO("[POWER]triggger cmdq[end]\n");
-				mdelay(16); /* wait for one frame for pms workarround!!!! */
-			}
-		} else {
-			if (primary_display_get_power_mode_nolock() == FB_RESUME && !skip_update) {
-				/* refresh black picture of ovl bg */
-				_trigger_display_interface(1, NULL, 0);
-				DISPINFO("[POWER]triggger cmdq[end]\n");
-				mdelay(16); /* wait for one frame for pms workarround!!!! */
-			}
+
+		if (primary_display_get_power_mode_nolock() == FB_RESUME && !skip_update) {
+			/* refresh black picture of ovl bg */
+			_trigger_display_interface(1, NULL, 0);
+			DISPINFO("[POWER]triggger cmdq[end]\n");
+			mdelay(16); /* wait for one frame for pms workarround!!!! */
 		}
-		#endif
 	}
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_resume, MMPROFILE_FLAG_PULSE, 0, 11);
 
@@ -5936,13 +5796,7 @@ int primary_display_resume(void)
 /* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2018/12/10, add for TM TD4330 LCM mipi before init */
 	if (!strcmp(pgc->plcm->drv->name, "oppo18531_tianma_td4330_1080p_dsi_cmd") \
 		|| is_project(18561) || is_project(18161)) {
-		if ((!strcmp(pgc->plcm->drv->name, "oppo18561_dsjm_jdi_himax83112a_1080p_dsi_vdo"))
-		|| (!strcmp(pgc->plcm->drv->name, "oppo18561_tianma_himax83112a_1080p_dsi_vdo"))) {
-			//video mode on need
-			mdelay(23); /* wait for one more frame */
-		} else {
-			disp_lcm_init_code(pgc->plcm);
-		}
+		disp_lcm_init_code(pgc->plcm);
 	}
 #endif /*VENDOR_EDIT*/
 
@@ -5986,284 +5840,6 @@ done:
 	#endif
 	return ret;
 }
-
-#ifdef VENDOR_EDIT
-/*
-* Ling.Guo@PSW.MM.Display.LCD.Feature, 2019/06/12,
-* add for get dimming layer hbm state
-*/
-int primary_display_aod_backlight(int level)
-{
-	int ret;
-
-	#ifdef VENDOR_EDIT
-	/*
-	 * Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/03/23,
-	 * add for change aod mode brightness
-	 */
-	enum mtkfb_power_mode cur_pm;
-	#endif /*VENDOR_EDIT*/
-
-	_primary_path_lock(__func__);
-
-	DISPCHECK("hold the wakelock...\n");
-	wake_lock(&pri_wk_lock);
-
-	#ifdef VENDOR_EDIT
-	/*
-	 * Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/03/23,
-	 * add for change aod mode brightness
-	 */
-	if (primary_display_get_lcm_power_state_nolock() != LCM_ON_LOW_POWER) {
-		DISPCHECK("primary display path is not lowpower, return\n");
-
-		if (primary_display_get_lcm_power_state_nolock() == LCM_OFF) {
-			DISPCHECK("release wakelock...\n");
-			wake_unlock(&pri_wk_lock);
-		}
-
-		_primary_path_unlock(__func__);
-		return 0;
-	}
-
-	cur_pm = primary_display_get_power_mode_nolock();
-	#endif /*VENDOR_EDIT*/
-
-	if (pgc->state == DISP_ALIVE) {
-		DISPCHECK("primary display path is already resume, skip\n");
-		goto skip_resume;
-	}
-
-	dpmgr_path_power_on(pgc->dpmgr_handle, CMDQ_DISABLE);
-
-	dpmgr_path_reset(pgc->dpmgr_handle, CMDQ_DISABLE);
-	{
-		LCM_PARAMS *lcm_param;
-		struct disp_ddp_path_config *data_config;
-
-		/*
-		 * disconnect primary path first
-		 * because MMsys config register may not power off during
-		 * early suspend
-		 * BUT session mode may change in primary_display_switch_mode()
-		 */
-		ddp_disconnect_path(DDP_SCENARIO_PRIMARY_ALL, NULL);
-		ddp_disconnect_path(DDP_SCENARIO_PRIMARY_RDMA0_COLOR0_DISP,
-				NULL);
-		DISPCHECK("cmd/video mode=%d\n",
-				primary_display_is_video_mode());
-		dpmgr_path_set_video_mode(pgc->dpmgr_handle,
-				primary_display_is_video_mode());
-
-		dpmgr_path_connect(pgc->dpmgr_handle, CMDQ_DISABLE);
-
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_resume,
-				MMPROFILE_FLAG_PULSE, 1, 2);
-		lcm_param = disp_lcm_get_params(pgc->plcm);
-
-		data_config = dpmgr_path_get_last_config(pgc->dpmgr_handle);
-		memcpy(&(data_config->dispif_config), lcm_param,
-				sizeof(LCM_PARAMS));
-
-		data_config->dst_w =
-			disp_helper_get_option(DISP_OPT_FAKE_LCM_WIDTH);
-		data_config->dst_h =
-			disp_helper_get_option(DISP_OPT_FAKE_LCM_HEIGHT);
-		if (lcm_param->type == LCM_TYPE_DSI) {
-			if (lcm_param->dsi.data_format.format ==
-					LCM_DSI_FORMAT_RGB888)
-				data_config->lcm_bpp = 24;
-			else if (lcm_param->dsi.data_format.format ==
-					LCM_DSI_FORMAT_RGB565)
-				data_config->lcm_bpp = 16;
-			else if (lcm_param->dsi.data_format.format ==
-					LCM_DSI_FORMAT_RGB666)
-				data_config->lcm_bpp = 18;
-		} else if (lcm_param->type == LCM_TYPE_DPI) {
-			if (lcm_param->dpi.format == LCM_DPI_FORMAT_RGB888)
-				data_config->lcm_bpp = 24;
-			else if (lcm_param->dpi.format == LCM_DPI_FORMAT_RGB565)
-				data_config->lcm_bpp = 16;
-			if (lcm_param->dpi.format == LCM_DPI_FORMAT_RGB666)
-				data_config->lcm_bpp = 18;
-		}
-
-		data_config->fps = pgc->lcm_fps;
-
-		data_config->dst_dirty = 1;
-
-		ret = dpmgr_path_config(pgc->dpmgr_handle, data_config, NULL);
-		data_config->dst_dirty = 0;
-	}
-
-	if (primary_display_get_lcm_power_state_nolock() != LCM_ON_LOW_POWER) {
-		if (pgc->plcm->drv->aod)
-			disp_lcm_aod(pgc->plcm, 1);
-		else
-			disp_lcm_resume(pgc->plcm);
-		primary_display_set_lcm_power_state_nolock(LCM_ON_LOW_POWER);
-	}
-
-	if (dpmgr_path_is_busy(pgc->dpmgr_handle)) {
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_resume,
-			 MMPROFILE_FLAG_PULSE, 1, 4);
-		DISPPR_ERROR("didn't start display path but it's busy\n");
-		ret = -1;
-		/* goto done; */
-	}
-
-	dpmgr_path_start(pgc->dpmgr_handle, CMDQ_DISABLE);
-
-	if (dpmgr_path_is_busy(pgc->dpmgr_handle)) {
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_resume,
-			MMPROFILE_FLAG_PULSE, 1, 6);
-		DISPPR_ERROR("didn't trigger display path but it's busy\n");
-		ret = -1;
-		/* goto done; */
-	}
-
-	DISPCHECK("%s start trig loop\n", __func__);
-	cmdqRecReset(pgc->cmdq_handle_trigger);
-	cmdqRecStartLoop(pgc->cmdq_handle_trigger);
-	cmdqCoreSetEvent(CMDQ_SYNC_TOKEN_STREAM_EOF);
-	cmdqCoreSetEvent(CMDQ_SYNC_TOKEN_CABC_EOF);
-
-	primary_set_state(DISP_ALIVE);
-
-skip_resume:
-
-	#ifndef VENDOR_EDIT
-	/*
-	 * Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/03/23,
-	 * add for change aod mode brightness
-	 */
-	primary_display_setbacklight_nolock(level);
-
-	/* blocking flush before stop trigger loop */
-	_blocking_flush();
-
-	if (dpmgr_path_is_busy(pgc->dpmgr_handle)) {
-		int event_ret;
-
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_suspend,
-				 MMPROFILE_FLAG_PULSE, 1, 2);
-		event_ret = dpmgr_wait_event_timeout(pgc->dpmgr_handle,
-				 DISP_PATH_EVENT_FRAME_DONE, HZ * 1);
-
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_suspend,
-				 MMPROFILE_FLAG_PULSE, 2, 2);
-		DISPCHECK("display path is busy now,wait frame done,event=%d\n",
-				event_ret);
-		if (event_ret <= 0) {
-			DISPPR_ERROR("wait frame done in suspend timeout\n");
-			mmprofile_log_ex(ddp_mmp_get_events()->primary_suspend,
-				 MMPROFILE_FLAG_PULSE, 3, 2);
-			primary_display_diagnose();
-			ret = -1;
-		}
-	}
-	DISPCHECK("%s stop trig loop\n", __func__);
-	_cmdq_stop_trigger_loop();
-
-	dpmgr_path_stop(pgc->dpmgr_handle, CMDQ_DISABLE);
-
-	if (dpmgr_path_is_busy(pgc->dpmgr_handle)) {
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_suspend,
-			 MMPROFILE_FLAG_PULSE, 1, 4);
-		DISPPR_ERROR("[POWER]stop display path failed, still busy\n");
-		dpmgr_path_reset(pgc->dpmgr_handle, CMDQ_DISABLE);
-		ret = -1;
-		/*
-		 * even path is busy(stop fail), we still need to
-		 * continue power off other module/devices
-		 */
-		/* goto done; */
-	}
-
-	if (primary_display_get_lcm_power_state_nolock() != LCM_ON_LOW_POWER) {
-		if (pgc->plcm->drv->aod)
-			disp_lcm_aod(pgc->plcm, 1);
-
-		primary_display_set_lcm_power_state_nolock(LCM_ON_LOW_POWER);
-	}
-
-	dpmgr_path_power_off(pgc->dpmgr_handle, CMDQ_DISABLE);
-
-	pgc->lcm_refresh_rate = 60;
-	/* pgc->state = DISP_SLEPT; */
-
-	primary_set_state(DISP_SLEPT);
-
-	#else
-	primary_display_set_aod_mode_nolock(level);
-
-	if (cur_pm == DOZE_SUSPEND) {
-		/* blocking flush before stop trigger loop */
-		_blocking_flush();
-
-		if (dpmgr_path_is_busy(pgc->dpmgr_handle)) {
-			int event_ret;
-
-			mmprofile_log_ex(ddp_mmp_get_events()->primary_suspend,
-					 MMPROFILE_FLAG_PULSE, 1, 2);
-			event_ret = dpmgr_wait_event_timeout(pgc->dpmgr_handle,
-					 DISP_PATH_EVENT_FRAME_DONE, HZ * 1);
-
-			mmprofile_log_ex(ddp_mmp_get_events()->primary_suspend,
-					 MMPROFILE_FLAG_PULSE, 2, 2);
-			DISPCHECK("display path is busy now,wait frame done,event=%d\n",
-					event_ret);
-			if (event_ret <= 0) {
-				DISPPR_ERROR("wait frame done in suspend timeout\n");
-				mmprofile_log_ex(ddp_mmp_get_events()->primary_suspend,
-					 MMPROFILE_FLAG_PULSE, 3, 2);
-				primary_display_diagnose();
-				ret = -1;
-			}
-		}
-		DISPCHECK("%s stop trig loop\n", __func__);
-		_cmdq_stop_trigger_loop();
-
-		dpmgr_path_stop(pgc->dpmgr_handle, CMDQ_DISABLE);
-
-		if (dpmgr_path_is_busy(pgc->dpmgr_handle)) {
-			mmprofile_log_ex(ddp_mmp_get_events()->primary_suspend,
-				 MMPROFILE_FLAG_PULSE, 1, 4);
-			DISPPR_ERROR("[POWER]stop display path failed, still busy\n");
-			dpmgr_path_reset(pgc->dpmgr_handle, CMDQ_DISABLE);
-			ret = -1;
-			/*
-			 * even path is busy(stop fail), we still need to
-			 * continue power off other module/devices
-			 */
-			/* goto done; */
-		}
-
-		if (primary_display_get_lcm_power_state_nolock() != LCM_ON_LOW_POWER) {
-			if (pgc->plcm->drv->aod)
-				disp_lcm_aod(pgc->plcm, 1);
-
-			primary_display_set_lcm_power_state_nolock(LCM_ON_LOW_POWER);
-		}
-
-		dpmgr_path_power_off(pgc->dpmgr_handle, CMDQ_DISABLE);
-
-		pgc->lcm_refresh_rate = 60;
-		/* pgc->state = DISP_SLEPT; */
-
-		primary_set_state(DISP_SLEPT);
-		DISPCHECK("release wakelock...\n");
-		wake_unlock(&pri_wk_lock);
-	}
-	#endif /*VENDOR_EDIT*/
-
-	_primary_path_unlock(__func__);
-
-	DISPCHECK("%s end\n", __func__);
-
-	return 0;
-}
-#endif
 
 int primary_display_ipoh_restore(void)
 {
@@ -7610,11 +7186,6 @@ static int primary_frame_cfg_input(struct disp_frame_cfg_t *cfg)
 		goto done;
 	}
 
-#ifdef VENDOR_EDIT
-/* jie.cheng@swdp.shanghai,2017/06/02,add frame cnt variable to summarize all frame updates on MTK platform */
-        pgc->frame_cnt++;
-#endif
-
 	if (disp_helper_get_stage() == DISP_HELPER_STAGE_NORMAL)
 		fps_ctx_update(&primary_fps_ctx);
 
@@ -7726,14 +7297,6 @@ out:
 	return ret;
 }
 
-#ifdef VENDOR_EDIT
-/*Mark.Yao@PSW.MM.Display.LCD.Stable,2019-05-10 add for dc backlight feature */
-extern int oppo_dc_enable;
-int oppo_dc_enable_real = 0;
-int _set_backlight_by_cmdq(unsigned int level);
-bool fingerprint_layer = false;
-#endif /* VENDOR_EDIT */
-
 int primary_display_frame_cfg(struct disp_frame_cfg_t *cfg)
 {
 	int ret = 0;
@@ -7776,30 +7339,6 @@ int primary_display_frame_cfg(struct disp_frame_cfg_t *cfg)
 
 		dprec_start(trigger_event, cfg->present_fence_idx, proc_name);
 	}
-
-
-	#ifdef VENDOR_EDIT
-	/*Mark.Yao@PSW.MM.Display.LCD.Stable,2019-05-10 add for dc backlight feature */
-	if (oppo_dc_enable != oppo_dc_enable_real) {
-		oppo_dc_enable_real = oppo_dc_enable;
-		_set_backlight_by_cmdq(ffl_backlight_backup);
-	}
-
-	/*
-	* Ling.Guo@PSW.MM.Display.LCD.Feature, 2019/06/12,
-	* add for get dimming layer hbm state
-	*/
-	if (disp_helper_get_option(DISP_OPT_LCM_HBM)) {
-		if (cfg->hbm_en > 0) {
-			fingerprint_layer = true;
-		} else {
-			fingerprint_layer = false;
-		}
-		primary_display_set_lcm_hbm(fingerprint_layer);
-		primary_display_hbm_wait(fingerprint_layer);
-	}
-	#endif /*VENDOR_EDIT*/
-
 
 	if (cfg->present_fence_idx != (unsigned int)-1)
 		primary_display_update_present_fence(cfg->present_fence_idx);
@@ -8893,219 +8432,6 @@ int primary_display_setlcm_cmd(unsigned int *lcm_cmd, unsigned int *lcm_count,
 }
 
 #ifdef VENDOR_EDIT
-/*
-* Ling.Guo@PSW.MM.Display.LCD.Feature, 2019/06/12,
-* add for get dimming layer hbm state
-*/
-static int _primary_display_set_lcm_hbm(bool en)
-{
-	int ret = 0;
-	struct cmdqRecStruct *qhandle_hbm = NULL;
-
-	ret = cmdqRecCreate(CMDQ_SCENARIO_PRIMARY_DISP, &qhandle_hbm);
-	if (ret) {
-		DISPMSG("%s:failed to create cmdq handle\n", __func__);
-		return -1;
-	}
-
-	if (!primary_display_is_video_mode()) {
-		cmdqRecReset(qhandle_hbm);
-		cmdqRecWait(qhandle_hbm, CMDQ_SYNC_TOKEN_CABC_EOF);
-		_cmdq_handle_clear_dirty(qhandle_hbm);
-
-		_cmdq_insert_wait_frame_done_token_mira(qhandle_hbm);
-		mtk_disp_lcm_set_hbm(en, pgc->plcm, qhandle_hbm);
-
-		cmdqRecSetEventToken(qhandle_hbm, CMDQ_SYNC_TOKEN_CABC_EOF);
-		_cmdq_flush_config_handle_mira(qhandle_hbm, 1);
-	} else {
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl, MMPROFILE_FLAG_PULSE, 1, 2);
-		mtk_disp_lcm_set_hbm(en, pgc->plcm, qhandle_hbm);
-
-		_cmdq_flush_config_handle_mira(qhandle_hbm, 1);
-		DISPMSG("[BL]qhandle_hbm ret=%d\n", ret);
-	}
-
-	cmdqRecDestroy(qhandle_hbm);
-	qhandle_hbm = NULL;
-
-	return ret;
-}
-
-int primary_display_set_lcm_hbm(bool en)
-{
-	if (disp_lcm_get_hbm_state(pgc->plcm) == en || fp_silence_mode)
-		return 0;
-
-	if (disp_helper_get_stage() != DISP_HELPER_STAGE_NORMAL) {
-		DISPMSG("%s: skip, stage:%s\n", __func__,
-			disp_helper_stage_spy());
-		return 0;
-	}
-	if (pgc->state == DISP_SLEPT) {
-		DISPMSG("%s: skip, slept\n", __func__);
-		return 0;
-	}
-
-	primary_display_idlemgr_kick(__func__, 0);
-	if (primary_display_cmdq_enabled())
-		_primary_display_set_lcm_hbm(en);
-
-	return 0;
-}
-
-bool primary_display_get_fp_hbm_state(void) {
-	if (disp_helper_get_option(DISP_OPT_LCM_HBM)) {
-		return disp_lcm_get_hbm_state(pgc->plcm);
-	}
-	return false;
-}
-
-/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/11/07, add for 19151 hbm wait */
-static int primary_display_set_hbm_wait_ramless(bool en)
-{
-	int ret = 0;
-	struct cmdqRecStruct *qhandle_wait = NULL;
-
-	ret = cmdqRecCreate(CMDQ_SCENARIO_PRIMARY_DISP, &qhandle_wait);
-	if (ret) {
-		DISPMSG("%s:failed to create cmdq handle\n", __func__);
-		return -1;
-	}
-
-	if (!primary_display_is_video_mode()) {
-		cmdqRecReset(qhandle_wait);
-		cmdqRecWait(qhandle_wait, CMDQ_SYNC_TOKEN_CABC_EOF);
-		_cmdq_handle_clear_dirty(qhandle_wait);
-
-		_cmdq_insert_wait_frame_done_token_mira(qhandle_wait);
-		disp_lcm_set_hbm_wait_ramless(en, pgc->plcm, qhandle_wait);
-
-		cmdqRecSetEventToken(qhandle_wait, CMDQ_SYNC_TOKEN_CABC_EOF);
-		_cmdq_flush_config_handle_mira(qhandle_wait, 1);
-	} else {
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl, MMPROFILE_FLAG_PULSE, 1, 2);
-		disp_lcm_set_hbm_wait_ramless(en, pgc->plcm, qhandle_wait);
-
-		_cmdq_flush_config_handle_mira(qhandle_wait, 1);
-		DISPMSG("[BL]qhandle_hbm ret=%d\n", ret);
-	}
-
-	cmdqRecDestroy(qhandle_wait);
-	qhandle_wait = NULL;
-
-	return ret;
-}
-#endif /*VENDOR_EDIT*/
-
-int primary_display_hbm_wait(bool en)
-{
-	int wait = 0;
-	unsigned int wait_count = 0;
-
-	wait = disp_lcm_get_hbm_wait(pgc->plcm);
-	ramless_dc_wait = wait;
-
-	if (wait == -1)
-		return -EINVAL;
-	else if (wait != 1)
-		return 0;
-
-
-	wait_count = disp_lcm_get_hbm_time(en, pgc->plcm);
-	if (wait_count == -1)
-		return -EINVAL;
-	else if (wait_count)
-		DISPMSG("LCM hbm %s wait %u-TE\n", en ? "enable" : "disable",
-			wait_count);
-
-	/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/11/29, add for ramless dc notify */
-	if(is_project(19151) || is_project(19350)){
-		if (ramless_dc_wait && oppo_dc_enable && wait_count) {
-			hbm_notify_init();
-		}
-	}
-
-	while (wait_count) {
-		wait_count--;
-		/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/11/28, add for ramless wait for 5ms */
-		if (is_project(19151) || is_project(19350)) {
-			if (ramless_dc_wait && oppo_dc_enable) {
-				mdelay(3);
-			} else {
-				mdelay(6);
-			}
-		} else {
-			//timeout is 250 jiffies,1s
-			dpmgr_wait_event_timeout(pgc->dpmgr_handle, DISP_PATH_EVENT_IF_VSYNC, 250);
-		}
-	}
-
-
-
-#ifndef VENDOR_EDIT
-/*
- * YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/11/07,
- * modify for 19151 ramless oled hbm wait
- */
-	disp_lcm_set_hbm_wait(false, pgc->plcm);
-#else /*VENDOR_EDIT*/
-	if(is_project(19151) || is_project(19350)){
-		if (ramless_dc_wait && oppo_dc_enable) {
-			DISPMSG("%s: ramless dc notify\n", __func__);
-		} else {
-			primary_display_set_hbm_wait_ramless(false);
-		}
-	} else {
-		disp_lcm_set_hbm_wait(false, pgc->plcm);
-	}
-
-#endif /*VENDOR_EDIT*/
-	return 0;
-}
-
-int primary_display_setbacklight_nolock(unsigned int level)
-{
-	static unsigned int last_level;
-
-	DISPFUNC();
-	if (disp_helper_get_stage() != DISP_HELPER_STAGE_NORMAL) {
-		DISPMSG("%s skip due to stage %s\n", __func__,
-			disp_helper_stage_spy());
-		return 0;
-	}
-
-	if (last_level == level)
-		return 0;
-
-	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-			 MMPROFILE_FLAG_START, 0, 0);
-
-	if (pgc->state == DISP_SLEPT) {
-		DISPINFO("Sleep State set backlight invalid\n");
-	} else {
-		primary_display_idlemgr_kick(__func__, 0);
-		if (primary_display_cmdq_enabled()) {
-			if (primary_display_is_video_mode()) {
-				mmprofile_log_ex(
-					ddp_mmp_get_events()->primary_set_bl,
-					MMPROFILE_FLAG_PULSE, 0, 7);
-				disp_lcm_set_backlight(pgc->plcm, NULL, level);
-			} else {
-				_set_backlight_by_cmdq(level);
-			}
-			atomic_set(&delayed_trigger_kick, 1);
-		} else {
-			_set_backlight_by_cpu(level);
-		}
-		last_level = level;
-	}
-
-	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-			 MMPROFILE_FLAG_END, 0, 0);
-	return 0;
-}
-
 /* LiPing-M@PSW.MultiMedia.Display.LCD.Machine.1077038, 2017/12/06, Add for Porting cabc interface */
 int _set_cabc_mode_by_cmdq(unsigned int level)
 {
@@ -9123,8 +8449,7 @@ int _set_cabc_mode_by_cmdq(unsigned int level)
 	if (primary_display_is_video_mode()) {
 		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_cmd, MMPROFILE_FLAG_PULSE, 1, 2);
 		cmdqRecReset(cmdq_handle_lcm_cmd);
-		if(is_project(OPPO_18311) || is_project(OPPO_18011)
-		|| is_project(OPPO_18161) || is_project(OPPO_18561)) {
+		if(is_project(OPPO_18311) || is_project(OPPO_18011)) {
 			_cmdq_insert_wait_frame_done_token_mira(cmdq_handle_lcm_cmd);
 			disp_lcm_oppo_set_lcm_cabc_cmd(pgc->plcm, cmdq_handle_lcm_cmd, level);
 		}else {
@@ -9204,97 +8529,6 @@ int primary_display_set_cabc_mode(unsigned int level)
 	return ret;
 }
 
-int _set_aod_mode_by_cmdq(unsigned int mode)
-{
-	int ret = 0;
-
-	struct cmdqRecStruct *cmdq_handle_aod_mode = NULL;
-
-	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_cmd,
-		MMPROFILE_FLAG_PULSE, 1, 1);
-
-	ret = cmdqRecCreate(CMDQ_SCENARIO_PRIMARY_DISP,&cmdq_handle_aod_mode);
-
-	if(ret!=0)
-	{
-		DISPCHECK("fail to create primary cmdq handle for aod mode\n");
-		return -1;
-	}
-
-	if (primary_display_is_video_mode()) {
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-			MMPROFILE_FLAG_PULSE, 1, 2);
-		cmdqRecReset(cmdq_handle_aod_mode);
-		ret = disp_lcm_set_aod_mode(pgc->plcm,cmdq_handle_aod_mode,mode);
-		_cmdq_flush_config_handle_mira(cmdq_handle_aod_mode, 1);
-	} else {
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-			MMPROFILE_FLAG_PULSE, 1, 3);
-		cmdqRecReset(cmdq_handle_aod_mode);
-		cmdqRecWait(cmdq_handle_aod_mode, CMDQ_SYNC_TOKEN_CABC_EOF);
-		_cmdq_handle_clear_dirty(cmdq_handle_aod_mode);
-		_cmdq_insert_wait_frame_done_token_mira(cmdq_handle_aod_mode);
-		ret = disp_lcm_set_aod_mode(pgc->plcm,cmdq_handle_aod_mode,mode);
-		cmdqRecSetEventToken(cmdq_handle_aod_mode, CMDQ_SYNC_TOKEN_CONFIG_DIRTY);
-		cmdqRecSetEventToken(cmdq_handle_aod_mode, CMDQ_SYNC_TOKEN_CABC_EOF);
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-			MMPROFILE_FLAG_PULSE, 1, 4);
-		_cmdq_flush_config_handle_mira(cmdq_handle_aod_mode, 1);
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-			MMPROFILE_FLAG_PULSE, 1, 6);
-	}
-	cmdqRecDestroy(cmdq_handle_aod_mode);
-	cmdq_handle_aod_mode = NULL;
-	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-		MMPROFILE_FLAG_PULSE, 1, 5);
-
-	return ret;
-}
-
-int primary_display_set_aod_mode_nolock(unsigned int mode)
-{
-	int ret = 0;
-
-	if (!(is_project(OPPO_19531) || is_project(OPPO_19391) \
-		|| is_project(19151) || is_project(19350)))
-	{
-		pr_err("panel is not samsung unsupported!!\n");
-		return 0;
-	}
-
-	if (flag_lcd_off)
-	{
-		pr_err("lcd is off,don't allow to set aod\n");
-		return 0;
-	}
-
-	DISPFUNC();
-
-	if (disp_helper_get_stage() != DISP_HELPER_STAGE_NORMAL) {
-		DISPMSG("%s skip due to stage %s\n", __func__, disp_helper_stage_spy());
-		return 0;
-	}
-
-	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-			MMPROFILE_FLAG_START, 0, 0);
-	if (pgc->state == DISP_SLEPT) {
-		DISPCHECK("Sleep State set aod mode invald\n");
-	} else {
-		primary_display_idlemgr_kick((char *)__func__, 0);
-		if (primary_display_cmdq_enabled()) {
-			if (primary_display_is_video_mode()) {
-				mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-					       MMPROFILE_FLAG_PULSE, 0, 7);
-			} else {
-				_set_aod_mode_by_cmdq(mode);
-			}
-			atomic_set(&delayed_trigger_kick, 1);
-		}
-	}
-	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-		MMPROFILE_FLAG_END, 0, 0);
-	return ret;
-}
 
 int _set_hbm_mode_by_cmdq(unsigned int level)
 {
@@ -9320,9 +8554,7 @@ int _set_hbm_mode_by_cmdq(unsigned int level)
 		if((!strcmp(pgc->plcm->drv->name,
 				"oppo_samsung_ams628nw_1080p_dsi_cmd"))
 			|| (!strcmp(pgc->plcm->drv->name,
-				"oppo_samsung_ams628nw_lsi_1080p_dsi_cmd"))
-			|| is_project(OPPO_19531) || is_project(OPPO_19391)
-			|| is_project(19151) || is_project(19350)){
+				"oppo_samsung_ams628nw_lsi_1080p_dsi_cmd"))){
 		    ret = disp_lcm_set_hbm(pgc->plcm,cmdq_handle_HBM_mode,level);
 		}
 		_cmdq_flush_config_handle_mira(cmdq_handle_HBM_mode, 1);
@@ -9337,9 +8569,7 @@ int _set_hbm_mode_by_cmdq(unsigned int level)
 		if((!strcmp(pgc->plcm->drv->name,
 				"oppo_samsung_ams628nw_1080p_dsi_cmd"))
 			|| (!strcmp(pgc->plcm->drv->name,
-				"oppo_samsung_ams628nw_lsi_1080p_dsi_cmd"))
-			|| is_project(OPPO_19531) || is_project(OPPO_19391)
-			|| is_project(19151) || is_project(19350)){
+				"oppo_samsung_ams628nw_lsi_1080p_dsi_cmd"))){
 		    ret = disp_lcm_set_hbm(pgc->plcm,cmdq_handle_HBM_mode,level);
 		}
 		cmdqRecSetEventToken(cmdq_handle_HBM_mode, CMDQ_SYNC_TOKEN_CONFIG_DIRTY);
@@ -9363,9 +8593,7 @@ int primary_display_set_hbm_mode(unsigned int level)
 {
 	int ret = 0;
 
-	if (!(is_project(OPPO_17197) \
-	|| is_project(OPPO_19531) || is_project(OPPO_19391) \
-	|| is_project(19151) || is_project(19350)))
+	if (!is_project(OPPO_17197))
 	{
 		pr_err("panel is not samsung unsupported!!\n");
 		return 0;
@@ -9396,7 +8624,6 @@ int primary_display_set_hbm_mode(unsigned int level)
 			if (primary_display_is_video_mode()) {
 				mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
 					       MMPROFILE_FLAG_PULSE, 0, 7);
-				_set_hbm_mode_by_cmdq(level);
 			} else {
 				_set_hbm_mode_by_cmdq(level);
 			}
@@ -9409,108 +8636,6 @@ int primary_display_set_hbm_mode(unsigned int level)
 		MMPROFILE_FLAG_END, 0, 0);
 	return ret;
 }
-
-int _set_safe_mode_by_cmdq(unsigned int level)
-{
-	int ret = 0;
-
-	struct cmdqRecStruct *cmdq_handle_SAFE_mode = NULL;
-
-	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_cmd,
-		MMPROFILE_FLAG_PULSE, 1, 1);
-
-	ret = cmdqRecCreate(CMDQ_SCENARIO_PRIMARY_DISP,&cmdq_handle_SAFE_mode);
-
-	if(ret!=0)
-	{
-		DISPCHECK("fail to create primary cmdq handle for SAFE mode\n");
-		return -1;
-	}
-
-	if (primary_display_is_video_mode()) {
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-			MMPROFILE_FLAG_PULSE, 1, 2);
-		cmdqRecReset(cmdq_handle_SAFE_mode);
-		if(is_project(19151) || is_project(19350)){
-		    ret = disp_lcm_set_safe_mode(pgc->plcm,cmdq_handle_SAFE_mode,level);
-		}
-		_cmdq_flush_config_handle_mira(cmdq_handle_SAFE_mode, 1);
-		DISPCHECK("[BL]_set_safe_mode_by_cmdq ret=%d\n",ret);
-	} else {
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-			MMPROFILE_FLAG_PULSE, 1, 3);
-		cmdqRecReset(cmdq_handle_SAFE_mode);
-		cmdqRecWait(cmdq_handle_SAFE_mode, CMDQ_SYNC_TOKEN_CABC_EOF);
-		_cmdq_handle_clear_dirty(cmdq_handle_SAFE_mode);
-		_cmdq_insert_wait_frame_done_token_mira(cmdq_handle_SAFE_mode);
-		if(is_project(19151) || is_project(19350)){
-		    ret = disp_lcm_set_safe_mode(pgc->plcm,cmdq_handle_SAFE_mode,level);
-		}
-		cmdqRecSetEventToken(cmdq_handle_SAFE_mode, CMDQ_SYNC_TOKEN_CONFIG_DIRTY);
-		cmdqRecSetEventToken(cmdq_handle_SAFE_mode, CMDQ_SYNC_TOKEN_CABC_EOF);
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-			MMPROFILE_FLAG_PULSE, 1, 4);
-		_cmdq_flush_config_handle_mira(cmdq_handle_SAFE_mode, 1);
-		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-			MMPROFILE_FLAG_PULSE, 1, 6);
-		DISPCHECK("[BL]_set_safe_mode_by_cmdq ret=%d\n",ret);
-	}
-	cmdqRecDestroy(cmdq_handle_SAFE_mode);
-	cmdq_handle_SAFE_mode = NULL;
-	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-		MMPROFILE_FLAG_PULSE, 1, 5);
-
-	return ret;
-}
-
-int primary_display_set_safe_mode(unsigned int level)
-{
-	int ret = 0;
-
-	if (!(is_project(OPPO_17197) \
-	|| is_project(OPPO_19531) || is_project(OPPO_19391) \
-	|| is_project(19151) || is_project(19350)))
-	{
-		pr_err("panel is not samsung unsupported!!\n");
-		return 0;
-	}
-
-	if (flag_lcd_off)
-	{
-		pr_err("lcd is off,don't allow to set hbm\n");
-		return 0;
-	}
-
-	DISPFUNC();
-
-	if (disp_helper_get_stage() != DISP_HELPER_STAGE_NORMAL) {
-		DISPMSG("%s skip due to stage %s\n", __func__, disp_helper_stage_spy());
-		return 0;
-	}
-
-	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-			MMPROFILE_FLAG_START, 0, 0);
-	if (pgc->state == DISP_SLEPT) {
-		DISPERR("Sleep State set backlight invald\n");
-	} else {
-		primary_display_idlemgr_kick((char *)__func__, 0);
-		if (primary_display_cmdq_enabled()) {
-			if (primary_display_is_video_mode()) {
-				mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-					       MMPROFILE_FLAG_PULSE, 0, 7);
-				_set_safe_mode_by_cmdq(level);
-			} else {
-				_set_safe_mode_by_cmdq(level);
-			}
-			atomic_set(&delayed_trigger_kick, 1);
-		}
-	}
-	mdelay(20);
-	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
-		MMPROFILE_FLAG_END, 0, 0);
-	return ret;
-}
-
 /*
 * Yongpeng.Yi@PSW.MM.Display.LCD.Stability, 2018/01/16,
 * add for lcd serial num
@@ -9731,7 +8856,7 @@ static int ffl_set_worker_kthread(void *data)
 		ffl_trigger_finish = false;
 		if (ffl_set_mode == FFL_TRIGGLE_CONTROL) {
 			for (index = FFL_START_LEVEL; index <= FFL_END_LEVEL; index = index + FFL_UPRATE) {
-				if (ffl_set_mode != FFL_TRIGGLE_CONTROL || primary_display_get_fp_hbm_state()) {
+				if (ffl_set_mode != FFL_TRIGGLE_CONTROL) {
 					break;
 				}
 				if ((index > 1) && ffl_display_ready
@@ -9750,8 +8875,7 @@ static int ffl_set_worker_kthread(void *data)
 			for (pending = 0; pending <= FFL_PENDING_END; pending++) {
 				if ((ffl_set_mode == FFL_EXIT_CONTROL)
 					|| (ffl_set_mode == FFL_EXIT_FULLY_CONTROL)
-					|| (ffl_backlight_backup == 0)
-					|| primary_display_get_fp_hbm_state()) {
+					|| (ffl_backlight_backup == 0)) {
 					break;
 				} else if (ffl_set_mode == FFL_TRIGGLE_CONTROL) {
 					msleep(8);
@@ -9760,8 +8884,7 @@ static int ffl_set_worker_kthread(void *data)
 
 			if (index < ffl_backlight_backup) {
 				while (index < ffl_backlight_backup) {
-					if (ffl_set_mode == FFL_EXIT_FULLY_CONTROL
-						|| primary_display_get_fp_hbm_state()) {
+					if (ffl_set_mode == FFL_EXIT_FULLY_CONTROL) {
 						break;
 					}
 					if ((index > 1) && ffl_display_ready
@@ -9779,8 +8902,7 @@ static int ffl_set_worker_kthread(void *data)
 				}
 			} else {
 				while (index > ffl_backlight_backup) {
-					if (ffl_set_mode == FFL_EXIT_FULLY_CONTROL
-						|| primary_display_get_fp_hbm_state()) {
+					if (ffl_set_mode == FFL_EXIT_FULLY_CONTROL) {
 						break;
 					}
 					if ((index > 1) && ffl_display_ready
@@ -9833,46 +8955,7 @@ void ffl_set_enable(unsigned int enable)
 		mutex_unlock(&ffl_lock);
 	}
 }
-
-
-#ifdef VENDOR_EDIT
-/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/11/29, add for ramless dc notify */
-static int hbm_notify_worker_kthread(void *data)
-{
-	int ret = 0;
-	while (1) {
-		ret = wait_event_interruptible(hbm_notify_task_wq, atomic_read(&hbm_task_task_wakeup));
-		atomic_set(&hbm_task_task_wakeup, 0);
-		primary_display_set_hbm_wait_ramless(false);
-		mdelay(5);
-		if (kthread_should_stop())
-			break;
-	}
-	return 0;
-}
-
-static void hbm_notify_init(void)
-{
-	if (!hbm_notify_task) {
-		hbm_notify_task = kthread_create(hbm_notify_worker_kthread, NULL,"hbm_NOTIFY");
-		init_waitqueue_head(&hbm_notify_task_wq);
-		wake_up_process(hbm_notify_task);
-		pr_info("[hbmnotify] YYP init CREATE\n");
-	}
-	pr_info("[hbmnotify] init\n");
-}
-
-void hbm_notify(void)
-{
-	if (hbm_notify_task != NULL) {
-		atomic_set(&hbm_task_task_wakeup, 1);
-		wake_up_interruptible(&hbm_notify_task_wq);
-		pr_info("[hbmnotify] notify\n");
-	} else {
-		pr_info("[hbmnotify] notify is NULL\n");
-	}
-}
-#endif /*VENDOR_EDIT*/
+#endif /* VENDOR_EDIT */
 
 
 int primary_display_mipi_clk_change(unsigned int clk_value)
@@ -11383,3 +10466,5 @@ end:
 
 	return -1;
 }
+module_param(display_framerate_main, uint, 0664);
+module_param(display_framerate_ext, uint, 0664);

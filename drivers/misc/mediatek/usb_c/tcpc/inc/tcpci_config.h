@@ -17,6 +17,8 @@
 #ifdef CONFIG_TCPC_CLASS
 /* default config */
 
+#define CONFIG_PD_DBG_INFO
+
 /* #define CONFIG_TYPEC_USE_DIS_VBUS_CTRL */
 #define CONFIG_TYPEC_POWER_CTRL_INIT
 
@@ -26,9 +28,7 @@
 /* #define CONFIG_TYPEC_CAP_DBGACC_SNK */
 #define CONFIG_TYPEC_CAP_CUSTOM_SRC
 #define CONFIG_TYPEC_CAP_NORP_SRC
-#define CONFIG_COMPATIBLE_APPLE_TA
 
-#define CONFIG_RECV_BAT_ABSENT_NOTIFY
 
 /* #define CONFIG_TYPEC_ATTACHED_SRC_SAFE0V_DELAY */
 #define CONFIG_TYPEC_ATTACHED_SRC_SAFE0V_TIMEOUT
@@ -61,7 +61,7 @@
 #define CONFIG_TYPEC_NOTIFY_ATTACHWAIT_SNK
 /* #define CONFIG_TYPEC_NOTIFY_ATTACHWAIT_SRC */
 
-#define CONFIG_TCPC_ATTACH_WAKE_LOCK_TOUT	5000
+#define CONFIG_TCPC_ATTACH_WAKE_LOCK_TOUT	5
 
 #define CONFIG_TCPC_DBG_PRESTR		"TCPC-"
 
@@ -297,8 +297,7 @@
  * If the rx buffer isn't empty, postpone timer.
  */
 
-#define CONFIG_USB_PD_CHECK_RX_PENDING_IF_SRTOUT
-#define CONFIG_USB_PD_ONLY_PRINT_SYSTEM_BUSY
+/* #define CONFIG_USB_PD_CHECK_RX_PENDING_IF_SRTOUT */
 
 /*
  * S/W patch for
@@ -385,33 +384,9 @@
 #endif /* CONFIG_USB_POWER_DELIVERY */
 
 /* debug config */
-#define CONFIG_USB_PD_DBG_ALERT_STATUS
+/* #define CONFIG_USB_PD_DBG_ALERT_STATUS */
 /* #define CONFIG_USB_PD_DBG_SKIP_ALERT_HANDLER */
 #define CONFIG_USB_PD_DBG_DP_DFP_D_AUTO_UPDATE
-
-/**********************************************************
- * TypeC Shield Protection
- **********************************************************/
-
-#ifdef CONFIG_MTK_TYPEC_WATER_DETECT
-#define CONFIG_WATER_DETECTION
-#endif /* CONFIG_MTK_TYPEC_WATER_DETECT */
-
-#ifdef CONFIG_WATER_DETECTION
-#define CONFIG_WD_SBU_POLLING
-/* #define CONFIG_WATER_CALIBRATION */
-#define CONFIG_WD_SBU_CALIB_INIT	1800 /* mV */
-#define CONFIG_WD_SBU_PL_BOUND		200 /* mV */
-#define CONFIG_WD_SBU_PH_AUDDEV		200 /* mV */
-#define CONFIG_WD_SBU_PH_LBOUND		1200 /* mV */
-#define CONFIG_WD_SBU_PH_LBOUND1_C2C	2850 /* mV */
-#define CONFIG_WD_SBU_PH_UBOUND1_C2C	3150 /* mV */
-#define CONFIG_WD_SBU_PH_UBOUND2_C2C	3800 /* mV */
-#define CONFIG_WD_SBU_AUD_UBOUND	1600 /* mV */
-#define CONFIG_WD_PROTECT_RETRY_COUNT	3
-#endif /* CONFIG_WATER_DETECTION */
-
-#define CONFIG_CABLE_TYPE_DETECTION
 
 #endif /* CONFIG_TCPC_CLASS */
 #endif /* __LINUX_TCPC_CONFIG_H */

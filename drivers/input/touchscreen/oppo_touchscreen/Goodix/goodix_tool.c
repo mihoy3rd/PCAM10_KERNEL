@@ -79,28 +79,19 @@ int gt1x_init_tool_node(struct touchpanel_data *ts, struct fw_update_info *updat
 
     if (NULL == gt_tool_info->cmd_head.data) {
         TPD_INFO("Apply for memory failed.");
-        goto OUT2;
+        return -1;
     }
     TPD_INFO("Alloc memory size:%d.", DATA_LENGTH_UINT);
 
     gt1x_tool_proc_entry = proc_create_data("goodix_tool", 0666, NULL, &gt1x_tool_fops, gt_tool_info);
     if (gt1x_tool_proc_entry == NULL) {
         TPD_INFO("CAN't create proc entry /proc/goodix_tool.");
-        goto OUT1;
+        return -1;
     } else {
         TPD_INFO("Created proc entry /proc/goodix_tool.");
     }
-    return 0;
 
-OUT1:
-    if (gt_tool_info->cmd_head.data) {
-        kfree(gt_tool_info->cmd_head.data);
-    }
-OUT2:
-    if (gt_tool_info) {
-        kfree(gt_tool_info);
-    }
-    return -1;
+    return 0;
 }
 
 #if 0
@@ -323,7 +314,6 @@ static ssize_t gt1x_tool_write(struct file *filp, const char __user * buff, size
             esd_handle_switch(gt_tool_info->esd_info, true);   //enable esd check
         return CMD_HEAD_LENGTH;
     } else if (17 == cmd_head->wr) {
-        cmd_head->data_len = cmd_head->data_len > DATA_LENGTH ? DATA_LENGTH : cmd_head->data_len;
         ret = copy_from_user(&cmd_head->data[GTP_ADDR_LENGTH], &buff[CMD_HEAD_LENGTH], cmd_head->data_len);
         if (ret) {
             TPD_INFO("copy_from_user failed.");
@@ -346,11 +336,11 @@ static ssize_t gt1x_tool_write(struct file *filp, const char __user * buff, size
     } else if (13 == cmd_head->wr) {
         gt_tool_info->reset(gt_tool_info->chip_data);
         if(gt_tool_info->esd_handle_support)
-            esd_handle_switch(gt_tool_info->esd_info, true);
+            esd_handle_switch(gt_tool_info->esd_info, true); 
         gt_tool_info->update_info->status = UPDATE_STATUS_IDLE;
  //       enable_irq(client->irq);
     } else if (15 == cmd_head->wr) {
-
+        
       /*struct task_struct *thrd = NULL;
         memset(cmd_head->data, 0, cmd_head->data_len + 1);
         memcpy(cmd_head->data, &buff[CMD_HEAD_LENGTH], cmd_head->data_len);

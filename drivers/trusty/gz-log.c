@@ -129,8 +129,9 @@ static bool trusty_supports_logging(struct device *device)
 static int do_gz_log_read(struct file *file, char __user *buf, size_t size)
 {
 	struct log_rb *log = tls->log;
-	uint32_t get, put, alloc, read_chars = 0, copy_chars = 0;
-	int ret = 0;
+	uint32_t get, put, alloc;
+	int read_chars = 0, copy_chars = 0, tbuf_size = 0, offset = 0;
+	char *psrc = NULL;
 
 	WARN_ON(!is_power_of_2(log->sz));
 
@@ -143,36 +144,39 @@ static int do_gz_log_read(struct file *file, char __user *buf, size_t size)
 	 */
 	get = tls->get;
 	put = log->put;
-	/* make sure the hardware and compiler reads the correct put & alloc*/
 	rmb();
 	alloc = log->alloc;
-
-	if (alloc - get > log->sz) {
-		pr_notice("trusty: log overflow, lose some msg\n");
+	if (alloc - tls->get > log->sz) {
+		pr_notice("trusty: log overflow.");
 		get = alloc - log->sz;
 	}
 
 	if (get > put)
 		return -EFAULT;
 
+	if (get == put)
+		return 0;
+
+	tbuf_size = ((put - get) / TRUSTY_LINE_BUFFER_SIZE + 1) * TRUSTY_LINE_BUFFER_SIZE;
+
+	psrc = kzalloc(tbuf_size, GFP_KERNEL);
+
+	if (!psrc)
+		return -ENOMEM;
+
 	while (get != put) {
 		read_chars = log_read_line(tls, put, get);
-		/* Force the loads from log_read_line to complete. */
-		rmb();
-		if (copy_chars + read_chars > (uint32_t)size)
-			break;
-
-		ret = copy_to_user(buf + copy_chars, tls->line_buffer,
-				   read_chars);
-		if (ret) {
-			pr_notice("[%s] copy_to_user failed ret %d\n",
-				  __func__, ret);
-			break;
-		}
+		memcpy(psrc + offset, tls->line_buffer, read_chars);
 		get += read_chars;
-		copy_chars += read_chars;
+		offset += read_chars;
 	}
-	tls->get = get;
+
+	copy_chars = size < offset ? size : offset;
+	if (copy_to_user(buf, psrc, copy_chars))
+		return -EFAULT;
+	kfree(psrc);
+
+	tls->get += copy_chars;
 
 	return copy_chars;
 }
@@ -276,11 +280,18 @@ int trusty_call_nop_std32(uint32_t type, uint64_t value)
 	return ret;
 }
 
+/* get_gz_log_buffer was called in arch_initcall */
+void get_gz_log_buffer(unsigned long *addr, unsigned long *size,
+			    unsigned long *start)
+{
+	*addr = (unsigned long)page_address(trusty_log_pages);
+	pr_info("trusty_log_pages virtual address:%lx\n", (unsigned long)*addr);
+	*start = 0;
+	*size = TRUSTY_LOG_SIZE;
+}
+
 int gz_log_page_init(void)
 {
-	if (trusty_log_pages)
-		return 0;
-
 	trusty_log_pages =  alloc_pages(GFP_KERNEL | __GFP_ZERO | GFP_DMA,
 				   get_order(TRUSTY_LOG_SIZE));
 	if (!trusty_log_pages) {
@@ -292,18 +303,6 @@ int gz_log_page_init(void)
 }
 arch_initcall(gz_log_page_init);
 
-/* get_gz_log_buffer was called in arch_initcall */
-void get_gz_log_buffer(unsigned long *addr, unsigned long *size,
-			    unsigned long *start)
-{
-	gz_log_page_init();
-
-	*addr = (unsigned long)page_address(trusty_log_pages);
-	pr_info("trusty_log_pages virtual address:%lx\n", (unsigned long)*addr);
-	*start = 0;
-	*size = TRUSTY_LOG_SIZE;
-}
-
 static int trusty_gz_log_probe(struct platform_device *pdev)
 {
 	int result;
@@ -312,8 +311,6 @@ static int trusty_gz_log_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s\n", __func__);
 	if (!trusty_supports_logging(pdev->dev.parent))
 		return -ENXIO;
-
-	gz_log_page_init();
 
 	tls = kzalloc(sizeof(*tls), GFP_KERNEL);
 	if (!tls) {

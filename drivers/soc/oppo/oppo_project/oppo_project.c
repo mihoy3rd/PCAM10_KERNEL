@@ -9,8 +9,6 @@
 #include <linux/of.h>
 #include <sec_boot_lib.h>
 
-#include <linux/syscalls.h>
-
 /////////////////////////////////////////////////////////////
 static struct proc_dir_entry *oppoVersion = NULL;
 
@@ -21,11 +19,6 @@ static ProjectInfoCDTType projectInfo = {
 	.nOperator		= 0,
 	.nPCBVersion	= 0,
 };
-
-#ifdef VENDOR_EDIT
-static const char* nfc_feature = "nfc_feature";
-static const char* feature_src = "/vendor/etc/nfc/com.oppo.nfc_feature.xml";
-#endif
 
 static unsigned int init_project_version(void)
 {
@@ -115,24 +108,6 @@ unsigned int get_Operator_Version(void)
 		return format->nOperator;
 	return 0;
 }
-
-#ifdef VENDOR_EDIT
-static int __init update_feature(void)
-{
-	mm_segment_t fs;
-	fs = get_fs();
-	pr_err("update_feature, Operator Version [%d]", get_Operator_Version());
-	set_fs(KERNEL_DS);
-	if (oppoVersion) {
-		if (get_Operator_Version() == OPERATOR_19350_ASIA_CARRIER) {
-			proc_symlink(nfc_feature, oppoVersion, feature_src);
-		}
-	}
-	set_fs(fs);
-	return 0;
-}
-late_initcall(update_feature);
-#endif
 
 //this module just init for creat files to show which version
 static ssize_t prjVersion_read_proc(struct file *file, char __user *buf,

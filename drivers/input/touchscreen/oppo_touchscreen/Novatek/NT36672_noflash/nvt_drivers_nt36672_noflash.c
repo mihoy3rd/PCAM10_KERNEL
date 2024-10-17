@@ -431,7 +431,7 @@ return:
 *******************************************************/
 static int32_t nvt_read_pid_noflash(struct chip_data_nt36672 *chip_info)
 {
-        uint8_t buf[4] = {0};
+        uint8_t buf[3] = {0};
         int32_t ret = 0;
 
         //---set xdata index to EVENT BUF ADDR---
@@ -1177,7 +1177,7 @@ static int nvt_ftm_process(void *chip_data)
     int ret = -1;
     struct chip_data_nt36672 *chip_info = (struct chip_data_nt36672 *)chip_data;
     struct touchpanel_data *ts = spi_get_drvdata(chip_info->s_client);
-    //const struct firmware *fw = NULL;
+    const struct firmware *fw = NULL;
 
     TPD_INFO("%s is called!\n", __func__);
 
@@ -1215,13 +1215,11 @@ static int nvt_ftm_process(void *chip_data)
     }
     ret = nvt_get_chip_info(chip_info);
     if (!ret) {
-    /*
-        ret = request_firmware(&fw, ts->panel_data.fw_name, ts->dev);
-        if (ret != 0) {
+	    ret = request_firmware(&fw, ts->panel_data.fw_name, ts->dev);
+	    if (ret != 0) {
             TPD_INFO("%s : request test firmware failed! ret = %d\n", __func__, ret);
         }
-    */
-        ret = nvt_fw_update(chip_info, NULL, 0);
+        ret = nvt_fw_update(chip_info, fw, 0);
         if(ret > 0) {
                 TPD_INFO("%s fw update failed!\n", __func__);
         } else {
@@ -1346,43 +1344,6 @@ static u8 nvt_trigger_reason(void *chip_data, int gesture_enable, int is_suspend
     return IRQ_TOUCH;
 }
 
-#if POINT_DATA_CHECKSUM
-static int32_t nvt_ts_point_data_checksum(uint8_t *buf, uint8_t length)
-{
-    uint8_t checksum = 0;
-    int32_t i = 0;
-
-    // Generate checksum
-    for (i = 0; i < length-1; i++) {
-        checksum += buf[i+1];
-    }
-    checksum = (~checksum + 1);
-
-    // Compare ckecksum and dump fail data
-    if (checksum != buf[length]) {
-        TPD_INFO("i2c/spi packet checksum not match. (point_data[%d]=0x%02X, checksum=0x%02X)\n",
-                length, buf[length], checksum);
-
-        for (i = 0; i < 10; i++) {
-            TPD_INFO("%02X %02X %02X %02X %02X %02X\n",
-                    buf[1+i*6], buf[2+i*6], buf[3+i*6], buf[4+i*6], buf[5+i*6], buf[6+i*6]);
-        }
-
-        for (i = 0; i < (length - 60); i++) {
-            TPD_INFO("%02X ", buf[1+60+i]);
-        }
-        if (buf[length] == 0x40) {
-            TPD_INFO("Checksum as release points', ignore fail.");
-            return 0;
-        } else {
-            return -1;
-        }
-    }
-
-    return 0;
-}
-#endif /* POINT_DATA_CHECKSUM */
-
 static int nvt_get_touch_points(void *chip_data, struct point_info *points, int max_num)
 {
     int obj_attention = 0;
@@ -1410,13 +1371,6 @@ static int nvt_get_touch_points(void *chip_data, struct point_info *points, int 
                 nvt_reset(chip_info);
                 return -1;
         }
-
-#if POINT_DATA_CHECKSUM
-    ret = nvt_ts_point_data_checksum(point_data, POINT_DATA_CHECKSUM_LEN);
-    if (ret) {
-        return -1;
-    }
-#endif /* POINT_DATA_CHECKSUM */
 
     for(i = 0; i < max_num; i++) {
         position = 1 + 6 * i;
@@ -1693,7 +1647,7 @@ static int nvt_reset(void *chip_data)
     mutex_lock(&chip_info->mutex_testing);
 
     if(!ts->fw_update_app_support || chip_info->probe_done){
-        if (chip_info->g_fw == NULL && !is_oem_unlocked()) {
+        if (chip_info->g_fw == NULL) {
             TPD_INFO("%s Request TP firmware.\n", __func__);
             if(ts->fw_update_app_support) {
                 ret = request_firmware_select(&chip_info->g_fw, chip_info->fw_name, chip_info->dev);
@@ -2423,9 +2377,9 @@ static fw_update_state nvt_fw_update(void *chip_data, const struct firmware *fw,
     }
 */
 #ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
-    if ((ts->boot_mode != RECOVERY_BOOT)  && !is_oem_unlocked())
+    if (ts->boot_mode != RECOVERY_BOOT)
 #else
-    if ((ts->boot_mode != MSM_BOOT_MODE__RECOVERY)  && !is_oem_unlocked())
+    if (ts->boot_mode != MSM_BOOT_MODE__RECOVERY)
 #endif
     {
         if(ts->fw_update_app_support && force == 1) {
@@ -4006,13 +3960,7 @@ static int nvt_tp_probe(struct spi_device *client)
         if(ret > 0) {
             TPD_INFO("fw update failed!\n");
         }
-    } else if (is_oem_unlocked()) {
-        TPD_INFO("It's oem unlock, no-flash download fw by headfile\n");
-        ret = nvt_fw_update(chip_info, NULL, 0);
-        if(ret > 0) {
-            TPD_INFO("fw update failed!\n");
-        }
-     }
+    }
 
     chip_info->probe_done = 1;
     TPD_INFO("%s, probe normal end\n", __func__);
@@ -4109,8 +4057,6 @@ static int32_t __init nvt_driver_init(void)
     TPD_INFO("%s is called\n", __func__);
         if (!tp_judge_ic_match(TPD_DEVICE))
             return -1;
-
-    get_oem_verified_boot_state();
 
     if (spi_register_driver(&tp_spi_driver)!= 0) {
         TPD_INFO("unable to add spi driver.\n");

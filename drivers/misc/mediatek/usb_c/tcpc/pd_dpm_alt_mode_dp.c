@@ -60,7 +60,7 @@ static inline bool dp_update_dp_connected_one(struct pd_port *pd_port,
 
 /*
  * If we support ufp_d & dfp_d both, we should decide to use which role.
- */
+*/
 
 static inline bool dp_update_dp_connected_both(struct pd_port *pd_port,
 			uint32_t dp_connected, uint32_t dp_local_connected)
@@ -118,7 +118,7 @@ int dp_dfp_u_notify_pe_ready(
 {
 	struct dp_data *dp_data = pd_get_dp_data(pd_port);
 
-	DPM_DBG("%s\r\n", __func__);
+	DPM_DBG("dp_dfp_u_notify_pe_ready\r\n");
 
 	if (pd_port->data_role != PD_ROLE_DFP)
 		return 0;
@@ -439,15 +439,15 @@ bool dp_dfp_u_notify_enter_mode(struct pd_port *pd_port,
 
 #ifdef CONFIG_USB_PD_DBG_DP_DFP_D_AUTO_UPDATE
 	/*
-	 * For Real Product,
-	 * DFP_U should not send status_update until USB status is changed
-	 *	From : "USB Mode, USB Configration"
-	 *	To : "DisplayPlay Mode, USB Configration"
-	 *
-	 * After USB status is changed,
-	 * please call following function to continue DFP_U flow.
-	 * tcpm_dpm_dp_status_update(tcpc, 0, 0, NULL)
-	 */
+	* For Real Product,
+	* DFP_U should not send status_update until USB status is changed
+	*	From : "USB Mode, USB Configration"
+	*	To : "DisplayPlay Mode, USB Configration"
+	*
+	* After USB status is changed,
+	* please call following function to continue DFP_U flow.
+	* tcpm_dpm_dp_status_update(tcpc, 0, 0, NULL)
+	*/
 
 	pd_put_tcp_vdm_event(pd_port, TCP_DPM_EVT_DP_STATUS_UPDATE);
 #endif	/* CONFIG_USB_PD_DBG_DP_DFP_D_AUTO_UPDATE */
@@ -895,10 +895,11 @@ static inline void dp_ufp_u_send_dp_attention(struct pd_port *pd_port)
 	case DP_UFP_U_OPERATION:
 		svid_data = dpm_get_svdm_svid_data(
 				pd_port, USB_SID_DISPLAYPORT);
-		PD_BUG_ON(svid_data == NULL);
-
-		pd_send_vdm_dp_attention(pd_port, TCPC_TX_SOP,
-			svid_data->active_mode, dp_data->local_status);
+		if (svid_data == NULL)
+			PD_BUG_ON(1);
+		else
+			pd_send_vdm_dp_attention(pd_port, TCPC_TX_SOP,
+				svid_data->active_mode, dp_data->local_status);
 		break;
 
 	default:

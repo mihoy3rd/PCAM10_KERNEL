@@ -408,11 +408,9 @@ struct chip_data_hx83112b_nf {
     const struct firmware    *g_fw_entry;
     uint8_t *tmp_data;
 #endif
-    struct monitor_data     *monitor_data;
     uint8_t     touch_direction;    //show touchpanel current direction
     bool        using_headfile;
     bool        is_in_noise_modeteset;
-    bool        health_monitor_support;
 };
 
 /*********PART4:ZERO FLASH**********************/

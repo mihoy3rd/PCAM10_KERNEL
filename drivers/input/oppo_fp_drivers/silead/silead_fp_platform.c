@@ -23,7 +23,6 @@
  **  Ran.Chen                 2018/08/14                  modify for set reset time to 4ms when power on
  **  Ran.Chen                 2018/11/26                  modify for SDM855
  **  Ran.Chen                 2018/11/27                  remove define MSM_DRM_ONSCREENFINGERPRINT_EVENT
- **  zoulian                  2020/01/02                  fix type of fb_event data to uint
  ***********************************************************************************/
 #include <linux/init.h>
 #include <linux/module.h>
@@ -73,8 +72,6 @@
 
 #include "silead_fp.h"
 #include "../include/oppo_fp_common.h"
-
-#include <soc/oppo/boot_mode.h>
 
 #define FP_DEV_NAME "silead_fp"
 #define FP_DEV_MAJOR 0	/* assigned */
@@ -197,6 +194,20 @@ static struct fp_dev_init_t silfp_dev_init_d = {
 	KEY_VOLUMEUP
 	KEY_VOLUMEDOWN */
 
+typedef struct _key_map {
+    int key_orig;
+    int key_new;
+} nav_keymap_t;
+
+static nav_keymap_t keymap[] = {
+    { NAV_KEY_UP,       KEY_UP,         }, /* KEY_RESERVED, ignore this key */
+    { NAV_KEY_DOWN,     KEY_DOWN,       },
+    { NAV_KEY_RIGHT,    KEY_RIGHT,      },
+    { NAV_KEY_LEFT,     KEY_LEFT,       },
+    { NAV_KEY_CLICK,    KEY_HOMEPAGE,   },
+    { NAV_KEY_DCLICK,   KEY_HOMEPAGE,   },
+    { NAV_KEY_LONGPRESS,KEY_HOMEPAGE,   },
+};
 
 static LIST_HEAD(device_list);
 static DEFINE_MUTEX(device_list_lock);
@@ -490,45 +501,37 @@ static int silfp_fb_callback(struct notifier_block *notif,
                              unsigned long event, void *data)
 {
     struct silfp_data *fp_dev = container_of(notif, struct silfp_data, notif);
-#if defined(CONFIG_DRM_MSM)
     struct msm_drm_notifier *evdata = data;
-#elif defined(CONFIG_FB)
-    struct fb_event *evdata = data;
-#endif
     unsigned int blank = 0;
-    uint8_t op_mode = 0x0;
     int retval = 0;
-    LOG_MSG_DEBUG(INFO_LOG, "[%s] silfp_fb_callback\n", __func__);
+	LOG_MSG_DEBUG(INFO_LOG, "[%s] silfp_fb_callback\n", __func__);
+	blank = *(int *)evdata->data;
 
-    if (!evdata || !evdata->data ||!fp_dev) {
-        LOG_MSG_DEBUG(INFO_LOG, "[%s] invalid structure", __func__);
-        return 0;
-    }
+    if (event == MSM_DRM_ONSCREENFINGERPRINT_EVENT ) {
+		LOG_MSG_DEBUG(INFO_LOG, "[%s] UI ready enter\n", __func__);
 
-    if (event == MSM_DRM_ONSCREENFINGERPRINT_EVENT) {
-        op_mode = *(uint8_t *)evdata->data;
-        switch (op_mode) {
-        case 0:
+		switch (blank) {
+		case 0:
             LOG_MSG_DEBUG(INFO_LOG, "[%s] UI disappear\n", __func__);
             //silfp_netlink_send(fp_dev, SIFP_NETLINK_UI_OFF);//SIFP_NETLINK_UI_OFF donothing now
             break;
-        case 1:
+		case 1:
             LOG_MSG_DEBUG(INFO_LOG, "[%s] UI ready \n", __func__);
             silfp_netlink_send(fp_dev, SIFP_NETLINK_UI_READY);
             break;
-        default:
+		default:
             LOG_MSG_DEBUG(INFO_LOG, "[%s] Unknown MSM_DRM_ONSCREENFINGERPRINT_EVENT\n", __func__);
             break;
-        }
-        return retval;
+		}
+		return retval;
     }
 
     /* If we aren't interested in this event, skip it immediately ... */
     if (event != FB_EVENT_BLANK /* FB_EARLY_EVENT_BLANK */) {
         return 0;
-    }
+   	}
 
-    blank = *(int *)evdata->data;
+    LOG_MSG_DEBUG(INFO_LOG, "[%s] enter, blank=0x%x\n", __func__, blank);
 
     switch (blank) {
     case FB_BLANK_UNBLANK:
@@ -629,11 +632,7 @@ int silfp_opticalfp_irq_handler(struct fp_underscreen_info* tp_info)
 {
 
     fp_tpinfo = *tp_info;
-    LOG_MSG_DEBUG(INFO_LOG, "fp_tpinfo %d, %d, %d, %d \n" ,
-    fp_tpinfo.touch_state, fp_tpinfo.area_rate, fp_tpinfo.x, fp_tpinfo.y);
 
-    //complete(&fp_dev->done);
-    LOG_MSG_DEBUG(INFO_LOG, "[%s] touchmode = %d, lasttouchmode =%d \n", __func__, tp_info->touch_state, lasttouchmode);
     if(tp_info->touch_state== lasttouchmode){
         return IRQ_HANDLED;
     }
@@ -656,6 +655,83 @@ static void silfp_work_func(struct work_struct *work)
 
     LOG_MSG_DEBUG(INFO_LOG, "[%s] running\n", __func__);
     silfp_netlink_send(fp_dev, SIFP_NETLINK_IRQ);
+}
+
+/* -------------------------------------------------------------------- */
+/*                          key event functions                         */
+/* -------------------------------------------------------------------- */
+static int silfp_keyevent(struct silfp_data	*fp_dev, struct fp_dev_key_t *pkey)
+{
+    int ret = -EFAULT;
+    int i;
+
+    //LOG_MSG_DEBUG(INFO_LOG, "[%s] key %d, flag %d\n", __func__,pkey->value,pkey->flag);
+    if (!fp_dev->input) {
+        LOG_MSG_DEBUG(INFO_LOG, "[%s] invalid input device\n",__func__);
+        return -1;
+    }
+    if ( IS_KEY_VALID(pkey->value) ) {
+        /* Translate Click Down/Up key to Click key. */
+        switch( pkey->value ) {
+        case NAV_KEY_CLICK_DOWN:
+            pkey->value = NAV_KEY_CLICK;
+            pkey->flag = NAV_KEY_FLAG_DOWN;
+            break;
+        case NAV_KEY_CLICK_UP:
+            pkey->value = NAV_KEY_CLICK;
+            pkey->flag = NAV_KEY_FLAG_UP;
+            break;
+        default:
+            break;
+        }
+
+        /* Check the custom define keymap */
+        if ( fp_dev->keymap_cust.k[pkey->value - NAV_KEY_START] ) {
+            LOG_MSG_DEBUG(INFO_LOG, "[%s] custom-key %d\n", __func__,fp_dev->keymap_cust.k[pkey->value - NAV_KEY_START]);
+            if ( KEY_RESERVED != fp_dev->keymap_cust.k[pkey->value - NAV_KEY_START] ) {
+                if ( NAV_KEY_FLAG_CLICK == pkey->flag ) {
+                    input_report_key(fp_dev->input, fp_dev->keymap_cust.k[pkey->value - NAV_KEY_START], NAV_KEY_FLAG_DOWN);
+                    input_sync(fp_dev->input);
+                    input_report_key(fp_dev->input, fp_dev->keymap_cust.k[pkey->value - NAV_KEY_START], NAV_KEY_FLAG_UP);
+                    input_sync(fp_dev->input);
+                } else {
+                    input_report_key(fp_dev->input, fp_dev->keymap_cust.k[pkey->value - NAV_KEY_START], pkey->flag);
+                    input_sync(fp_dev->input);
+                }
+            } else {
+                // Here means this key is not set, simply ignore it.
+            }
+            ret = 0;
+        }
+    }
+
+    for ( i = 0; ret && i < ARRAY_SIZE(keymap); i++ ) {
+        if ( keymap[i].key_orig == pkey->value ) {
+            LOG_MSG_DEBUG(INFO_LOG, "[%s] key %d\n", __func__,keymap[i].key_new);
+            if ( KEY_RESERVED != keymap[i].key_new ) {
+                if ( NAV_KEY_FLAG_CLICK == pkey->flag ) {
+                    input_report_key(fp_dev->input, keymap[i].key_new, NAV_KEY_FLAG_DOWN);
+                    input_sync(fp_dev->input);
+                    input_report_key(fp_dev->input, keymap[i].key_new, NAV_KEY_FLAG_UP);
+                    input_sync(fp_dev->input);
+                } else {
+                    input_report_key(fp_dev->input, keymap[i].key_new, pkey->flag);
+                    input_sync(fp_dev->input);
+                }
+            } else {
+                // Here means this key is not set, simply ignore it.
+            }
+            ret = 0;
+        }
+    }
+
+    if ( ret ) {
+        LOG_MSG_DEBUG(INFO_LOG, "[%s] unregister custom-key %d\n", __func__,pkey->value);
+        input_report_key(fp_dev->input, pkey->value, pkey->flag);
+        input_sync(fp_dev->input);
+        ret = 0;
+    }
+    return ret;
 }
 
 /* -------------------------------------------------------------------- */
@@ -741,6 +817,65 @@ static void silfp_proc_deinit(struct silfp_data *fp_dev)
 /* -------------------------------------------------------------------- */
 /*                         init/deinit functions                        */
 /* -------------------------------------------------------------------- */
+static int silfp_input_init(struct silfp_data *fp_dev)
+{
+    int i, status = 0;
+
+    /*register device within input system.*/
+    fp_dev->input = input_allocate_device();
+    if (!fp_dev->input) {
+        LOG_MSG_DEBUG(ERR_LOG, "[%s] input_allocate_device() fail!\n", __func__);
+        status = -ENOMEM;
+        return status;
+    }
+
+    __set_bit(EV_KEY, fp_dev->input->evbit);
+    //__set_bit(KEY_Q, fp_dev->input->keybit); // it will cause Android think this is a physical keyboard.
+    __set_bit(KEY_HOME, fp_dev->input->keybit);
+    __set_bit(KEY_HOMEPAGE, fp_dev->input->keybit);
+
+    __set_bit(KEY_MENU, fp_dev->input->keybit);
+    __set_bit(KEY_BACK, fp_dev->input->keybit);
+    __set_bit(KEY_CAMERA, fp_dev->input->keybit);
+
+    for ( i = 0; i < ARRAY_SIZE(keymap); i++ ) {
+        if ( keymap[i].key_new != KEY_RESERVED ) {
+            __set_bit(keymap[i].key_new, fp_dev->input->keybit);
+        }
+    }
+
+    for ( i = 0; i < ARRAY_SIZE(fp_dev->keymap_cust.k); i++ ) {
+        if (fp_dev->keymap_cust.k[i] && (fp_dev->keymap_cust.k[i] != KEY_RESERVED)) {
+            __set_bit(fp_dev->keymap_cust.k[i], fp_dev->input->keybit);
+        }
+    }
+
+    fp_dev->input->name = FP_INPUT_NAME;
+    if (input_register_device(fp_dev->input)) {
+        LOG_MSG_DEBUG(ERR_LOG, "[%s] input_register_device() fail!\n", __func__);
+        input_free_device(fp_dev->input);
+        fp_dev->input = NULL;
+        status = -ENODEV;
+    }
+    return status;
+}
+
+static int silfp_input_deinit(struct silfp_data *fp_dev)
+{
+    if (fp_dev->input) {
+        input_unregister_device(fp_dev->input);
+        fp_dev->input = NULL;
+    }
+    return 0;
+}
+
+static int silfp_input_reinit(struct silfp_data *fp_dev)
+{
+    if (fp_dev->input) {
+        silfp_input_deinit(fp_dev);
+    }
+    return silfp_input_init(fp_dev);
+}
 
 static int silfp_init(struct silfp_data *fp_dev)
 {
@@ -767,17 +902,11 @@ static int silfp_init(struct silfp_data *fp_dev)
     /* register screen on/off callback */
     fp_dev->notif.notifier_call = silfp_fb_callback;
     LOG_MSG_DEBUG(INFO_LOG, "[%s] msm_drm_register_client\n", __func__);
-#if defined(CONFIG_DRM_MSM)
+    //fb_register_client(&fp_dev->notif);
     status = msm_drm_register_client(&fp_dev->notif);
     if (status == -1) {
         return status;
     }
-#elif defined(CONFIG_FB)
-    status = fb_register_client(&fp_dev->notif);
-    if (status == -1) {
-        return status;
-    }
-#endif
 #endif /* CONFIG_HAS_EARLYSUSPEND */
 
     atomic_set(&fp_dev->spionoff_count,0);
@@ -807,6 +936,7 @@ static int silfp_resource_deinit(struct silfp_data *fp_dev)
             fp_dev->int_port = 0;
             fp_dev->rst_port = 0;
 
+            silfp_input_deinit(fp_dev);
             silfp_power_deinit(fp_dev);
 #ifdef PROC_NODE
             silfp_proc_deinit(fp_dev);
@@ -857,6 +987,7 @@ silfp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     int			err = 0;
     int			retval = 0;
     struct silfp_data	*fp_dev;
+    struct fp_dev_key_t key;
 
     /* Check type and command number */
     if (_IOC_TYPE(cmd) != SIFP_IOC_MAGIC)
@@ -946,6 +1077,15 @@ silfp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         retval = __put_user((char)silfp_irq_status(fp_dev), (__u8 __user *)arg);
         break;
 
+    case SIFP_IOC_KEY_EVENT:
+        if (copy_from_user(&key, (struct fp_dev_key_t *)arg, sizeof(struct fp_dev_key_t))) {
+            LOG_MSG_DEBUG(ERR_LOG, "[%s] copy key fail?\n",__func__);
+            retval = -EFAULT;
+        } else {
+            retval = silfp_keyevent(fp_dev,&key);
+        }
+        break;
+
     case SIFP_IOC_SCR_STATUS:
         if (arg) {
             LOG_MSG_DEBUG(INFO_LOG, "[IOC_SCR_STATUS] put v = %d\n",(u8)(!fp_dev->scr_off));
@@ -959,6 +1099,22 @@ silfp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     case SIFP_IOC_GET_VER:
         if ( copy_to_user((void __user *)arg, (void *)FP_DEV_VERSION, sizeof(char)*7)) {
             LOG_MSG_DEBUG(ERR_LOG, "[IOC_GET_VER] copy_to fail\n");
+            retval = -EFAULT;
+        }
+        break;
+
+    case SIFP_IOC_SET_KMAP:
+        if (!arg) {
+            retval = -EFAULT;
+            break;
+        }
+        if (copy_from_user(&fp_dev->keymap_cust.k, (void __user *)arg, sizeof(struct fp_dev_kmap_t))) {
+            LOG_MSG_DEBUG(ERR_LOG, "[IOC_SET_KMAP] copy_from fail\n");
+            retval = -EFAULT;
+            break;
+        }
+
+        if (silfp_input_reinit(fp_dev)) {
             retval = -EFAULT;
         }
         break;

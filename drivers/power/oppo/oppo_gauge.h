@@ -21,50 +21,36 @@
 #include <linux/power_supply.h>
 
 struct oppo_gauge_chip {
-	struct i2c_client *client;
-	struct device *dev;
-	struct oppo_gauge_operations *gauge_ops;
-	struct power_supply *batt_psy;
-	int device_type;
-	int device_type_for_vooc;
+        struct i2c_client            *client;
+        struct device                *dev;
+        struct oppo_gauge_operations *gauge_ops;
+        struct power_supply          *batt_psy;
+        int                          device_type;
+        int                          device_type_for_vooc;
 };
 
 struct oppo_gauge_operations {
-	int (*get_battery_mvolts)(void);
-	int (*get_battery_fc)(void);
-	int (*get_battery_qm)(void);
-	int (*get_battery_pd)(void);
-	int (*get_battery_rcu)(void);
-	int (*get_battery_rcf)(void);
-	int (*get_battery_fcu)(void);
-	int (*get_battery_fcf)(void);
-	int (*get_battery_sou)(void);
-	int (*get_battery_do0)(void);
-	int (*get_battery_doe)(void);
-	int (*get_battery_trm)(void);
-	int (*get_battery_pc)(void);
-	int (*get_battery_qs)(void);
-	int (*get_battery_temperature)(void);
-	int (*get_batt_remaining_capacity)(void);
-	int (*get_battery_soc)(void);
-	int (*get_average_current)(void);
-	int (*get_battery_fcc)(void);
-	int (*get_battery_cc)(void);
-	int (*get_battery_soh)(void);
-	bool (*get_battery_authenticate)(void);
-	bool (*get_battery_hmac)(void);
-	void (*set_battery_full)(bool);
-	int (*get_prev_battery_mvolts) (void);
-	int (*get_prev_battery_temperature) (void);
-	int (*get_prev_battery_soc) (void);
-	int (*get_prev_average_current) (void);
-	int (*get_prev_batt_remaining_capacity)(void);
-	int (*get_battery_mvolts_2cell_max) (void);
-	int (*get_battery_mvolts_2cell_min) (void);
-	int (*get_prev_battery_mvolts_2cell_max) (void);
-	int (*get_prev_battery_mvolts_2cell_min) (void);
-	int (*update_battery_dod0) (void);
-	int (*update_soc_smooth_parameter) (void);
+        int (*get_battery_mvolts)(void);
+        int (*get_battery_temperature)(void);
+        int (*get_batt_remaining_capacity)(void);
+        int (*get_battery_soc)(void);
+        int (*get_average_current)(void);
+        int (*get_battery_fcc)(void);
+        int (*get_battery_cc)(void);
+        int (*get_battery_soh)(void);
+        bool (*get_battery_authenticate)(void);
+        void (*set_battery_full)(bool);
+        int (*get_prev_battery_mvolts) (void);
+        int (*get_prev_battery_temperature) (void);
+        int (*get_prev_battery_soc) (void);
+        int (*get_prev_average_current) (void);
+        int (*get_prev_batt_remaining_capacity)(void);
+        int (*get_battery_mvolts_2cell_max) (void);
+        int (*get_battery_mvolts_2cell_min) (void);
+        int (*get_prev_battery_mvolts_2cell_max) (void);
+        int (*get_prev_battery_mvolts_2cell_min) (void);
+		int (*update_battery_dod0) (void);
+		int (*update_soc_smooth_parameter) (void);
 };
 
 /****************************************
@@ -77,19 +63,6 @@ struct oppo_gauge_operations {
 void oppo_gauge_init(struct oppo_gauge_chip *chip);
 
 int oppo_gauge_get_batt_mvolts(void);
-int oppo_gauge_get_batt_fc(void);
-int oppo_gauge_get_batt_qm(void);
-int oppo_gauge_get_batt_pd(void);
-int oppo_gauge_get_batt_rcu(void);
-int oppo_gauge_get_batt_rcf(void);
-int oppo_gauge_get_batt_fcu(void);
-int oppo_gauge_get_batt_fcf(void);
-int oppo_gauge_get_batt_sou(void);
-int oppo_gauge_get_batt_do0(void);
-int oppo_gauge_get_batt_doe(void);
-int oppo_gauge_get_batt_trm(void);
-int oppo_gauge_get_batt_pc(void);
-int oppo_gauge_get_batt_qs(void);
 int oppo_gauge_get_batt_mvolts_2cell_max(void);
 int oppo_gauge_get_batt_mvolts_2cell_min(void);
 
@@ -104,7 +77,6 @@ int oppo_gauge_get_batt_fcc(void);
 
 int oppo_gauge_get_batt_cc(void);
 int oppo_gauge_get_batt_soh(void);
-bool oppo_gauge_get_batt_hmac(void);
 bool oppo_gauge_get_batt_authenticate(void);
 void oppo_gauge_set_batt_full(bool);
 bool oppo_gauge_check_chip_is_null(void);
@@ -121,8 +93,8 @@ int oppo_gauge_update_soc_smooth_parameter(void);
 
 #if defined(CONFIG_OPPO_CHARGER_MTK6763) || defined(CONFIG_OPPO_CHARGER_MTK6771)
 extern int oppo_fuelgauged_init_flag;
-extern struct power_supply *oppo_batt_psy;
-extern struct power_supply *oppo_usb_psy;
-extern struct power_supply *oppo_ac_psy;
+extern struct power_supply	*oppo_batt_psy;
+extern struct power_supply	*oppo_usb_psy;
+extern struct power_supply	*oppo_ac_psy;
 #endif /* CONFIG_OPPO_CHARGER_MTK6763 */
 #endif /* _OPPO_GAUGE_H */

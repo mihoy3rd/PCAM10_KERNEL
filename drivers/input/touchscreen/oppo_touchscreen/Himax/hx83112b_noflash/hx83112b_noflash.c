@@ -1777,7 +1777,7 @@ int hx83112b_nf_mcu_0f_operation_dirly(void)
 
     TPD_DETAIL("%s, Entering \n", __func__);
     TPD_DETAIL("file name = %s\n", hx83112b_nf_pri_ts->panel_data.fw_name);
-    if (hx83112b_nf_chip_info->g_fw_entry == NULL && !is_oem_unlocked()) {
+    if (hx83112b_nf_chip_info->g_fw_entry == NULL) {
         TPD_INFO("Request TP firmware.\n");
         if(hx83112b_nf_pri_ts->fw_update_app_support) {
             err = request_firmware_select (&hx83112b_nf_chip_info->g_fw_entry, hx83112b_nf_pri_ts->panel_data.fw_name, hx83112b_nf_pri_ts->dev);
@@ -1851,9 +1851,9 @@ void hx83112b_nf_mcu_0f_operation(struct work_struct *work)
     TPD_INFO("%s, Entering \n", __func__);
 
 #ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
-    if (hx83112b_nf_pri_ts->boot_mode != RECOVERY_BOOT && !is_oem_unlocked())
+    if (hx83112b_nf_pri_ts->boot_mode != RECOVERY_BOOT)
 #else
-    if (hx83112b_nf_pri_ts->boot_mode != MSM_BOOT_MODE__RECOVERY && !is_oem_unlocked())
+    if (hx83112b_nf_pri_ts->boot_mode != MSM_BOOT_MODE__RECOVERY)
 #endif
     {
         TPD_INFO("file name = %s\n", hx83112b_nf_pri_ts->panel_data.fw_name);
@@ -2624,18 +2624,12 @@ void hx83112b_nf_esd_hw_reset(struct chip_data_hx83112b_nf * chip_info)
 
         TPD_DETAIL("It will update fw after esd event in zero flash mode!\n");
 
-        if (load_fw_times < 10 && chip_info->health_monitor_support) {
-            chip_info->monitor_data->fw_download_retry++;
-        }
         load_fw_times--;
         hx83112b_nf_core_fp.fp_0f_operation_dirly();
         ret = hx83112b_nf_core_fp.fp_reload_disable(0);//success return 1, fail return 0
     } while (!ret && load_fw_times > 0);
 
     if (!load_fw_times) {
-        if (chip_info->health_monitor_support) {
-            chip_info->monitor_data->fw_download_fail++;
-        }
         TPD_INFO("%s: load_fw_times over 10 times\n", __func__);
     }
 
@@ -2905,8 +2899,7 @@ int hx83112b_nf_get_rawdata(struct chip_data_hx83112b_nf *chip_info, uint32_t *R
         retry = 0;
     }
 
-    //tmp_rawdata = kzalloc(sizeof(uint8_t)*(datalen*2),GFP_KERNEL);
-    tmp_rawdata = kzalloc(sizeof(uint8_t)*(total_size + 8),GFP_KERNEL);
+    tmp_rawdata = kzalloc(sizeof(uint8_t)*(datalen*2),GFP_KERNEL);
     if (!tmp_rawdata) {
         return RESULT_ERR;
     }
@@ -2942,8 +2935,7 @@ int hx83112b_nf_get_rawdata(struct chip_data_hx83112b_nf *chip_info, uint32_t *R
 
 //
         //3 Check Checksum
-        //for (i = 2; i < datalen * 2 + 4; i = i + 2) {
-        for (i = 2; i < total_size; i = i + 2) {
+        for (i = 2; i < datalen * 2 + 4; i = i + 2) {
             checksum_cal += tmp_rawdata[i + 1] * 256 + tmp_rawdata[i];
         }
 
@@ -3870,7 +3862,7 @@ static void hx83112b_nf_black_screen_test(void *chip_data, char *message)
         snprintf(buf, 128, "Open log file '%s' failed.\n", data_buf);
         TPD_INFO("%s", buf);
         sprintf(message, "%s\n", buf);
-//        error_num++;
+        error_num++;
     }
 
     //6. LPWUG RAWDATA
@@ -5554,18 +5546,12 @@ static int hx83112b_nf_reset(void *chip_data)
     disable_irq_nosync(chip_info->hx_irq);
 
     do {
-        if (load_fw_times < 10 && chip_info->health_monitor_support) {
-            chip_info->monitor_data->fw_download_retry++;
-        }
         load_fw_times--;
         hx83112b_nf_core_fp.fp_0f_operation_dirly();
         ret = hx83112b_nf_core_fp.fp_reload_disable(0);//success return 1, fail return 0
     } while (!ret && load_fw_times > 0);
 
     if (!load_fw_times) {
-        if (chip_info->health_monitor_support) {
-            chip_info->monitor_data->fw_download_fail++;
-        }
         TPD_INFO("%s: load_fw_times over 10 times\n", __func__);
     }
     hx83112b_nf_sense_on(0x00);
@@ -6819,7 +6805,7 @@ void hx83112b_nf_set_noise_modetest(void *chip_data, bool enable)
             tmp_addr[3] = 0x10;
             tmp_addr[2] = 0x00;
             tmp_addr[1] = 0x7F;
-            tmp_addr[0] = 0xF4;
+            tmp_addr[0] = 0xE0;
             tmp_data[3] = 0xA5;
             tmp_data[2] = 0x5A;
             tmp_data[1] = 0xA5;
@@ -6847,7 +6833,7 @@ void hx83112b_nf_set_noise_modetest(void *chip_data, bool enable)
             tmp_addr[3] = 0x10;
             tmp_addr[2] = 0x00;
             tmp_addr[1] = 0x7F;
-            tmp_addr[0] = 0xF4;
+            tmp_addr[0] = 0xE0;
             tmp_data[3] = 0x00;
             tmp_data[2] = 0x00;
             tmp_data[1] = 0x00;
@@ -7010,10 +6996,6 @@ static int hx83112b_nf_tp_probe(struct spi_device *spi)
         TPD_INFO("Himax chip doesn NOT EXIST");
         goto err_register_driver;
     }
-    chip_info->health_monitor_support = ts->health_monitor_support;
-    if (chip_info->health_monitor_support) {
-        chip_info->monitor_data = &ts->monitor_data;
-    }
 #ifdef HX_ZERO_FLASH
     chip_info->p_firmware_headfile = &ts->panel_data.firmware_headfile;
     hx83112b_nf_auto_update_flag = true;
@@ -7052,10 +7034,6 @@ static int hx83112b_nf_tp_probe(struct spi_device *spi)
         enable_irq(chip_info->hx_irq);
         TPD_INFO("In Recovery mode, no-flash download fw by headfile\n");
         queue_delayed_work(chip_info->himax_0f_update_wq, &chip_info->work_0f_update, msecs_to_jiffies(500));
-    } else if (is_oem_unlocked()) {
-        enable_irq(chip_info->hx_irq);
-        TPD_INFO("It's oem unlocked, download fw in probe\n");
-        queue_delayed_work(chip_info->himax_0f_update_wq, &chip_info->work_0f_update, msecs_to_jiffies(5000));
     } else {
         //disable_irq_nosync(chip_info->hx_irq);
     }
@@ -7171,7 +7149,6 @@ static int __init hx83112b_nf_driver_init(void)
     }
 
     hx83112b_nf_get_lcd_vendor();
-    get_oem_verified_boot_state();
 
     status = spi_register_driver(&hx83112b_nf_common_driver);
     if (status < 0) {

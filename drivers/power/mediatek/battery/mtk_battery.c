@@ -1623,38 +1623,6 @@ void fg_ocv_query_soc(int ocv)
 		__func__, ocv);
 }
 
-
-void fg_change_aging(int new_aging)
-{
-	new_aging = new_aging * UNIT_TRANS_100;
-
-	wakeup_fg_algo_cmd(
-		FG_INTR_KERNEL_CMD, FG_KERNEL_CMD_REQ_CHANGE_AGING_DATA,
-		new_aging);
-
-	bm_err("[%s] new_aging:%d\n", __func__, new_aging);
-}
-
-void fg_test_ag_cmd(int cmd)
-{
-	wakeup_fg_algo_cmd(
-		FG_INTR_KERNEL_CMD, FG_KERNEL_CMD_AG_LOG_TEST, cmd);
-
-	bm_err("[%s]FG_KERNEL_CMD_AG_LOG_TEST:%d\n",
-		__func__, cmd);
-}
-
-void fg_notify_aglog_latch_done(void)
-{
-	gm.ag_detect_err = 0;
-	wakeup_fg_algo_cmd(
-		FG_INTR_KERNEL_CMD, FG_KERNEL_CMD_AGLOG_LATCH_DONE, 0);
-
-	bm_err("[%s]FG_KERNEL_CMD_AGLOG_LATCH_DONE:%d\n",
-		__func__, gm.ag_detect_err);
-}
-
-
 void exec_BAT_EC(int cmd, int param)
 {
 	int i;
@@ -2562,36 +2530,6 @@ void exec_BAT_EC(int cmd, int param)
 				cmd, fg_cust_data.record_log);
 		}
 		break;
-	case 888:
-		{
-			fg_change_aging(param);
-			bm_err(
-				"exe_BAT_EC cmd %d,change aging to=%d\n",
-				cmd, param);
-		}
-		break;
-	case 889:
-		{
-			bm_err(
-				"exe_BAT_EC cmd %d,nofify latch done\n",
-				cmd);
-
-			fg_notify_aglog_latch_done();
-		}
-		break;
-	case 890:
-		{
-
-			bm_err(
-				"exe_BAT_EC cmd %d,FG_KERNEL_CMD_AG_LOG_TEST=%d\n",
-				cmd, param);
-
-			wakeup_fg_algo_cmd(
-				FG_INTR_KERNEL_CMD,
-				FG_KERNEL_CMD_AG_LOG_TEST, param);
-
-		}
-		break;
 
 	default:
 		bm_err(
@@ -2865,8 +2803,8 @@ static ssize_t store_FG_daemon_log_level(
 				val
 			);
 
-			gm.d_log_level = val;
-			gm.log_level = val;
+			gm.d_log_level = 0;
+			gm.log_level = 0;
 		}
 		if (val >= 7) {
 			gtimer_set_log_level(3);

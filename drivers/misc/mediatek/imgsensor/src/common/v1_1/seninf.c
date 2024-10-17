@@ -38,11 +38,6 @@
 #include "seninf.h"
 #include "kd_imgsensor_errcode.h"
 #include "imgsensor_ca.h"
-#ifdef VENDOR_EDIT
-/*Riqin.Wei@camera.driver, 2019/08/06/, add for improve 19531 mclk waveform*/
-#include <soc/oppo/oppo_project.h>
-#define SENINF_MAP_BASE_GPIO2 0x11E70000
-#endif
 
 #define SENINF_WR32(addr, data)    mt_reg_sync_writel(data, addr)
 #define SENINF_RD32(addr)          ioread32((void *)addr)
@@ -151,71 +146,6 @@ static MINT32 seninf_mmap(struct file *pFile, struct vm_area_struct *pVma)
 	/*PK_DBG("mmap: vm_pgoff(0x%lx),pfn(0x%x),phy(0x%lx),vm_start(0x%lx),vm_end(0x%lx),length(0x%lx)\n",
 	 *      pVma->vm_pgoff, pfn, pVma->vm_pgoff << PAGE_SHIFT, pVma->vm_start, pVma->vm_end, length);
 	 */
-	#ifdef VENDOR_EDIT
-	/*Riqin.Wei@camera.driver, 2019/08/06/, add for improve 19531 mclk waveform*/
-	if(is_project(OPPO_19531)) {
-	    switch (pfn) {
-	    case SENINF_MAP_BASE_REG:
-		if (length > SENINF_MAP_LENGTH_REG) {
-			PK_PR_ERR
-			    ("mmap range error :module(0x%x),length(0x%lx),SENINF_BASE_RANGE(0x%x)!\n",
-			     pfn, length, SENINF_MAP_LENGTH_REG);
-			return -EAGAIN;
-		}
-		break;
-	    case SENINF_MAP_BASE_ANA:
-		if (length > SENINF_MAP_LENGTH_ANA) {
-			PK_PR_ERR
-			    ("mmap range error :module(0x%x),length(0x%lx),MIPI_RX_RANGE(0x%x)!\n",
-			     pfn, length, SENINF_MAP_LENGTH_ANA);
-			return -EAGAIN;
-		}
-		break;
-	    case SENINF_MAP_BASE_GPIO:
-	    case SENINF_MAP_BASE_GPIO2:
-		if (length > SENINF_MAP_LENGTH_GPIO) {
-			PK_PR_ERR
-			    ("mmap range error :module(0x%x),length(0x%lx),GPIO_RX_RANGE(0x%x)!\n",
-			     pfn, length, SENINF_MAP_LENGTH_GPIO);
-			return -EAGAIN;
-		}
-		break;
-	    default:
-		PK_PR_ERR("Illegal starting HW addr for mmap!\n");
-		return -EAGAIN;
-	    }
-	} else {
-            switch (pfn) {
-            case SENINF_MAP_BASE_REG:
-                if (length > SENINF_MAP_LENGTH_REG) {
-                        PK_PR_ERR
-                            ("mmap range error :module(0x%x),length(0x%lx),SENINF_BASE_RANGE(0x%x)!\n",
-                             pfn, length, SENINF_MAP_LENGTH_REG);
-                        return -EAGAIN;
-                }
-                break;
-            case SENINF_MAP_BASE_ANA:
-                if (length > SENINF_MAP_LENGTH_ANA) {
-                        PK_PR_ERR
-                            ("mmap range error :module(0x%x),length(0x%lx),MIPI_RX_RANGE(0x%x)!\n",
-                             pfn, length, SENINF_MAP_LENGTH_ANA);
-                        return -EAGAIN;
-                }
-                break;
-            case SENINF_MAP_BASE_GPIO:
-                if (length > SENINF_MAP_LENGTH_GPIO) {
-                        PK_PR_ERR
-                            ("mmap range error :module(0x%x),length(0x%lx),GPIO_RX_RANGE(0x%x)!\n",
-                             pfn, length, SENINF_MAP_LENGTH_GPIO);
-                        return -EAGAIN;
-                }
-                break;
-            default:
-                PK_PR_ERR("Illegal starting HW addr for mmap!\n");
-                return -EAGAIN;
-            }
-        }
-	#else
 	switch (pfn) {
 	case SENINF_MAP_BASE_REG:
 		if (length > SENINF_MAP_LENGTH_REG) {
@@ -234,9 +164,6 @@ static MINT32 seninf_mmap(struct file *pFile, struct vm_area_struct *pVma)
 		}
 		break;
 	case SENINF_MAP_BASE_GPIO:
-#ifdef SENINF_MAP_BASE_GPIO2
-	case SENINF_MAP_BASE_GPIO2:
-#endif
 		if (length > SENINF_MAP_LENGTH_GPIO) {
 			PK_PR_ERR
 			    ("mmap range error :module(0x%x),length(0x%lx),GPIO_RX_RANGE(0x%x)!\n",
@@ -249,7 +176,6 @@ static MINT32 seninf_mmap(struct file *pFile, struct vm_area_struct *pVma)
 		return -EAGAIN;
 
 	}
-	#endif
 
 	if (remap_pfn_range
 	    (pVma, pVma->vm_start, pVma->vm_pgoff, pVma->vm_end - pVma->vm_start,

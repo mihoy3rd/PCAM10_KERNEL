@@ -107,12 +107,6 @@ struct test_header {
     unsigned int array_limitcbc_offset;
     unsigned int array_limitcbc_size;
 };
-struct hx_limit_data {
-    int item_size;
-    int rawdata_size;
-    char **item_name;
-    int **crtra_val;
-};
 
 struct syna_testdata{
     int TX_NUM;
@@ -143,8 +137,6 @@ struct himax_proc_operations {
     size_t (*himax_proc_FW_debug_read) (struct file *file, char *buff, size_t len, loff_t *pos);
     size_t (*himax_proc_reset_write) (struct file *file, const char *buff, size_t len, loff_t *pos);
     size_t (*himax_proc_sense_on_off_write) (struct file *file, const char *buff, size_t len, loff_t *pos);
-    size_t (*himax_proc_vendor_read)(struct file *file, char *buff, size_t len, loff_t *pos);
-    void (*fp_hx_limit_get)(struct touchpanel_data *ts, struct hx_limit_data *limit);
 };
 
 

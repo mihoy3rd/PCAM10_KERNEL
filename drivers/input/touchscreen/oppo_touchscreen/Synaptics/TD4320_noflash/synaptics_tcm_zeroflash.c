@@ -478,9 +478,6 @@ void zeroflash_download_firmware(void)
 {
     if (zeroflash_init_done){
         if (zeroflash_check_uboot() < 0) {
-            if (g_zeroflash_hcd->tcm_hcd->health_monitor_support) {
-                g_zeroflash_hcd->tcm_hcd->monitor_data->reserve1++;
-            }
             TPD_INFO(
                     "uboot check fail\n");
             msleep(50);
@@ -698,7 +695,7 @@ unlock_out:
 static void zeroflash_download_config_work(struct work_struct *work)
 {
     int retval;
-    struct syna_tcm_hcd *tcm_hcd = g_zeroflash_hcd->tcm_hcd;
+    //struct syna_tcm_hcd *tcm_hcd = g_zeroflash_hcd->tcm_hcd;
 
     retval = zeroflash_get_fw_image();
     if (retval < 0) {
@@ -713,9 +710,6 @@ static void zeroflash_download_config_work(struct work_struct *work)
     if (g_zeroflash_hcd->fw_status.need_app_config) {
         retval = zeroflash_download_app_config();
         if (retval < 0) {
-            if (tcm_hcd->health_monitor_support) {
-                tcm_hcd->monitor_data->reserve2++;
-            }
             TPD_INFO(
                     "Failed to download application config\n");
             return;
@@ -726,9 +720,6 @@ static void zeroflash_download_config_work(struct work_struct *work)
     if (g_zeroflash_hcd->fw_status.need_disp_config) {
         retval = zeroflash_download_disp_config();
         if (retval < 0) {
-            if (tcm_hcd->health_monitor_support) {
-                tcm_hcd->monitor_data->reserve2++;
-            }
             TPD_INFO(
                     "Failed to download display config\n");
             return;
@@ -1002,9 +993,6 @@ reload_fw:
     goto exit;
 update_fail:
     if (!reload) {
-        if (tcm_hcd->health_monitor_support) {
-            tcm_hcd->monitor_data->fw_download_retry++;
-        }
         reload = 1;
         goto reload_fw;
     }
@@ -1013,9 +1001,6 @@ exit:
     if(request_fw_headfile != NULL) {
         kfree(request_fw_headfile);
         request_fw_headfile = NULL;
-    }
-    if (retval < 0 && tcm_hcd->health_monitor_support) {
-        tcm_hcd->monitor_data->fw_download_fail++;
     }
     return retval;
 }
@@ -1086,9 +1071,6 @@ exit:
         retry_count++;
 
     if (DOWNLOAD_RETRY_COUNT && retry_count > DOWNLOAD_RETRY_COUNT) {
-        if (tcm_hcd->health_monitor_support) {
-            tcm_hcd->monitor_data->fw_download_fail++;
-        }
         disable_irq(tcm_hcd->s_client->irq);
 
         TPD_DETAIL("zeroflash_download_firmware_work disable_irq \n");
@@ -1096,9 +1078,6 @@ exit:
 
     } else {
         if (retval < 0) {
-            if (tcm_hcd->health_monitor_support) {
-                tcm_hcd->monitor_data->fw_download_retry++;
-            }
             syna_reset_gpio(tcm_hcd, 0);
             msleep(20);
             syna_reset_gpio(tcm_hcd, 1);

@@ -42,7 +42,6 @@
 #define Limit_MagicNum1     0x494D494C
 #define Limit_MagicNum2     0x474D4954
 #define Limit_MagicNum2_V2  0x32562D54
-#define Limit_ItemMagic     0x4F50504F
 
 
 /*********PART3:Struct Area**********************/
@@ -191,42 +190,6 @@ struct test_header {
     unsigned int array_limitcbc_size;
 };
 
-struct test_header_new {
-    uint32_t magic1;
-    uint32_t magic2;
-    uint64_t test_item;
-};
-
-struct syna_test_item_header {
-    uint32_t    item_magic;
-    uint32_t    item_size;
-    uint16_t    item_bit;
-    uint16_t    item_limit_type;
-    uint32_t    top_limit_offset;
-    uint32_t    floor_limit_offset;
-    uint32_t    para_num;
-};
-
-enum test_item_bit {
-    TYPE_TRX_SHORT          = 1,
-    TYPE_TRX_OPEN           = 2,
-    TYPE_TRXGND_SHORT       = 3,
-    TYPE_FULLRAW_CAP        = 5,
-    TYPE_DELTA_NOISE        = 10,
-    TYPE_HYBRIDRAW_CAP      = 18,
-    TYPE_RAW_CAP            = 22,
-    TYPE_TREXSHORT_CUSTOM   = 25,
-    TYPE_HYBRIDABS_DIFF_CBC = 26,
-    TYPE_HYBRIDABS_NOSIE    = 29,
-};
-
-enum {
-    LIMIT_TYPE_NO_DATA          = 0x00,     //means no limit data
-    LIMIT_TYPE_CERTAIN_DATA     = 0x01,     //means all nodes limit data is a certain data
-    LIMIT_TYPE_EACH_NODE_DATA   = 0x02,     //means all nodes have it's own limit
-    LIMIT_TYPE_INVALID_DATA     = 0xFF,     //means wrong limit data type
-};
-
 struct syna_testdata{
     int TX_NUM;
     int RX_NUM;
@@ -238,7 +201,6 @@ struct syna_testdata{
     const struct firmware *fw;
     bool fd_support;
     bool fingerprint_underscreen_support;
-    uint64_t test_item;
 };
 
 //import from "android/bootable/bootloader/lk/platform/msm_shared/include/msm_panel.h"

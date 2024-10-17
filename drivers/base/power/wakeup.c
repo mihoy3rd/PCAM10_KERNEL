@@ -128,7 +128,6 @@ void wakeup_source_drop(struct wakeup_source *ws)
 	if (!ws)
 		return;
 
-	del_timer_sync(&ws->timer);
 	__pm_relax(ws);
 }
 EXPORT_SYMBOL_GPL(wakeup_source_drop);
@@ -216,6 +215,13 @@ void wakeup_source_remove(struct wakeup_source *ws)
 	list_del_rcu(&ws->entry);
 	spin_unlock_irqrestore(&events_lock, flags);
 	synchronize_srcu(&wakeup_srcu);
+
+	del_timer_sync(&ws->timer);
+	/*
+	 * Clear timer.function to make wakeup_source_not_registered() treat
+	 * this wakeup source as not registered.
+	 */
+	ws->timer.function = NULL;
 }
 EXPORT_SYMBOL_GPL(wakeup_source_remove);
 
@@ -1245,35 +1251,15 @@ static void kernel_time_reset(void)
 	if(!ws_all_release()) {
 		ktime_t offset_hold_time;
 		ktime_t now = ktime_get();
-#ifdef VENDOR_EDIT
-//wen.luo@BSP.Power.Basic 2017/11/09 add for wakelock profiler, protect for timer and process content deadlock
-		spin_lock_bh(&statistics_lock);
-#else
 		spin_lock(&statistics_lock);
-#endif /*VENDOR_EDIT*/
 		offset_hold_time = ktime_sub(now, ws_start_node);
 		newest_hold_time = ktime_add(ws_hold_all_time, offset_hold_time);
-#ifdef VENDOR_EDIT
-//wen.luo@BSP.Power.Basic 2017/11/09 add for wakelock profiler, protect for timer and process content deadlock
-		spin_unlock_bh(&statistics_lock);
-#else
 		spin_unlock(&statistics_lock);
-#endif /*VENDOR_EDIT*/
 	}
 	else {
-#ifdef VENDOR_EDIT
-//wen.luo@BSP.Power.Basic 2017/11/09 add for wakelock profiler, protect for timer and process content deadlock
-		spin_lock_bh(&statistics_lock);
-#else
 		spin_lock(&statistics_lock);
-#endif /*VENDOR_EDIT*/
 		newest_hold_time = ws_hold_all_time;
-#ifdef VENDOR_EDIT
-//wen.luo@BSP.Power.Basic 2017/11/09 add for wakelock profiler, protect for timer and process content deadlock
-		spin_unlock_bh(&statistics_lock);
-#else
 		spin_unlock(&statistics_lock);
-#endif /*VENDOR_EDIT*/
 	}
 
 	reset_time = newest_hold_time;
@@ -1303,31 +1289,16 @@ static ssize_t kernel_time_show(struct kobject *kobj, struct kobj_attribute *att
 	if(!ws_all_release()) {
 		ktime_t offset_hold_time;
 		ktime_t now = ktime_get();
-#ifdef VENDOR_EDIT
-//wen.luo@BSP.Power.Basic 2017/11/09 add for wakelock profiler, protect for timer and process content deadlock
-		spin_lock_bh(&statistics_lock);
-#else
 		spin_lock(&statistics_lock);
-#endif /*VENDOR_EDIT*/
 		offset_hold_time = ktime_sub(now, ws_start_node);
 		newest_hold_time = ktime_add(ws_hold_all_time, offset_hold_time);
 	}
 	else {
-#ifdef VENDOR_EDIT
-//wen.luo@BSP.Power.Basic 2017/11/09 add for wakelock profiler, protect for timer and process content deadlock
-		spin_lock_bh(&statistics_lock);
-#else
 		spin_lock(&statistics_lock);
-#endif /*VENDOR_EDIT*/
 		newest_hold_time = ws_hold_all_time;
 	}
 	newest_hold_time = ktime_sub(newest_hold_time, reset_time);
-#ifdef VENDOR_EDIT
-//wen.luo@BSP.Power.Basic 2017/11/09 add for wakelock profiler, protect for timer and process content deadlock
-	spin_unlock_bh(&statistics_lock);
-#else
 	spin_unlock(&statistics_lock);
-#endif /*VENDOR_EDIT*/
 	buf_offset += sprintf(buf + buf_offset, "%lld\n", ktime_to_ms(newest_hold_time));
 	return buf_offset;
 }

@@ -442,7 +442,7 @@ void wdt_arch_reset(char mode)
 
 	/* make sure WDT mode is hw reboot mode, can not config isr mode  */
 	wdt_mode_val &= (~(MTK_WDT_MODE_IRQ | MTK_WDT_MODE_IRQ_LEVEL_EN |
-						MTK_WDT_MODE_DUAL_MODE));
+						MTK_WDT_MODE_ENABLE | MTK_WDT_MODE_DUAL_MODE));
 
 	if (mode & WD_SW_RESET_BYPASS_PWR_KEY) {
 		/* Bypass power key reboot, We using auto_restart bit as by pass power key flag */

@@ -70,29 +70,10 @@
 #define DA9313_WORK_MODE_AUTO			1
 #define DA9313_WORK_MODE_FIXED			0
 
-//max77932
-#define MAX77932B_WORK_MODE_AUTO			1
-#define MAX77932B_WORK_MODE_FIXED			0
-#define MAX77932B_SCC_CFG1				0x04
-#define MAX77932B_FIX_FREQ_MASK                          BIT(0)
-#define MAX77932B_FIX_FREQ_FIX                           BIT(0)
-#define MAX77932B_FIX_FREQ_AUTO  						 0
-#define MAX77932B_OVP_UVLO 						 0x06
-#define MAX77932B_IOVP_R_MASK  					(BIT(5) | BIT(4))
-#define MAX77932B_IOVP_R_10V5 					BIT(5)
-
-#define MAX77932B_FIRST_REG                       	0x0
-#define MAX77932B_LAST_REG                        	0x16
-#define MAX77932B_REG_NUMBER                        (MAX77932B_LAST_REG + 1)
-
 struct chip_da9313 {
         struct i2c_client           *client;
         struct device               *dev;
         bool                        fixed_mode_set_by_dev_file;
-        bool                        double_res_support;
-        int chgpump_gpio;
-        struct pinctrl *pinctrl;
-        struct pinctrl_state *chgpump_id;
         atomic_t                    suspended;
 };
 #endif

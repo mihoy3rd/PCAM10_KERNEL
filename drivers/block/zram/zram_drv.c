@@ -47,15 +47,7 @@ static DEFINE_MUTEX(zram_index_mutex);
 
 static int zram_major;
 static struct zram *zram_devices;
-#ifdef VENDOR_EDIT //YiXue.Ge@PSW.kernel.drv 20170703 modify for enable lz4 default
-#ifdef CONFIG_ZRAM_LZ4_COMPRESS
-static const char *default_compressor = "lz4";
-#else /*CONFIG_ZRAM_LZ4_COMPRESS*/
 static const char *default_compressor = "lzo";
-#endif /*CONFIG_ZRAM_LZ4_COMPRESS*/
-#else /*VENDOR_EDIT*/
-static const char *default_compressor = "lzo";
-#endif/*VENDOR_EDIT*/
 
 /* Module params (documentation at end) */
 static unsigned int num_devices = 1;
@@ -832,15 +824,6 @@ static int zram_bvec_write(struct zram *zram, struct bio_vec *bvec, u32 index,
 #endif
 
 	handle = zs_malloc(meta->mem_pool, clen);
-
-#ifdef VENDOR_EDIT
-    if (!handle) {
-        meta->mem_pool->flags |= GFP_ATOMIC;
-	    handle = zs_malloc(meta->mem_pool, clen);
-        meta->mem_pool->flags &= ~GFP_ATOMIC;
-    }
-#endif
-
 	if (!handle) {
 		pr_info_ratelimited("Error allocating memory for compressed page: %u, size=%zu\n",
 			index, clen);
@@ -1154,11 +1137,7 @@ static void zram_reset_device(struct zram *zram)
 	/* Reset stats */
 	memset(&zram->stats, 0, sizeof(zram->stats));
 	zram->disksize = 0;
-#ifdef VENDOR_EDIT //YiXue.Ge@PSW.kernel.drv 20170703 modify for enable more compress streams
-	zram->max_comp_streams = num_present_cpus();
-#else
 	zram->max_comp_streams = 1;
-#endif
 
 	set_capacity(zram->disk, 0);
 	part_stat_set_all(&zram->disk->part0, 0);
@@ -1344,6 +1323,11 @@ static struct attribute_group zram_disk_attr_group = {
 	.attrs = zram_disk_attrs,
 };
 
+static const struct attribute_group *zram_disk_attr_groups[] = {
+	&zram_disk_attr_group,
+	NULL,
+};
+
 /*
  * Allocate and initialize new zram device. the function returns
  * '>= 0' device_id upon success, and negative value otherwise.
@@ -1427,29 +1411,16 @@ static int zram_add(void)
 		zram->disk->queue->limits.discard_zeroes_data = 0;
 	queue_flag_set_unlocked(QUEUE_FLAG_DISCARD, zram->disk->queue);
 
+	disk_to_dev(zram->disk)->groups = zram_disk_attr_groups;
 	add_disk(zram->disk);
 
-	ret = sysfs_create_group(&disk_to_dev(zram->disk)->kobj,
-				&zram_disk_attr_group);
-	if (ret < 0) {
-		pr_err("Error creating sysfs group for device %d\n",
-				device_id);
-		goto out_free_disk;
-	}
 	strlcpy(zram->compressor, default_compressor, sizeof(zram->compressor));
 	zram->meta = NULL;
-#ifdef VENDOR_EDIT //YiXue.Ge@PSW.kernel.drv 20170703 modify for enable more compress streams
-	zram->max_comp_streams = num_present_cpus();
-#else
 	zram->max_comp_streams = 1;
-#endif
 
 	pr_info("Added device: %s\n", zram->disk->disk_name);
 	return device_id;
 
-out_free_disk:
-	del_gendisk(zram->disk);
-	put_disk(zram->disk);
 out_free_queue:
 	blk_cleanup_queue(queue);
 out_free_idr:
@@ -1477,16 +1448,6 @@ static int zram_remove(struct zram *zram)
 
 	zram->claim = true;
 	mutex_unlock(&bdev->bd_mutex);
-
-	/*
-	 * Remove sysfs first, so no one will perform a disksize
-	 * store while we destroy the devices. This also helps during
-	 * hot_remove -- zram_reset_device() is the last holder of
-	 * ->init_lock, no later/concurrent disksize_store() or any
-	 * other sysfs handlers are possible.
-	 */
-	sysfs_remove_group(&disk_to_dev(zram->disk)->kobj,
-			&zram_disk_attr_group);
 
 	/* Make sure all the pending I/O are finished */
 	fsync_bdev(bdev);

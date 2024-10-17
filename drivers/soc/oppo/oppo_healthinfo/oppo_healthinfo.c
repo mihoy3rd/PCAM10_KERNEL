@@ -596,7 +596,6 @@ static ssize_t ohm_para_write(struct file *file, const char __user *buff, size_t
 {
         char write_data[32] = {0};
         char ctrl_list[32] = {0};
-        int action_ctrl;
 
         if (copy_from_user(&write_data, buff, len)) {
                 ohm_err("write error.\n");
@@ -625,18 +624,13 @@ static ssize_t ohm_para_write(struct file *file, const char __user *buff, size_t
         } else if (0 == strncmp(write_data, "ohmparaupdate", 13)) {
                 ohm_para_update();
                 return len;
-        } else  if (0 == strncmp(write_data, "ohmacitonctrl", 13)) {
-                strncpy(ctrl_list, &write_data[13], OHM_INT_MAX);
-                ctrl_list[OHM_INT_MAX] = '\0';
-                action_ctrl =  (int)simple_strtol(ctrl_list, NULL, 10);
-                ohm_action_ctrl = action_ctrl != 0 ? 1 : 0;
         } else {
                 ohm_err("input illegal\n");
                 return -EFAULT;
         }
         ohm_debug("write: %s, set: %s, ctrl: 0x%08x, logon: 0x%08x, trig: 0x%08x\n",
                 write_data, ctrl_list, ohm_ctrl_list, ohm_logon_list, ohm_trig_list);
-        return len;
+	return len;
 }
 
 static const struct file_operations proc_para_fops = {

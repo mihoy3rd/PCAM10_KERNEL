@@ -54,7 +54,8 @@ struct REGULATOR_CTRL regulator_control[REGULATOR_TYPE_MAX_NUM] = {
 	{"vcamd_main3"},
 	{"vcamio_main3"}
 };
-struct REGULATOR_CTRL regulator_control_18011[REGULATOR_TYPE_MAX_NUM] = {
+/*Xiaoyang.Huang@RM.Camera add for 18611 board,20190304*/
+struct REGULATOR_CTRL regulator_control_18611[REGULATOR_TYPE_MAX_NUM] = {
 	{"vcama"},
 	{"vcamd"},
 	{"vcamio"},
@@ -105,11 +106,14 @@ static enum IMGSENSOR_RETURN regulator_init(
 	struct REGULATOR      *preg            = (struct REGULATOR *)pinstance;
 	struct REGULATOR_CTRL *pregulator_ctrl = regulator_control;
 	int i;
-
-	if (is_project(OPPO_18311) || is_project(OPPO_18011) || is_project(OPPO_18611)) {
-		PK_PR_ERR("This is 18311/18011 board regulator\n");
-		pregulator_ctrl = regulator_control_18011;
+	#ifdef VENDOR_EDIT
+	/*Xiaoyang.Huang@RM.Camera add for 18611 board,20190304*/
+	if (is_project(OPPO_18611)) {
+		PK_PR_ERR("This is 18611 board regulator\n");
+		pregulator_ctrl = regulator_control_18611;
 	}
+
+	#endif
 
 	for (i = 0; i < REGULATOR_TYPE_MAX_NUM; i++, pregulator_ctrl++) {
 		preg->pregulator[i] = regulator_get(

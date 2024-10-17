@@ -31,10 +31,7 @@
 
 #include "flashlight-core.h"
 #include "flashlight-dt.h"
-#ifdef VENDOR_EDIT
-/*Liukai@Camera.Driver 20191008 add for 19151flashlight*/
-#include <soc/oppo/oppo_project.h>
-#endif
+
 /* device tree should be defined in flashlight-dt.h */
 #ifndef MT6370_DTNAME
 #define MT6370_DTNAME "mediatek,flashlights_mt6370"
@@ -46,8 +43,6 @@
 #define MT6370_CHANNEL_NUM 2
 #define MT6370_CHANNEL_CH1 0
 #define MT6370_CHANNEL_CH2 1
-/*Riqin.Wei@camera.driver, 2019/07/26, add for led2 of flashlight oaccur abnomal current and voltage when open main flash*/
-#define MT6370_CHANNEL_ALL 2
 
 #define MT6370_NONE (-1)
 #define MT6370_DISABLE 0
@@ -55,14 +50,8 @@
 #define MT6370_ENABLE_TORCH 1
 #define MT6370_ENABLE_FLASH 2
 
-#ifdef VENDOR_EDIT
-/* Shounan.Yang@Camera.Driver add for P70 Project 20190704 */
-#define MT6370_LEVEL_NUM 12
-#define MT6370_LEVEL_TORCH 6
-#else
 #define MT6370_LEVEL_NUM 32
 #define MT6370_LEVEL_TORCH 16
-#endif
 #define MT6370_LEVEL_FLASH MT6370_LEVEL_NUM
 #define MT6370_WDT_TIMEOUT 1248 /* ms */
 #define MT6370_HW_TIMEOUT 400 /* ms */
@@ -101,38 +90,6 @@ struct mt6370_platform_data {
 /******************************************************************************
  * mt6370 operations
  *****************************************************************************/
-#ifdef VENDOR_EDIT
-/*Add by Shounan.Yang@Camera.Driver for P70 flashlight 20190704*/
-/* single-colortemperature dual-leds mt6370_current: single-led current * 2 */
-static const int mt6370_current[MT6370_LEVEL_NUM] = {
-	100, 150, 200, 300, 400, 450, 500, 550, 600, 650, 700, 750
-};
-
-/* 25+12.5*n*/
-static const unsigned char mt6370_torch_level[MT6370_LEVEL_TORCH] = {
-	0x01, 0x02, 0x03, 0x06, 0x0A, 0x0E
-};
-
-/* 0x00~0x74 6.25mA/step 0x75~0xB1 12.5mA/step */
-static const unsigned char mt6370_strobe_level[MT6370_LEVEL_FLASH] = {
-	0x04, 0x08, 0x0C, 0x14, 0x1C, 0x20, 0x24, 0x28, 0x2C, 0x30, 0x34, 0x38
-};
-
-static const int mt6370_current_19151[MT6370_LEVEL_NUM] = {
-	75, 125, 150, 225, 275, 300, 325, 375, 425, 475, 525, 550
-};
-
-/* 25+12.5*n*/
-/* 110ma */
-static const unsigned char mt6370_torch_level_19151[MT6370_LEVEL_TORCH] = {
-	0x07, 0x07, 0x07, 0x07, 0x07, 0x07
-};
-
-/* 0x00~0x74 6.25mA/step 0x75~0xB1 12.5mA/step  25+6.25*n*/
-static const unsigned char mt6370_strobe_level_19151[MT6370_LEVEL_FLASH] = {
-	0x08,0x10,0x14,0x20,0x28,0x2C,0x30,0x38,0x40,0x48,0x50,0x54
-};
-#else
 static const int mt6370_current[MT6370_LEVEL_NUM] = {
 	  25,   50,  75, 100, 125, 150, 175,  200,  225,  250,
 	 275,  300, 325, 350, 375, 400, 450,  500,  550,  600,
@@ -151,7 +108,6 @@ static const unsigned char mt6370_strobe_level[MT6370_LEVEL_FLASH] = {
 	0x30, 0x34, 0x38, 0x3C, 0x40, 0x44, 0x48, 0x4C, 0x50, 0x54,
 	0x58, 0x5C
 };
-#endif
 
 static int mt6370_decouple_mode;
 static int mt6370_en_ch1;
@@ -214,42 +170,20 @@ static int mt6370_enable(void)
 	if ((mt6370_en_ch1 == MT6370_ENABLE_FLASH)
 			|| (mt6370_en_ch2 == MT6370_ENABLE_FLASH))
 		mode = FLASHLIGHT_MODE_FLASH;
-	#ifdef VENDOR_EDIT
-	/*Riqin.Wei@camera.driver, 2019/07/26, Modify for led2 of flashlight oaccur abnomal current and voltage when open main flash*/
-	pr_debug("enable(%d,%d), mode:%d.\n",
-		mt6370_en_ch1, mt6370_en_ch2, mode);
-	#else
-	pr_debug("enable(%d,%d), mode:%d.\n", mt6370_en_ch1, mt6370_en_ch2, mode);
-	#endif
 
 	/* enable channel 1 and channel 2 */
-
-	/*Riqin.Wei@camera.driver, 2019/07/26, add for led2 of flashlight oaccur abnomal current and voltage when open main flash*/
-	if (mt6370_decouple_mode == FLASHLIGHT_SCENARIO_COUPLE &&
-			mt6370_en_ch1 != MT6370_DISABLE &&
-			mt6370_en_ch2 != MT6370_DISABLE) {
-		pr_info("dual flash mode\n");
-		if (mode == FLASHLIGHT_MODE_TORCH)
-			ret |= flashlight_set_mode(
-				flashlight_dev_ch1, FLASHLIGHT_MODE_DUAL_TORCH);
-		else
-			ret |= flashlight_set_mode(
-				flashlight_dev_ch1, FLASHLIGHT_MODE_DUAL_FLASH);
-	} else {
-		if (mt6370_en_ch1)
-			ret |= flashlight_set_mode(
+	if (mt6370_en_ch1)
+		ret |= flashlight_set_mode(
 				flashlight_dev_ch1, mode);
-		else if (mt6370_decouple_mode == FLASHLIGHT_SCENARIO_COUPLE)
-			ret |= flashlight_set_mode(
+	else
+		ret |= flashlight_set_mode(
 				flashlight_dev_ch1, FLASHLIGHT_MODE_OFF);
-		if (mt6370_en_ch2)
-			ret |= flashlight_set_mode(
+	if (mt6370_en_ch2)
+		ret |= flashlight_set_mode(
 				flashlight_dev_ch2, mode);
-		else if (mt6370_decouple_mode == FLASHLIGHT_SCENARIO_COUPLE)
-			ret |= flashlight_set_mode(
+	else
+		ret |= flashlight_set_mode(
 				flashlight_dev_ch2, FLASHLIGHT_MODE_OFF);
-	}
-
 
 	if (ret < 0)
 		pr_err("Failed to enable.\n");
@@ -258,83 +192,24 @@ static int mt6370_enable(void)
 }
 
 /* flashlight disable function */
-
-/*Riqin.Wei@camera.driver, 2019/07/26, add for led2 of flashlight oaccur abnomal current and voltage when open main flash*/
-static int mt6370_disable_ch1(void)
+static int mt6370_disable(void)
 {
 	int ret = 0;
 
-	pr_debug("disable_ch1.\n");
-
-	if (!flashlight_dev_ch1) {
-		pr_info("Failed to disable since no flashlight device.\n");
+	if (!flashlight_dev_ch1 || !flashlight_dev_ch2) {
+		pr_err("Failed to disable since no flashlight device.\n");
 		return -1;
 	}
 
+	/* disable channel 1 and channel 2 */
 	ret |= flashlight_set_mode(flashlight_dev_ch1, FLASHLIGHT_MODE_OFF);
-
-	if (ret < 0)
-		pr_info("Failed to disable.\n");
-
-	return ret;
-}
-
-static int mt6370_disable_ch2(void)
-{
-	int ret = 0;
-
-	pr_debug("disable_ch2.\n");
-
-	if (!flashlight_dev_ch2) {
-		pr_info("Failed to disable since no flashlight device.\n");
-		return -1;
-	}
-
 	ret |= flashlight_set_mode(flashlight_dev_ch2, FLASHLIGHT_MODE_OFF);
 
 	if (ret < 0)
-		pr_info("Failed to disable.\n");
+		pr_err("Failed to disable.\n");
 
 	return ret;
 }
-
-static int mt6370_disable_all(void)
-{
-	int ret = 0;
-
-	pr_debug("disable_ch1.\n");
-
-	if (!flashlight_dev_ch1) {
-		pr_info("Failed to disable since no flashlight device.\n");
-		return -1;
-	}
-
-	ret |= flashlight_set_mode(flashlight_dev_ch1, FLASHLIGHT_MODE_DUAL_OFF);
-
-	if (ret < 0)
-		pr_info("Failed to disable.\n");
-
-	return ret;
-}
-
-static int mt6370_disable(int channel)
-{
-	int ret = 0;
-
-	if (channel == MT6370_CHANNEL_CH1)
-		ret = mt6370_disable_ch1();
-	else if (channel == MT6370_CHANNEL_CH2)
-		ret = mt6370_disable_ch2();
-	else if (channel == MT6370_CHANNEL_ALL)
-		ret = mt6370_disable_all();
-	else {
-		pr_info("Error channel\n");
-		return -1;
-	}
-
-	return ret;
-}
-
 
 /* set flashlight level */
 static int mt6370_set_level_ch1(int level)
@@ -348,22 +223,12 @@ static int mt6370_set_level_ch1(int level)
 	}
 
 	/* set brightness level */
-	if (!mt6370_is_torch(level)){
-	    if(is_project(OPPO_19151)||is_project(OPPO_19350)){
-		    flashlight_set_torch_brightness(
-				flashlight_dev_ch1, mt6370_torch_level_19151[level]);
-		} else{
-		    flashlight_set_torch_brightness(
+	if (!mt6370_is_torch(level))
+		flashlight_set_torch_brightness(
 				flashlight_dev_ch1, mt6370_torch_level[level]);
-		}
-	}
-	if(is_project(OPPO_19151)||is_project(OPPO_19350)){
-	    flashlight_set_strobe_brightness(
-			flashlight_dev_ch1, mt6370_strobe_level_19151[level]);
-    } else{
-	    flashlight_set_strobe_brightness(
+	flashlight_set_strobe_brightness(
 			flashlight_dev_ch1, mt6370_strobe_level[level]);
-	}
+
 	return 0;
 }
 
@@ -378,22 +243,11 @@ static int mt6370_set_level_ch2(int level)
 	}
 
 	/* set brightness level */
-	if (!mt6370_is_torch(level)){
-	    if(is_project(OPPO_19151)||is_project(OPPO_19350)){
-		    flashlight_set_torch_brightness(
-				flashlight_dev_ch2, mt6370_torch_level_19151[level]);
-		} else{
-		    flashlight_set_torch_brightness(
+	if (!mt6370_is_torch(level))
+		flashlight_set_torch_brightness(
 				flashlight_dev_ch2, mt6370_torch_level[level]);
-		}
-	}
-    if(is_project(OPPO_19151)||is_project(OPPO_19350)){
-	    flashlight_set_strobe_brightness(
-			flashlight_dev_ch2, mt6370_strobe_level_19151[level]);
-	} else{
-	    flashlight_set_strobe_brightness(
+	flashlight_set_strobe_brightness(
 			flashlight_dev_ch2, mt6370_strobe_level[level]);
-	}
 
 	return 0;
 }
@@ -461,9 +315,6 @@ static int mt6370_init(void)
 /* flashlight uninit */
 static int mt6370_uninit(void)
 {
-	/*Riqin.Wei@camera.driver, 2019/07/26, add for led2 of flashlight oaccur abnomal current and voltage when open main flash*/
-	int ret;
-
 	/* clear flashlight state */
 	mt6370_en_ch1 = MT6370_NONE;
 	mt6370_en_ch2 = MT6370_NONE;
@@ -474,10 +325,7 @@ static int mt6370_uninit(void)
 	/* clear charger status */
 	is_decrease_voltage = 0;
 
-	/*Riqin.Wei@camera.driver, 2019/07/26, add for led2 of flashlight oaccur abnomal current and voltage when open main flash*/
-	ret = mt6370_disable(MT6370_CHANNEL_ALL);
-	return ret;
-
+	return mt6370_disable();
 }
 
 
@@ -487,19 +335,13 @@ static int mt6370_uninit(void)
 static void mt6370_work_disable_ch1(struct work_struct *data)
 {
 	pr_debug("ht work queue callback\n");
-
-	/*Riqin.Wei@camera.driver, 2019/07/26, add for led2 of flashlight oaccur abnomal current and voltage when open main flash*/
-	mt6370_disable(MT6370_CHANNEL_CH1);
-
+	mt6370_disable();
 }
 
 static void mt6370_work_disable_ch2(struct work_struct *data)
 {
 	pr_debug("lt work queue callback\n");
-
-	/*Riqin.Wei@camera.driver, 2019/07/26, add for led2 of flashlight oaccur abnomal current and voltage when open main flash*/
-	mt6370_disable(MT6370_CHANNEL_CH2);
-
+	mt6370_disable();
 }
 
 static enum hrtimer_restart mt6370_timer_func_ch1(struct hrtimer *timer)
@@ -567,41 +409,19 @@ static int mt6370_operate(int channel, int enable)
 
 	/* decouple mode */
 	if (mt6370_decouple_mode) {
-
-		/*Riqin.Wei@camera.driver, 2019/07/26, add for led2 of flashlight oaccur abnomal current and voltage when open main flash*/
-		if (channel == MT6370_CHANNEL_CH1) {
+		if (channel == MT6370_CHANNEL_CH1)
 			mt6370_en_ch2 = MT6370_DISABLE;
-			mt6370_timeout_ms[MT6370_CHANNEL_CH2] = 0;
-		} else if (channel == MT6370_CHANNEL_CH2) {
+		else if (channel == MT6370_CHANNEL_CH2)
 			mt6370_en_ch1 = MT6370_DISABLE;
-			mt6370_timeout_ms[MT6370_CHANNEL_CH1] = 0;
-		}
-
 	}
-
-	pr_debug("en_ch(%d,%d), decouple:%d\n",
-		mt6370_en_ch1, mt6370_en_ch2, mt6370_decouple_mode);
 
 	/* operate flashlight and setup timer */
 	if ((mt6370_en_ch1 != MT6370_NONE) && (mt6370_en_ch2 != MT6370_NONE)) {
 		if ((mt6370_en_ch1 == MT6370_DISABLE) &&
 				(mt6370_en_ch2 == MT6370_DISABLE)) {
-
-			/*Riqin.Wei@camera.driver, 2019/07/26, add for led2 of flashlight oaccur abnomal current and voltage when open main flash*/
-			if (mt6370_decouple_mode) {
-				if (channel == MT6370_CHANNEL_CH1) {
-					mt6370_disable(MT6370_CHANNEL_CH1);
-					mt6370_timer_cancel(MT6370_CHANNEL_CH1);
-				} else if (channel == MT6370_CHANNEL_CH2) {
-					mt6370_disable(MT6370_CHANNEL_CH2);
-					mt6370_timer_cancel(MT6370_CHANNEL_CH2);
-				}
-			} else {
-				mt6370_disable(MT6370_CHANNEL_ALL);
-				mt6370_timer_cancel(MT6370_CHANNEL_CH1);
-				mt6370_timer_cancel(MT6370_CHANNEL_CH2);
-			}
-
+			mt6370_disable();
+			mt6370_timer_cancel(MT6370_CHANNEL_CH1);
+			mt6370_timer_cancel(MT6370_CHANNEL_CH2);
 		} else {
 			if (mt6370_timeout_ms[MT6370_CHANNEL_CH1] && mt6370_en_ch1 != MT6370_DISABLE) {
 				ktime = ktime_set(
@@ -647,25 +467,13 @@ static int mt6370_ioctl(unsigned int cmd, unsigned long arg)
 	case FLASH_IOC_SET_TIME_OUT_TIME_MS:
 		pr_debug("FLASH_IOC_SET_TIME_OUT_TIME_MS(%d): %d\n",
 				channel, (int)fl_arg->arg);
-		#ifdef VENDOR_EDIT
-		/* Shounan.Yang@Camera.Driver add for Dual channel flashlight 20190622 */
-		mt6370_timeout_ms[MT6370_CHANNEL_CH1] = fl_arg->arg;
-		mt6370_timeout_ms[MT6370_CHANNEL_CH2] = fl_arg->arg;
-		#else
 		mt6370_timeout_ms[channel] = fl_arg->arg;
-		#endif
 		break;
 
 	case FLASH_IOC_SET_DUTY:
 		pr_debug("FLASH_IOC_SET_DUTY(%d): %d\n",
 				channel, (int)fl_arg->arg);
-		#ifdef VENDOR_EDIT
-		/* Shounan.Yang@Camera.Driver add for Dual channel flashlight 20190622 */
-		mt6370_set_level(MT6370_CHANNEL_CH1, fl_arg->arg);
-		mt6370_set_level(MT6370_CHANNEL_CH2, fl_arg->arg);
-		#else
 		mt6370_set_level(channel, fl_arg->arg);
-		#endif
 		break;
 
 	case FLASH_IOC_SET_SCENARIO:
@@ -677,22 +485,7 @@ static int mt6370_ioctl(unsigned int cmd, unsigned long arg)
 	case FLASH_IOC_SET_ONOFF:
 		pr_debug("FLASH_IOC_SET_ONOFF(%d): %d\n",
 				channel, (int)fl_arg->arg);
-		#ifdef VENDOR_EDIT
-		/*Shounan.Yang@Camera.Driver add for dualflash eng test 20190622*/
-		if (fl_arg->arg == 2) {
-			mt6370_operate(MT6370_CHANNEL_CH1, MT6370_ENABLE);
-			mt6370_operate(MT6370_CHANNEL_CH2, MT6370_DISABLE);
-		} else if (fl_arg->arg == 3) {
-			mt6370_operate(MT6370_CHANNEL_CH1, MT6370_DISABLE);
-			mt6370_operate(MT6370_CHANNEL_CH2, MT6370_ENABLE);
-		} else {
-			/* Shounan.Yang@Camera.Driver add for Dual channel flashlight 20190622 */
-			mt6370_operate(MT6370_CHANNEL_CH1, fl_arg->arg);
-			mt6370_operate(MT6370_CHANNEL_CH2, fl_arg->arg);
-		}
-		#else
 		mt6370_operate(channel, fl_arg->arg);
-		#endif
 		break;
 
 	case FLASH_IOC_IS_CHARGER_READY:
@@ -714,12 +507,7 @@ static int mt6370_ioctl(unsigned int cmd, unsigned long arg)
 		fl_arg->arg = mt6370_verify_level(fl_arg->arg);
 		pr_debug("FLASH_IOC_GET_DUTY_CURRENT(%d): %d\n",
 				channel, (int)fl_arg->arg);
-        if (is_project(OPPO_19151)||is_project(OPPO_19350)) {
-		    fl_arg->arg = mt6370_current_19151[fl_arg->arg];
-		}
-        else {
-		    fl_arg->arg = mt6370_current[fl_arg->arg];
-		}
+		fl_arg->arg = mt6370_current[fl_arg->arg];
 		break;
 
 	case FLASH_IOC_GET_HW_TIMEOUT:

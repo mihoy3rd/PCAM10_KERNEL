@@ -26,8 +26,8 @@
 #include <linux/rtc.h>
 #include <linux/workqueue.h>
 #include <linux/suspend.h>
-#include <soc/oppo/oppo_project.h>
 
+struct als_control_path	set_cali;
 static struct workqueue_struct *scp_sync_utc_wq;
 static struct delayed_work scp_sync_utc_dw;
 static int scp_sync_wq_flag = 0;
@@ -51,13 +51,7 @@ struct alspshub_ipi_data {
 	atomic_t	scp_init_done;
 
 	/*data */
-	u16			als;
-#ifndef VENDOR_EDIT
-/*Fei.Mo@PSW.BSP.Sensor, 2017/12/17, Modify for get alsps value to engineer mode*/
-	u8			ps;
-#else
 	int			als_factor;
-	int			ps;
 	int			ps_state;
 	int			ps0_offset;
 	int			ps0_value;
@@ -65,8 +59,10 @@ struct alspshub_ipi_data {
 	int			ps1_offset;
 	int			ps1_value;
 	int			ps1_distance_delta;
-#endif
-	int			ps_cali;
+	u16		als;
+	u8		ps;
+	int		ps_cali;
+	atomic_t	als_cali;
 	atomic_t	ps_thd_val_high;	/*the cmd value can't be read, stored in ram*/
 	atomic_t	ps_thd_val_low;		/*the cmd value can't be read, stored in ram*/
 	atomic_t	als_thd_val_high;	/*the cmd value can't be read, stored in ram*/
@@ -110,8 +106,6 @@ enum {
 	CMC_TRC_DEBUG = 0x8000,
 } CMC_TRC;
 
-#ifndef VENDOR_EDIT
-/*Fei.Mo@PSW.BSP.Sensor, 2017/12/17, Modify for get alsps value to engineer mode*/
 long alspshub_read_ps(u8 *ps)
 {
 	long res;
@@ -146,28 +140,6 @@ long alspshub_read_als(u16 *als)
 
 	return 0;
 }
-#else
-long alspshub_read_ps(int *ps)
-{
-	long res;
-	struct alspshub_ipi_data *obj = obj_ipi_data;
-	struct data_unit_t data_t;
-
-	res = sensor_get_data_from_hub(ID_PROXIMITY, &data_t);
-	if (res < 0) {
-		*ps = -1;
-		APS_PR_ERR("sensor_get_data_from_hub fail, (ID: %d)\n", ID_PROXIMITY);
-		return -1;
-	}
-
-	//APS_PR_ERR("ps0 = %d, ps1 = %d\n", data_t.proximity_t.steps & 0xffff, data_t.proximity_t.steps >> 16);
-
-	if (data_t.proximity_t.steps < obj->ps_cali)
-		*ps = 0;
-	else
-		*ps = data_t.proximity_t.steps - obj->ps_cali;
-	return 0;
-}
 
 long alspshub_read_ps_state(int *ps)
 {
@@ -187,24 +159,6 @@ long alspshub_read_ps_state(int *ps)
 
     return 0;
 }
-
-long alspshub_read_als(u16 *als)
-{
-	long res = 0;
-	struct data_unit_t data_t;
-
-	res = sensor_get_data_from_hub(ID_LIGHT, &data_t);
-	if (res < 0) {
-		*als = -1;
-		APS_PR_ERR("sensor_set_cmd_to_hub fail, (ID: %d),(action: %d)\n", ID_LIGHT, CUST_ACTION_GET_RAW_DATA);
-		return -1;
-	}
-
-	*als = data_t.data[0];//als raw data;
-	APS_PR_ERR("alspshub_read_als:als_raw data = %d\n",*als);
-	return 0;
-}
-#endif /* VENDOR_EDIT */
 
 static ssize_t alspshub_show_trace(struct device_driver *ddri, char *buf)
 {
@@ -285,11 +239,7 @@ static ssize_t alspshub_show_ps(struct device_driver *ddri, char *buf)
 /*Fei.Mo@PSW.BSP.Sensor, 2017/12/17, Modify for get alsps value to engineer mode*/
 		return snprintf(buf, PAGE_SIZE, "0x%04X\n", obj->ps);
 #else
-	if (is_project(19151) || is_project(19350)) {
-		return snprintf(buf, PAGE_SIZE, "%d\n", obj->ps & 0xffff);
-	} else {
 		return snprintf(buf, PAGE_SIZE, "%d\n", obj->ps);
-	}
 #endif
 }
 
@@ -376,7 +326,7 @@ static ssize_t als_store_gain(struct device_driver *ddri, const char *buf, size_
 static ssize_t alspshub_show_ps_raw(struct device_driver *ddri, char *buf)
 {
 	struct alspshub_ipi_data *obj = obj_ipi_data;
-	int offset = 0;
+
 	if (!obj) {
 		APS_PR_ERR("obj null!!\n");
 		return scnprintf(buf, PAGE_SIZE, "%d\n", 0);
@@ -385,16 +335,8 @@ static ssize_t alspshub_show_ps_raw(struct device_driver *ddri, char *buf)
 	//sensor_get_data_from_hub(ID_LIGHT, &data_t);
 
 	//APS_PR_ERR("ps0_raw = %d, ps1_raw = %d\n", obj->ps & 0xffff, obj->ps >> 16);
-#ifdef VENDOR_EDIT
-//Yajie.chen@TECH.BSP.Sensor add for report the ps offset to engineer mode
-	if (is_project(19151) || is_project(19350)) {
-		offset = ((obj->ps >> 16) & 0xffff) - (obj->ps & 0xffff);
-		offset = offset * 10 / 208 + 10;
-		return scnprintf(buf, PAGE_SIZE, "%d\n", offset);
-	} else {
-		return scnprintf(buf, PAGE_SIZE, "%d\n", obj->ps);
-	}
-#endif
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", obj->ps);
 }
 
 static ssize_t ps_show_cali(struct device_driver *ddri, char *buf)
@@ -577,12 +519,7 @@ static void alspshub_init_done_work(struct work_struct *work)
 	struct alspshub_ipi_data *obj = obj_ipi_data;
 	int err = 0;
 #ifndef MTK_OLD_FACTORY_CALIBRATION
-#ifdef VENDOR_EDIT
-	int temp_cali[6] = {0};
-	int prox_cali_to_scp[3] = {0};
-#else
 	int32_t cfg_data[2] = {0};
-#endif
 #endif
 
 	if (atomic_read(&obj->scp_init_done) == 0) {
@@ -598,24 +535,6 @@ static void alspshub_init_done_work(struct work_struct *work)
 		pr_err_ratelimited("sensor_set_cmd_to_hub fail,(ID: %d),(action: %d)\n",
 			ID_PROXIMITY, CUST_ACTION_SET_CALI);
 #else
-
-#ifdef VENDOR_EDIT
-	/*Yan.Chen@PSW.BSP.Sensor, 2019/04/08, Add for alsps set cali while scp crashed reboot*/
-	get_sensor_parameter(ID_LIGHT, temp_cali);
-	err = sensor_set_cmd_to_hub(ID_LIGHT, CUST_ACTION_SET_CALI, (void*)&temp_cali[0]);
-	pr_err_ratelimited("set als factory cali=%d, res=%d\n",temp_cali[0], err);
-	msleep(20);
-	get_sensor_parameter(ID_PROXIMITY, temp_cali);
-	if (temp_cali[0] >= 0)
-	{
-		prox_cali_to_scp[0] = (temp_cali[3] << 16) | temp_cali[0];
-		prox_cali_to_scp[1] = (temp_cali[4] << 16) | temp_cali[1];
-		prox_cali_to_scp[2] = (temp_cali[5] << 16) | temp_cali[2];
-
-		err = sensor_set_cmd_to_hub(ID_PROXIMITY, CUST_ACTION_SET_CALI, (void*)prox_cali_to_scp);
-		pr_err_ratelimited("set ps factory cali (%d %d %d, %d %d %d), res=%d\n", temp_cali[0], temp_cali[1], temp_cali[2], temp_cali[3], temp_cali[4], temp_cali[5], err);
-	}
-#else
 	spin_lock(&calibration_lock);
 	cfg_data[0] = atomic_read(&obj->ps_thd_val_high);
 	cfg_data[1] = atomic_read(&obj->ps_thd_val_low);
@@ -624,7 +543,14 @@ static void alspshub_init_done_work(struct work_struct *work)
 		(uint8_t *)cfg_data, sizeof(cfg_data));
 	if (err < 0)
 		pr_err_ratelimited("sensor_cfg_to_hub ps fail\n");
-#endif
+
+	spin_lock(&calibration_lock);
+	cfg_data[0] = atomic_read(&obj->als_cali);
+	spin_unlock(&calibration_lock);
+	err = sensor_cfg_to_hub(ID_LIGHT,
+		(uint8_t *)cfg_data, sizeof(cfg_data));
+	if (err < 0)
+		pr_err("sensor_cfg_to_hub als fail\n");
 #endif
 }
 
@@ -659,13 +585,14 @@ static int ps_recv_data(struct data_unit_t *event, void *reserved)
 }
 static int als_recv_data(struct data_unit_t *event, void *reserved)
 {
+	int err = 0;
 	struct alspshub_ipi_data *obj = obj_ipi_data;
 #ifdef VENDOR_EDIT
 //zhihong.lu@BSP.sensor,2018/3/5,add log for debug
     static int recv_num = 0;
 #endif
 
-	if (READ_ONCE(obj->als_android_enable) == false)
+	if (!obj)
 		return 0;
 
 #ifdef VENDOR_EDIT
@@ -678,10 +605,17 @@ static int als_recv_data(struct data_unit_t *event, void *reserved)
 #endif
 
 	if (event->flush_action == FLUSH_ACTION)
-		als_flush_report();
-	else if (event->flush_action == DATA_ACTION)
-		als_data_report(event->light, SENSOR_STATUS_ACCURACY_MEDIUM);
-	return 0;
+		err = als_flush_report();
+	else if ((event->flush_action == DATA_ACTION) &&
+			READ_ONCE(obj->als_android_enable) == true)
+		err = als_data_report(event->light,
+			SENSOR_STATUS_ACCURACY_MEDIUM);
+	else if (event->flush_action == CALI_ACTION) {
+		spin_lock(&calibration_lock);
+		atomic_set(&obj->als_cali, event->data[0]);
+		spin_unlock(&calibration_lock);
+	}
+	return err;
 }
 
 static int rgbw_recv_data(struct data_unit_t *event, void *reserved)
@@ -710,16 +644,7 @@ static int alshub_factory_enable_sensor(bool enable_disable, int64_t sample_peri
 			return -1;
 		}
 	}
-#ifdef VENDOR_EDIT
-    //@BSP.PSW.Sensor,2019/02/25,add for WiseLight AT-Test
-    #ifdef CONFIG_OPPO_ALS_CALI
-	err = sensor_enable_to_hub(ID_RGBW, enable_disable);
-    #else
 	err = sensor_enable_to_hub(ID_LIGHT, enable_disable);
-    #endif
-#else
-	err = sensor_enable_to_hub(ID_LIGHT, enable_disable);
-#endif
 	if (err) {
 		APS_PR_ERR("sensor_enable_to_hub failed!\n");
 		return -1;
@@ -758,46 +683,28 @@ static int alshub_factory_clear_cali(void)
 {
 	return 0;
 }
-static int alshub_factory_set_cali(int32_t als_factor)
+static int alshub_factory_set_cali(int32_t offset)
 {
-	int ret = 0;
-
-#ifdef VENDOR_EDIT
-/*zhq@PSW.BSP.Sensor, 2018/10/28, Add for als ps cail*/
 	struct alspshub_ipi_data *obj = obj_ipi_data;
+	int err = 0;
+	int32_t cfg_data;
 
-	update_sensor_parameter(ID_LIGHT, &als_factor);
-	obj->als_factor = als_factor;
+	cfg_data = offset;
+	err = sensor_cfg_to_hub(ID_LIGHT,
+		(uint8_t *)&cfg_data, sizeof(cfg_data));
+	if (err < 0)
+		pr_err("sensor_cfg_to_hub fail\n");
+	atomic_set(&obj->als_cali, offset);
 
-	APS_PR_ERR("als_factor = %d\n", obj->als_factor);
+	return err;
 
-	ret = sensor_set_cmd_to_hub(ID_LIGHT, CUST_ACTION_SET_CALI, (void*)&obj->als_factor);
-	if (ret) {
-		APS_PR_ERR("als set cali hub failed, ret = %d\n", ret);
-	}
-#endif
-
-	return ret;
 }
 
-static int alshub_factory_get_cali(int32_t data[6])
+static int alshub_factory_get_cali(int32_t *offset)
 {
-#ifdef VENDOR_EDIT
-/*zhq@PSW.BSP.Sensor, 2018/10/28, Add for als ps cail*/
 	struct alspshub_ipi_data *obj = obj_ipi_data;
 
-    get_sensor_parameter(ID_LIGHT ,&obj->als_factor);
-
-	spin_lock(&calibration_lock);
-	data[0] = obj->als_factor;
-	data[1] = 0;
-	data[2] = 0;
-	data[3] = 0;
-	data[4] = 0;
-	data[5] = 0;
-	spin_unlock(&calibration_lock);
-#endif
-
+	*offset = atomic_read(&obj->als_cali);
 	return 0;
 }
 static int pshub_factory_enable_sensor(bool enable_disable, int64_t sample_periods_ms)

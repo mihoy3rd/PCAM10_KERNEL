@@ -473,8 +473,6 @@ static int syna_parse_report(struct syna_tcm_hcd *tcm_hcd)
     num_of_active_objects = false;
 
     idx = 0;
-    obj = 0;
-    next = 0;
     offset = 0;
     objects = 0;
     while (idx < config_size) {
@@ -3873,9 +3871,9 @@ static void syna_tcm_black_screen_test(void *chip_data, char *message)
     if (fd < 0) {
         TPD_INFO("Open log file '%s' failed.\n", data_buf);
         store_to_buf(buffer, "Open failed failed");
-//        error_count++;
+        error_count++;
         set_fs(old_fs);
-//        goto sys_err;
+        goto sys_err;
     }
 
     retval = request_firmware(&fw, tcm_hcd->limit_name, &tcm_hcd->s_client->dev);
@@ -3900,7 +3898,7 @@ firware_err:
     sys_close(fd);
     set_fs(old_fs);
 
-//sys_err:
+sys_err:
     sprintf(message, "%d errors. %s", error_count, buffer);
     TPD_INFO("%d errors. %s\n", error_count, buffer);
 
@@ -4736,10 +4734,6 @@ static int syna_tcm_spi_probe(struct spi_device *spi)
         goto err_register_driver;
     }
     tcm_hcd->p_firmware_headfile = &ts->panel_data.firmware_headfile;
-    tcm_hcd->health_monitor_support = ts->health_monitor_support;
-    if (tcm_hcd->health_monitor_support) {
-        tcm_hcd->monitor_data = &ts->monitor_data;
-    }
     ts->int_mode = 1;
     zeroflash_check_uboot(tcm_hcd);
 

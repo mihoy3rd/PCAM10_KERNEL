@@ -313,6 +313,19 @@ static inline void mtu3d_u3_ltssm_intr_handler(struct musb *musb, u32 dwLtssmVal
 	}
 }
 
+#ifdef VENDOR_EDIT
+//PengNan@BSP.CHG.Basic, 2018/01/20, add for bq24190 chargertype detect.
+extern void oppo_usb_enum_detected(void);
+extern int oppo_get_usb_enum_type(void);
+enum {
+	USB_ENUM_DISABLE = 0,
+	USB_ENUM_DEFAULT,
+	USB_ENUM_DETECTED,
+	USB_ENUM_TIMEOUT,
+	USB_ENUM_USB_TYPE,
+};
+#endif /*VENDOR_EDIT*/
+
 static inline void mtu3d_u2_common_intr_handler(u32 dwIntrUsbValue)
 {
 	if (dwIntrUsbValue & DISCONN_INTR) {
@@ -356,16 +369,6 @@ static inline void mtu3d_u2_common_intr_handler(u32 dwIntrUsbValue)
 	}
 
 	if (dwIntrUsbValue & SUSPEND_INTR) {
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/03/15, sjc Add for dump USBIP register */
-		os_writel(U3D_SSUSB_PRB_CTRL0, 0xF);
-		os_writel(U3D_SSUSB_PRB_CTRL3, 0xb0b0b0b0);
-		os_writel(U3D_SSUSB_PRB_CTRL1, 0x000c0000);
-		os_writel(U3D_SSUSB_PRB_CTRL2, 0x000e000d);
-		os_printk(K_EMERG, "DBG_PROBE(0x000e000d, 0x000c0000): 0x%X\n", os_readl(U3D_SSUSB_PRB_CTRL5));
-		os_writel(U3D_SSUSB_PRB_CTRL1, 0x00150013);
-		os_printk(K_EMERG, "DBG_PROBE(0x000e000d, 0x00150013): 0x%X\n", os_readl(U3D_SSUSB_PRB_CTRL5));
-#endif /*VENDOR_EDIT*/
 		usb_hal_dpidle_request(USB_DPIDLE_TIMER);
 		os_printk(K_NOTICE, "[U2 SUSPEND_INTR], USB_DPIDLE_TIMER\n");
 		mu3d_hal_pdn_ip_port(0, 0, 0, 1);

@@ -469,7 +469,6 @@ struct qcom_pmic {
 	struct smb2 *smb2_chip;
 	struct qpnp_vadc_chip	*pm660_vadc_dev;
 	struct qpnp_vadc_chip	*pm660_usbtemp_vadc_dev;
-	struct iio_channel	*usb_temp_v_chan;
 
 	/* for complie*/
 	bool			otg_pulse_skip_dis;

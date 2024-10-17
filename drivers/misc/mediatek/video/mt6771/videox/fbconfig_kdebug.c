@@ -168,9 +168,6 @@ int fbconfig_get_esd_check(enum DSI_INDEX dsi_id, uint32_t cmd, uint8_t *buffer,
 atomic_t LCMREG_byCPU = ATOMIC_INIT(0);
 extern unsigned int DSI_dcs_read_lcm_reg_v3_wrapper_DSI0(unsigned char cmd,
 		unsigned char *buffer, unsigned char buffer_size);
-extern unsigned int DSI_dcs_read_lcm_reg_v4_wrapper_DSI0(unsigned char cmd,
-		unsigned char *buffer, unsigned char buffer_size);
-
 extern bool flag_lcd_off;
 
 typedef struct panel_serial_info
@@ -193,9 +190,7 @@ int panel_serial_number_read(char cmd, uint64_t *buf, int num)
 	unsigned char read[16];
 	PANEL_SERIAL_INFO panel_serial_info;
 
-	if (!(is_project(OPPO_17197) \
-		|| is_project(OPPO_19531) || is_project(OPPO_19391)
-		|| is_project(19151) || is_project(19350))) {
+	if (!is_project(OPPO_17197)) {
 		pr_err("panel is not samsung unsupported!!\n");
 		return 0;
 	}
@@ -214,11 +209,8 @@ int panel_serial_number_read(char cmd, uint64_t *buf, int num)
 		dsi_set_cmdq(array, 1, 1);
 
 		atomic_set(&LCMREG_byCPU, 1);
-		if(is_project(19151) || is_project(19350)) {
-			ret = DSI_dcs_read_lcm_reg_v4_wrapper_DSI0(cmd,	read, num);
-		} else {
-			ret = DSI_dcs_read_lcm_reg_v3_wrapper_DSI0(cmd,	read, num);
-		}
+
+		ret = DSI_dcs_read_lcm_reg_v3_wrapper_DSI0(cmd,	read, num);
 		count--;
 		if (ret == 0) {
 			*buf = 0;
@@ -226,24 +218,13 @@ int panel_serial_number_read(char cmd, uint64_t *buf, int num)
 				__func__, cmd);
 			continue;
 		} else {
-
-			if(is_project(19151) || is_project(19350)) {
-				panel_serial_info.reg_index = 4;
-				panel_serial_info.month		= read[panel_serial_info.reg_index]	& 0x0F;
-				panel_serial_info.year		= ((read[panel_serial_info.reg_index + 1] & 0xE0) >> 5) + 7;
-				panel_serial_info.day		= read[panel_serial_info.reg_index + 1] & 0x1F;
-				panel_serial_info.hour		= read[panel_serial_info.reg_index + 2];
-				panel_serial_info.minute	= read[panel_serial_info.reg_index + 3];
-				panel_serial_info.second	= read[panel_serial_info.reg_index + 4];
-			} else {
-				panel_serial_info.reg_index = 11;
-				panel_serial_info.year		= (read[panel_serial_info.reg_index] & 0xF0) >> 0x4;
-				panel_serial_info.month		= read[panel_serial_info.reg_index]		& 0x0F;
-				panel_serial_info.day		= read[panel_serial_info.reg_index + 1]	& 0x1F;
-				panel_serial_info.hour		= read[panel_serial_info.reg_index + 2]	& 0x1F;
-				panel_serial_info.minute	= read[panel_serial_info.reg_index + 3]	& 0x3F;
-				panel_serial_info.second	= read[panel_serial_info.reg_index + 4]	& 0x3F;
-			}
+			panel_serial_info.reg_index = 11;
+			panel_serial_info.year		= (read[panel_serial_info.reg_index] & 0xF0) >> 0x4;
+			panel_serial_info.month		= read[panel_serial_info.reg_index]		& 0x0F;
+			panel_serial_info.day		= read[panel_serial_info.reg_index + 1]	& 0x1F;
+			panel_serial_info.hour		= read[panel_serial_info.reg_index + 2]	& 0x1F;
+			panel_serial_info.minute	= read[panel_serial_info.reg_index + 3]	& 0x3F;
+			panel_serial_info.second	= read[panel_serial_info.reg_index + 4]	& 0x3F;
 
 			*buf = (panel_serial_info.year		<< 56)\
 				 + (panel_serial_info.month		<< 48)\
@@ -287,11 +268,9 @@ int lcm_id_info_read(char cmd, uint32_t *buf, int num)
 	int array[4];
 	int ret = 0;
 	int count = 30;
-	unsigned char read[16];
+	unsigned char read[2];
 
-	if (!(is_project(OPPO_17197) \
-		|| is_project(OPPO_19531) || is_project(OPPO_19391) \
-		|| is_project(19151) || is_project(19350))) {
+	if (!is_project(OPPO_17197)) {
 		pr_err("panel is not samsung unsupported!!\n");
 		return 0;
 	}
@@ -305,14 +284,7 @@ int lcm_id_info_read(char cmd, uint32_t *buf, int num)
 		array[0] = 0x00013700;
 		dsi_set_cmdq(array, 1, 1);
 		atomic_set(&LCMREG_byCPU, 1);
-
-		if(is_project(19151) || is_project(19350)) {
-			num = 16;
-			ret = DSI_dcs_read_lcm_reg_v4_wrapper_DSI0(cmd,	read, num);
-		} else {
-			ret = DSI_dcs_read_lcm_reg_v3_wrapper_DSI0(cmd,	read, num);
-		}
-
+		ret = DSI_dcs_read_lcm_reg_v3_wrapper_DSI0(cmd,	read, num);
 		count--;
 		if (ret == 0) {
 			continue;

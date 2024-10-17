@@ -388,10 +388,6 @@ struct mt_i2c {
 	bool have_ccu;
 	u32 ccu_offset;
 	unsigned long main_clk;
-#ifdef VENDOR_EDIT
-/*Jianchao.Shi@PSW.BSP.CHG.Basic, 2019/07/01, sjc Add for zhongying fg ZY0602*/
-	struct pinctrl *pctrl;
-#endif /*VENDOR_EDIT*/
 };
 
 #if defined(CONFIG_MTK_FPGA) || defined(CONFIG_FPGA_EARLY_PORTING)

@@ -349,14 +349,6 @@ struct mmc_host *mmc_alloc_host(int extra, struct device *dev)
 	spin_lock_init(&host->lock);
 	init_waitqueue_head(&host->wq);
 	INIT_DELAYED_WORK(&host->detect, mmc_rescan);
-    
-
-#ifdef VENDOR_EDIT
-    //Lycan.Wang@Prd.BasicDrv, 2014-07-09 Add for retry 5 times when new sdcard init error
-    host->detect_change_retry = 5;
-#endif /* VENDOR_EDIT */
-
-    
 #ifdef CONFIG_PM
 	host->pm_notify.notifier_call = mmc_pm_notify;
 #endif

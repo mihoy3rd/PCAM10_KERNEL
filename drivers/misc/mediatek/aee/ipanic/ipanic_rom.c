@@ -27,22 +27,6 @@
 #include <asm/system_misc.h>
 #include "../mrdump/mrdump_private.h"
 
-#ifdef VENDOR_EDIT
-//Liang.Zhang@PSW.TECH.BOOTUP, 2019/01/22, Add for monitor kernel error
-#ifdef HANG_OPPO_ALL
-extern int kernel_panic_happened;
-extern void deal_fatal_err(void);
-#endif
-#endif  // VENDOR_EDIT
-
-#ifdef VENDOR_EDIT
-//Zhang Jiashu@PSW.AD.Performance,2019/10/03,Add for flushing device cache before goto dump mode!
-extern bool is_triggering_panic;
-extern void flush_cache_on_panic(void);
-#endif  /*VENDOR_EDIT*/
-
-
-
 int __weak ipanic_atflog_buffer(void *data, unsigned char *buffer, size_t sz_buf)
 {
 	return 0;
@@ -101,28 +85,6 @@ static int common_die(int fiq_step, int reboot_reason, const char *msg,
 		      struct pt_regs *regs)
 {
 	u64 kaslr_offset;
-
-#ifdef VENDOR_EDIT
-//Zhang Jiashu@PSW.AD.Performance,2019/10/03,Add for flushing device cache before goto dump mode!
-    if(!is_triggering_panic)
-    {
-        is_triggering_panic = true;
-        pr_notice("is_triggering_panic : true\n");
-        flush_cache_on_panic();
-    }
-#endif // VENDOR_EDIT
-
-
-#ifdef VENDOR_EDIT
-//Liang.Zhang@PSW.TECH.BOOTUP, 2019/01/22, Add for monitor kernel error
-#ifdef HANG_OPPO_ALL
-    if(!kernel_panic_happened)
-    {
-        kernel_panic_happened = 1;
-        deal_fatal_err();
-    }
-#endif
-#endif // VENDOR_EDIT
 
 	bust_spinlocks(1);
 	aee_disable_api();

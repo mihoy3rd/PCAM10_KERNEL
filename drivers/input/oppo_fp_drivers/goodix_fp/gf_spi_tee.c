@@ -17,7 +17,6 @@
 **    Ran.Chen     2017/09/08    add gf_cmd_wakelock
 **    Hongdao.yu  2018/03/09    modify irq/reset/power time sequence
 **    Long.Liu     2019/02/01    add for 18561 GOODIX GF5658_FP
-**    Long.Liu     2019/05/05    modify for GF5658 CS and spi device
 ************************************************************************************/
 #define pr_fmt(fmt)		KBUILD_MODNAME ": " fmt
 
@@ -83,7 +82,6 @@
 #define SENDCMD_WAKELOCK_HOLD_TIME 1000 /* in ms */
 
 #define GF_SPIDEV_NAME     "goodix,goodix_fp"
-#define OPPO_SPIDEV_NAME   "oppo,oppo_fp"
 /*device name after register in charater*/
 #define GF_DEV_NAME            "goodix_fp"
 #define	GF_INPUT_NAME	    "qwerty"	/*"goodix_fp" */
@@ -96,20 +94,9 @@ static int SPIDEV_MAJOR;
 
 //struct mt_spi_t *fpc_ms;
 
-struct mtk_spi {
-        void __iomem                                        *base;
-        void __iomem                                        *peri_regs;
-        u32                                                 state;
-        int                                                 pad_num;
-        u32                                                 *pad_sel;
-        struct clk                                          *parent_clk, *sel_clk, *spi_clk;
-        struct spi_transfer                                 *cur_transfer;
-        u32                                                 xfer_len;
-        struct scatterlist                                  *tx_sgl, *rx_sgl;
-        u32                                                 tx_sgl_len, rx_sgl_len;
-        const struct mtk_spi_compatible                     *dev_comp;
-        u32                                                 dram_8gb_offset;
-};
+#if !defined(CONFIG_MTK_CLKMGR)
+extern struct clk *globle_spi_clk;
+#endif
 
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
 static LIST_HEAD(device_list);
@@ -204,34 +191,30 @@ found:
     return rc;
 }
 
-static void gf_spi_clk_enable(struct gf_dev *gf_dev)
-{
+ static void gf_spi_clk_enable(void)
+ {
     #if !defined(CONFIG_MTK_CLKMGR)
-    struct spi_device *spi = gf_dev->spi;
-    struct mtk_spi *gf_ms = spi_master_get_devdata(spi->master);
-    clk_prepare_enable(gf_ms->spi_clk);
-        pr_info("clk_prepare_enable gf_spi_clk_enable.\n");
+    clk_prepare_enable(globle_spi_clk);
+	pr_debug("clk_prepare_enable gf_spi_clk_enable.\n");
+   
     #else
     enable_clock(MT_CG_PERI_SPI0, "spi");
-        pr_debug("enable_clock gf_spi_clk_enable.\n");
+	pr_debug("enable_clock gf_spi_clk_enable.\n");
     #endif
     return;
-}
+ }
 
-static void gf_spi_clk_disable(struct gf_dev *gf_dev)
-{
+ static void gf_spi_clk_disable(void)
+ {
     #if !defined(CONFIG_MTK_CLKMGR)
-    struct spi_device *spi = gf_dev->spi;
-    struct mtk_spi *gf_ms = spi_master_get_devdata(spi->master);
-
-    clk_disable_unprepare(gf_ms->spi_clk);
-    printk("%s, clk_disable_unprepare\n", __func__);
+    clk_disable_unprepare(globle_spi_clk);
+    //printk("%s, clk_disable_unprepare\n", __func__);
     #else
     disable_clock(MT_CG_PERI_SPI0, "spi");
     //printk("%s, disable_clock\n", __func__);
     #endif
     return;
-}
+ }
 
 static int pid = -1;
 struct sock *nl_sk = NULL;
@@ -672,7 +655,7 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 #ifdef AP_CONTROL_CLK
 		gfspi_ioctl_clk_enable(gf_dev);
 #else
-        gf_spi_clk_enable(gf_dev);
+        gf_spi_clk_enable();
 		pr_debug("gf_spi_clk_enable.\n");
 #endif
 		break;
@@ -681,7 +664,7 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 #ifdef AP_CONTROL_CLK
 		gfspi_ioctl_clk_disable(gf_dev);
 #else
-        gf_spi_clk_disable(gf_dev);
+        gf_spi_clk_disable();
 		pr_debug("gf_spi_clk_disable\n");
 #endif
 		break;
@@ -1067,7 +1050,6 @@ static int gf_remove(struct platform_device *pdev)
 
 static struct of_device_id gx_match_table[] = {
 	{ .compatible = GF_SPIDEV_NAME },
-        { .compatible = OPPO_SPIDEV_NAME },
 	{},
 };
 
@@ -1088,16 +1070,6 @@ static struct platform_driver gf_driver = {
 static int __init gf_init(void)
 {
 	int status;
-
-        if(FP_GOODIX_3268 != get_fpsensor_type() 
-           && FP_GOODIX_5298 != get_fpsensor_type()
-           && FP_GOODIX_5298_GLASS != get_fpsensor_type()
-           && FP_GOODIX_5658 != get_fpsensor_type()){
-            pr_err("%s, found not goodix sensor: %d\n", __func__, get_fpsensor_type());
-            status = -EINVAL;
-            return status;//need add 
-         }
-        pr_err("%s, found goodix sensor: %d\n", __func__, get_fpsensor_type());
 
 	/* Claim our 256 reserved device numbers.  Then register a class
 	 * that will key udev/mdev to add/remove /dev nodes.  Last, register

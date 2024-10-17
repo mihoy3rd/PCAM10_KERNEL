@@ -77,6 +77,11 @@ typedef struct imgsensor_struct {
 	kal_uint8  ihdr_mode;		    //ihdr mode 0: disable, 1: ihdr, 2:mVHDR, 9:zigzag
 
 	kal_uint8 i2c_write_id;			//record current sensor's i2c write id
+	#ifdef VENDOR_EDIT
+	//dingpeifei@hq 20181122 add for long exp n+1 or n+2
+	struct IMGSENSOR_AE_FRM_MODE ae_frm_mode;
+	kal_uint8 current_ae_effective_frame;
+	#endif
 } imgsensor_struct;
 
 //sensor基本信息，datasheet上的信息

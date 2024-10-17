@@ -180,10 +180,10 @@ void ion_heap_freelist_add(struct ion_heap *heap, struct ion_buffer *buffer)
 	spin_lock(&heap->free_lock);
 	list_add(&buffer->list, &heap->free_list);
 	heap->free_list_size += buffer->size;
-
-	if (heap->free_list_size > 200*1024*1024)
-		IONMSG("[ion_dbg] warning: free_list_size=0x%zu\n", heap->free_list_size);
-
+	if (heap->free_list_size > 200 * 1024 * 1024)
+		IONMSG(
+			"[ion_dbg] warning: free_list_size=%zu, heap_id:%u\n",
+			heap->free_list_size, heap->id);
 	spin_unlock(&heap->free_lock);
 	wake_up(&heap->waitqueue);
 }
@@ -343,7 +343,8 @@ struct ion_heap *ion_heap_create(struct ion_platform_heap *heap_data)
 
 	switch (heap_data->type) {
 	case ION_HEAP_TYPE_SYSTEM_CONTIG:
-		pr_err("%s: Heap type is disabled: %d\n", __func__, heap_data->type);
+		pr_err("%s: Heap type is disabled: %d\n", __func__,
+		       heap_data->type);
 		return ERR_PTR(-EINVAL);
 	case ION_HEAP_TYPE_SYSTEM:
 		heap = ion_system_heap_create(heap_data);
@@ -383,7 +384,8 @@ void ion_heap_destroy(struct ion_heap *heap)
 
 	switch (heap->type) {
 	case ION_HEAP_TYPE_SYSTEM_CONTIG:
-		pr_err("%s: Heap type is disabled: %d\n", __func__, heap->type);
+		pr_err("%s: Heap type is disabled: %d\n", __func__,
+		       heap->type);
 		break;
 	case ION_HEAP_TYPE_SYSTEM:
 		ion_system_heap_destroy(heap);

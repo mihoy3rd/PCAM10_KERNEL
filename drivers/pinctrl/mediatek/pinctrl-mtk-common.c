@@ -41,8 +41,7 @@
 #include "../pinctrl-utils.h"
 #include "pinctrl-mtk-common.h"
 #include <mt-plat/mtk_gpio.h>
-/*Riqin.Wei@camera.drv, 2019/08/07, add for 19531 set i2c4 i2c2  inside pull up or not*/
-#include <soc/oppo/oppo_project.h>
+
 #define MAX_GPIO_MODE_PER_REG 5
 #define GPIO_MODE_BITS        3
 #define GPIO_MODE_PREFIX "GPIO"
@@ -2689,7 +2688,6 @@ int mtk_pctrl_init(struct platform_device *pdev,
 #endif
 
 	pr_warn("mtk_pctrl_init------ ok\n");
-
 	return 0;
 
 chip_error:

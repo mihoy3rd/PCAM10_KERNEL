@@ -13,4 +13,3 @@ oppo_hypnus-objs := hypnus_main.o hypnus_dev.o hypnus_sysfs.o
 oppo_hypnus-objs += $(hypnus_ops-y)
 
 obj-$(CONFIG_OPPO_HYPNUS) += oppo_hypnus.o
-obj-y += hypnus_helper.o

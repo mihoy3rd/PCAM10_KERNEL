@@ -120,10 +120,6 @@ static struct {
 	{DISP_OPT_OVL_EXT_LAYER, 0, "DISP_OPT_OVL_EXT_LAYER"},
 	{DISP_OPT_REG_PARSER_RAW_DUMP, 0, "DISP_OPT_REG_PARSER_RAW_DUMP"},
 	{DISP_OPT_AOD, 1, "DISP_OPT_AOD"},
-#ifdef VENDOR_EDIT
-/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/10/22, add for 19151 fake aod */
-	{DISP_OPT_AOD_RAMLESS, 1, "DISP_OPT_AOD_RAMLESS"},
-#endif /*VENDOR_EDIT*/
 	{DISP_OPT_ARR_PHASE_1, 0, "DISP_OPT_ARR_PHASE_1"},
 	{DISP_OPT_RSZ, 0, "DISP_OPT_RSZ"},
 	{DISP_OPT_RPO, 0, "DISP_OPT_RPO"},
@@ -133,7 +129,6 @@ static struct {
 	{DISP_OPT_ANTILATENCY, 0, "DISP_OPT_ANTILATENCY"},
 	{DISP_OPT_DC_BY_HRT, 0, "DISP_OPT_DC_BY_HRT"},
 	{DISP_OPT_OVL_DCM, 0, "DISP_OPT_OVL_DCM"},
-	{DISP_OPT_LCM_HBM, 0, "DISP_OPT_LCM_HBM"},
 };
 
 const char *disp_helper_option_spy(enum DISP_HELPER_OPT option)
@@ -396,23 +391,12 @@ void disp_helper_option_init(void)
 	*/
 	disp_helper_set_option(DISP_OPT_AOD, 1);
 	#else
-	if (is_project(OPPO_17197) \
-		|| is_project(OPPO_19531) || is_project(OPPO_19391) \
-		|| is_project(19151) || is_project(19350)) {
+	if (is_project(OPPO_17197)) {
 		disp_helper_set_option(DISP_OPT_AOD, 1);
 	} else {
 		disp_helper_set_option(DISP_OPT_AOD, 0);
 	}
 	#endif /* VENDOR_EDIT */
-
-#ifdef VENDOR_EDIT
-/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/10/22, add for 19151 fake aod */
-	if (is_project(19151) || is_project(19350)) {
-		disp_helper_set_option(DISP_OPT_AOD_RAMLESS, 1);
-	} else {
-		disp_helper_set_option(DISP_OPT_AOD_RAMLESS, 0);
-	}
-#endif /*VENDOR_EDIT*/
 
 	/* ARR phase 1 option*/
 	disp_helper_set_option(DISP_OPT_ARR_PHASE_1, 0);
@@ -427,18 +411,6 @@ void disp_helper_option_init(void)
 #ifndef CONFIG_MTK_HDMI_SUPPORT
 	disp_helper_set_option(DISP_OPT_OVL_DCM, 1);
 #endif
-	#ifdef VENDOR_EDIT
-	/*
-	* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/01/21,
-	* add for dimming layer HBM mode
-	*/
-	if (is_project(OPPO_19531) || is_project(OPPO_19391) \
-		|| is_project(19151) || is_project(19350)) {
-		disp_helper_set_option(DISP_OPT_LCM_HBM, 1);
-	} else {
-		disp_helper_set_option(DISP_OPT_LCM_HBM, 0);
-	}
-	#endif /*VENDOR_EDIT*/
 }
 
 int disp_helper_get_option_list(char *stringbuf, int buf_len)

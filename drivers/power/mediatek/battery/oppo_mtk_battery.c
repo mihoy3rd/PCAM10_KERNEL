@@ -1079,12 +1079,6 @@ int BattVoltToTemp(int dwVolt, int volt_cali)
 	int vbif28 = gm.rbat.rbat_pull_up_volt;
 	int delta_v;
 
-#ifdef VENDOR_EDIT
-/* Yichun.Chen  PSW.BSP.CHG  2019-03-15  for produce */
-	if (dwVolt >= 2000)
-		return -80;
-#endif
-
 	TRes_temp = (gm.rbat.rbat_pull_up_r * (long long) dwVolt);
 #ifdef RBAT_PULL_UP_VOLT_BY_BIF
 	vbif28 = pmic_get_vbif28_volt() + volt_cali;
@@ -1296,7 +1290,7 @@ int force_get_tbat(bool update)
 {
 	int bat_temperature_val = 0;
 	int counts = 0;
-	int fgv;
+    int fgv;
 
 	if (is_fg_disabled()) {
 		bm_debug("[force_get_tbat] fixed TBAT=25 t\n");
@@ -1617,41 +1611,6 @@ void fg_ocv_query_soc(int ocv)
 
 	bm_trace("[fg_ocv_query_soc] ocv:%d\n", ocv);
 }
-
-#ifdef VENDOR_EDIT
-/* Yichun.Chen  PSW.BSP.CHG  2019-07-23  for aging issue */
-void fg_change_aging(int new_aging)
-{
-	new_aging = new_aging * UNIT_TRANS_100;
-
-	wakeup_fg_algo_cmd(
-		FG_INTR_KERNEL_CMD, FG_KERNEL_CMD_REQ_CHANGE_AGING_DATA,
-		new_aging);
-
-	bm_err("[%s] new_aging:%d\n", __func__, new_aging);
-}
-
-/*
-void fg_test_ag_cmd(int cmd)
-{
-	wakeup_fg_algo_cmd(
-		FG_INTR_KERNEL_CMD, FG_KERNEL_CMD_AG_LOG_TEST, cmd);
-
-	bm_err("[%s]FG_KERNEL_CMD_AG_LOG_TEST:%d\n",
-		__func__, cmd);
-}
-*/
-
-void fg_notify_aglog_latch_done(void)
-{
-	gm.ag_detect_err = 0;
-	wakeup_fg_algo_cmd(
-		FG_INTR_KERNEL_CMD, FG_KERNEL_CMD_AGLOG_LATCH_DONE, 0);
-
-	bm_err("[%s]FG_KERNEL_CMD_AGLOG_LATCH_DONE:%d\n",
-		__func__, gm.ag_detect_err);
-}
-#endif
 
 void exec_BAT_EC(int cmd, int param)
 {
@@ -2551,38 +2510,7 @@ void exec_BAT_EC(int cmd, int param)
 				cmd, param);
 		}
 		break;
-#ifdef VENDOR_EDIT
-/* Yichun.Chen  PSW.BSP.CHG  2019- */
-	case 888:
-		{
-			fg_change_aging(param);
-			bm_err(
-				"exe_BAT_EC cmd %d,change aging to=%d\n",
-				cmd, param);
-		}
-		break;
-	case 889:
-		{
-			bm_err(
-				"exe_BAT_EC cmd %d,nofify latch done %d\n",
-				cmd, param);
 
-			fg_notify_aglog_latch_done();
-		}
-		break;
-	case 890:
-		{
-			bm_err(
-				"exe_BAT_EC cmd %d,FG_KERNEL_CMD_AG_LOG_TEST=%d\n",
-				cmd, param);
-
-			wakeup_fg_algo_cmd(
-				FG_INTR_KERNEL_CMD,
-				FG_KERNEL_CMD_AG_LOG_TEST, param);
-
-		}
-		break;
-#endif
 
 	default:
 		bm_err(
@@ -3029,7 +2957,6 @@ static DEVICE_ATTR(
 static int battery_callback(
 	struct notifier_block *nb, unsigned long event, void *v)
 {
-	printk("battery_callback\n");
 	bm_err("battery_callback:%ld\n", event);
 	switch (event) {
 	case CHARGER_NOTIFY_EOC:
@@ -3531,8 +3458,7 @@ static int meter_fg_30_get_battery_mvolts(void)
 {
 	int ret = 0;
 
-	/* for calibrate -10mV */
-	ret = battery_get_bat_voltage() - 10;
+	ret = battery_get_bat_voltage();
 	return ret;
 }
 
@@ -3635,11 +3561,16 @@ extern int notify_battery_full(void);
 
 static void meter_fg_30_set_battery_full(bool full)
 {
-	printk("last full = %d, full = %d\n", last_full, full);
 	if(last_full != full) {
-		if (full)
-			notify_fg_chr_full();
-		last_full = full;
+		if (full) {
+			if (notify_battery_full()) {
+				//BMT_status.bat_full = true;
+				last_full = full;
+			}
+		} else {
+			//BMT_status.bat_full = false;
+			last_full = full;
+		}
 	}
 }
 #else
@@ -3884,92 +3815,6 @@ static void get_average_current(struct work_struct *work)
 						msecs_to_jiffies(delay_time * 1000));
 }
 
-#ifdef VENDOR_EDIT
-/* Yichun.Chen  PSW.BSP.CHG  2019-07-23  for aging issue */
-static ssize_t aging_log_read(struct file *filp, char __user *buff, size_t count, loff_t *off)
-{
-	char page[2200] = "", aging_value[100] = "", over_length[] = "over_length", aging_error[] = "aging_error = 1 ";
-	int len = 0, bat_volt = 0, bat_curr = 0, bat_temp = 0, ui_soc = 0;
-
-	bat_volt = meter_fg_30_get_battery_mvolts();
-	bat_curr = meter_fg_30_get_average_current();
-	bat_temp = meter_fg_30_get_battery_temperature();
-	ui_soc = meter_fg_30_get_battery_soc();
-
-	sprintf(aging_value, "[root cause][%d %d %d %d %d %d %d %d] ", bat_volt, bat_curr, bat_temp, ui_soc,
-			gm.aging_factor, gm.algo_qmax, fg_cust_data.v_soc, fg_cust_data.c_soc);
-	strncat(page, aging_value, strlen(aging_value));
-	if (gm.ag_detect_err == 1) {
-		strncat(page, aging_error, strlen(aging_error));
-		if (strlen(gm.ag_log) + strlen(page) <= 2200)
-			strncat(page, gm.ag_log, strlen(gm.ag_log));
-		else
-			strncat(page, over_length, strlen(over_length));
-		fg_notify_aglog_latch_done();
-	}
-
-	len = strlen(page);
-
-	if (len > *off)
-		len -= *off;
-	else
-		len = 0;
-
-	if (copy_to_user(buff, page, (len < count ? len : count))) {
-		return -EFAULT;
-	}
-
-	*off += len < count ? len : count;
-	return (len < count ? len : count);
-}
-
-static const struct file_operations aging_log_proc_fops = {
-	.read = aging_log_read,
-};
-
-static ssize_t aging_error_read(struct file *filp, char __user *buff, size_t count, loff_t *off)
-{
-	char page[256] = {0};
-	int len = 0;
-
-	len = sprintf(page, "%d\n", 1);
-
-	if (len > *off) {
-		len -= *off;
-	} else {
-		len = 0;
-	}
-
-	if (copy_to_user(buff, page, (len < count ? len : count))) {
-		return -EFAULT;
-	}
-
-	*off += len < count ? len : count;
-	return (len < count ? len : count);
-}
-
-static const struct file_operations aging_error_proc_fops = {
-	.read = aging_error_read,
-};
-
-static int init_gauge_aging_log(void)
-{
-	struct proc_dir_entry *p = NULL;
-
-	p = proc_create("aging_error", 0664, NULL, &aging_error_proc_fops);
-	if (!p) {
-		bm_err("proc_create aging_error fail!\n");
-	}
-
-	p = proc_create("aging_log", 0664, NULL, &aging_log_proc_fops);
-	if (!p) {
-		bm_err("proc_create aging_log fail!\n");
-	}
-
-	return 0;
-}
-#endif
-
 static struct oppo_gauge_operations battery_meter_fg_30_gauge = {
 	.get_battery_mvolts			= meter_fg_30_get_battery_mvolts,
 	.get_battery_temperature		= meter_fg_30_get_battery_temperature,
@@ -4012,7 +3857,7 @@ void dis_GM3_SRC_SEL(void)
 }
 #endif /* VENDOR_EDIT */
 
-static int battery_probe(struct platform_device *dev)
+static int __init battery_probe(struct platform_device *dev)
 {
 	int ret_device_file = 0;
 	int ret;
@@ -4049,6 +3894,7 @@ static int battery_probe(struct platform_device *dev)
 					adc_cali_devno,
 					NULL, ADC_CALI_DEVNAME);
 /*****************************/
+
 	mtk_battery_init(dev);
 	/* Power supply class */
 #if !defined(CONFIG_MTK_DISABLE_GAUGE)
@@ -4163,7 +4009,6 @@ static int battery_probe(struct platform_device *dev)
 	}
 #if 1
 	gm.pbat_consumer = charger_manager_get_by_name(&(dev->dev), "charger");
-
 	if (gm.pbat_consumer != NULL) {
 		gm.bat_nb.notifier_call = battery_callback;
 		register_charger_manager_notifier(gm.pbat_consumer, &gm.bat_nb);
@@ -4337,12 +4182,6 @@ if(!is_vooc_project()) {
 #endif
 
 	ret = platform_driver_register(&battery_driver_probe);
-
-#ifdef VENDOR_EDIT
-/* Yichun.Chen  PSW.BSP.CHG  2019-07-29  for aging issue */
-	if(!is_vooc_project())
-		init_gauge_aging_log();
-#endif
 
 	bm_err("[battery_init] Initialization : DONE\n");
 

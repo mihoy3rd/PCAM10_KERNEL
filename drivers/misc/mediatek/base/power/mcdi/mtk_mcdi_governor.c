@@ -562,10 +562,6 @@ int mcdi_governor_select(int cpu, int cluster_idx)
 	bool last_core_token_get = false;
 	bool last_core_in_this_cluster = false;
 	struct mcdi_status *mcdi_stat = NULL;
-#ifdef VENDOR_EDIT
-//tianwen@BSP.Kernel.Stability, 2019/11/29   add protection to avoid unexcepted mcdi when CPU is offline
-	unsigned int avail_cpu = 0;
-#endif /*VENDOR_EDIT*/
 
 	if (!is_mcdi_working())
 		return MCDI_STATE_WFI;
@@ -587,15 +583,6 @@ int mcdi_governor_select(int cpu, int cluster_idx)
 
 	if (!(cpu >= 0 && cpu < NF_CPU))
 		return MCDI_STATE_WFI;
-
-#ifdef VENDOR_EDIT
-//tianwen@BSP.Kernel.Stability, 2019/11/29   add protection to avoid unexcepted mcdi when CPU is offline
-	/* Check if online CPUx alignes with avail_cpu_mask*/
-	avail_cpu = mcdi_mbox_read(MCDI_MBOX_AVAIL_CPU_MASK);
-
-	if (!(avail_cpu & (1 << cpu)))
-		return MCDI_STATE_WFI;
-#endif /*VENDOR_EDIT*/		
 
 	spin_lock_irqsave(&mcdi_gov_spin_lock, flags);
 
@@ -771,10 +758,6 @@ void set_mcdi_enable_status(bool enabled)
 	if (!enabled)
 		mcdi_wakeup_all_cpu();
 }
-#ifdef VENDOR_EDIT
-//cuixiaogang@swdp.shanghai, 2017/12/08, Add gpufreq min limit interface
-EXPORT_SYMBOL(set_mcdi_enable_status);
-#endif /* VENDOR_EDIT */
 
 void set_mcdi_s_state(int state)
 {
@@ -814,7 +797,6 @@ void set_mcdi_s_state(int state)
 
 	spin_unlock_irqrestore(&mcdi_feature_stat_spin_lock, flags);
 }
-EXPORT_SYMBOL(set_mcdi_s_state);
 
 void set_mcdi_buck_off_mask(unsigned int buck_off_mask)
 {

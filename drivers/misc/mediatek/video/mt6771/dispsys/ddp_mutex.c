@@ -319,12 +319,6 @@ int ddp_mutex_enable(int mutex_id, enum DDP_SCENARIO_ENUM scenario, enum DDP_MOD
 
 int ddp_mutex_set(int mutex_id, enum DDP_SCENARIO_ENUM scenario, enum DDP_MODE mode, void *handle)
 {
-	if ((mutex_id == 0) && (scenario == DDP_SCENARIO_PRIMARY_OVL_MEMOUT)) {
-		DDPPR_ERR("unexpect mutex_id %d config in scenario %s\n",
-			mutex_id, ddp_get_scenario_name(scenario));
-		BUG_ON(1);
-	}
-
 	if (scenario < DDP_SCENARIO_MAX)
 		return ddp_mutex_set_l(mutex_id, module_list_scenario[scenario], mode, handle);
 

@@ -873,7 +873,6 @@ struct synaptics_register
         uint8_t F51_CUSTOM_CTRL04_08;
         uint8_t F51_CUSTOM_CTRL13; //Debug enable reg
         uint8_t F51_CUSTOM_CTRL20; //gesture for fingerprint
-        uint8_t F51_CUSTOM_CTRL30; //change for game mode
         uint8_t F51_CUSTOM_DATA;
 
         uint8_t F54_ANALOG_QUERY_BASE;
@@ -911,11 +910,8 @@ struct chip_data_s3706 {
         uint8_t     touch_direction;    //show touchpanel current direction
         bool        is_fp_down;             //show fp is down or up
         uint8_t     default_nosie_level;
-        uint8_t     default_lock_point_level;   //show the default strong lock point level in high frequency
         bool        force_update_needed;    //show what if need do force update when touch up
         bool        rt155_fdreplace_rt59_support;   //means fd RT59 test is replaced by RT155
-        bool        report_120hz_support;           //report point use >=120HZ
-        unsigned long rotation_changed_time;        //remember rotation changed time
 };
 
 static inline int secure_memcpy(unsigned char *dest, unsigned int dest_size,

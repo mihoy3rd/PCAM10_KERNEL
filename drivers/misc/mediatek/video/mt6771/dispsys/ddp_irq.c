@@ -35,14 +35,6 @@
 #include "smi_debug.h"
 #include "ddp_manager.h"
 #include "primary_display.h"
-#ifdef VENDOR_EDIT
-/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/11/29, add for ramless dc notify */
-extern bool fingerprint_layer;
-extern void hbm_notify(void);
-extern int ramless_dc_wait;
-extern int oppo_dc_enable;
-int dim_count = 0;
-#endif
 
 /* IRQ log print kthread */
 static struct task_struct *disp_irq_log_task;
@@ -355,17 +347,6 @@ irqreturn_t disp_irq_handler(int irq, void *dev_id)
 			DDPIRQ("IRQ: RDMA%d reg update done!\n", index);
 
 		if (reg_val & (1 << 2)) {
-			#ifdef VENDOR_EDIT
-				if (ramless_dc_wait && oppo_dc_enable && fingerprint_layer) {
-					dim_count = dim_count + 1;
-					if (dim_count == 2) {
-						hbm_notify();
-					}
-				} else {
-					dim_count = 0;
-				}
-			#endif
-
 			mmprofile_log_ex(ddp_mmp_get_events()->SCREEN_UPDATE[index], MMPROFILE_FLAG_END,
 				       reg_val, DISP_REG_GET(DISPSYS_RDMA0_BASE + 0x4));
 			rdma_end_time[index] = sched_clock();
@@ -378,7 +359,6 @@ irqreturn_t disp_irq_handler(int irq, void *dev_id)
 			rdma_start_time[index] = sched_clock();
 			DDPIRQ("IRQ: RDMA%d frame start!\n", index);
 			rdma_start_irq_cnt[index]++;
-
 		}
 		if (reg_val & (1 << 3)) {
 			mmprofile_log_ex(ddp_mmp_get_events()->SCREEN_UPDATE[index], MMPROFILE_FLAG_PULSE,

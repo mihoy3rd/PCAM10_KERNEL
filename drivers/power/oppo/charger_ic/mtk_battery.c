@@ -1350,7 +1350,7 @@ void fg_custom_init_from_header(void)
 	/* ADC resistor  */
 	#ifdef VENDOR_EDIT
 	/* Qiao.Hu@BSP.BaseDrv.CHG.Basic, 2018/02/24, Add for bq25890IC charging and hardware change */
-	if (is_project(17197) || is_project(18311)) {
+	if (is_project(17197)) {
 		fg_cust_data.r_charger_1 = 300;
 	} else {
         if (main_hwid5_val) {
@@ -6154,12 +6154,9 @@ static int __init battery_probe(struct platform_device *dev)
 		bm_err("gauge_dev is NULL\n");
 #ifdef VENDOR_EDIT
 //PengNan@BSP.CHG.Basic, 2017/09/07, add for compatabling two fuelgauge.
-	if(is_project(17031) || is_project(17032) || is_project(17197) || is_project(18311) ) {
-		if (get_Operator_Version() != OPERATOR_18328_ASIA_SIMPLE_NORMALCHG) {
-            gDisableGM30 = 1;
-            fg_custom_init_from_header();
-        }
-		
+	if(is_project(17031) || is_project(17032) || is_project(17197)) {
+		gDisableGM30 = 1;
+		fg_custom_init_from_header();
 		//return 0;
 	}
 #endif /*VENDOR_EDIT*/
@@ -6367,7 +6364,8 @@ static int __init battery_probe(struct platform_device *dev)
 	}
 #ifndef VENDOR_EDIT
 		/* tongfeng.Huang@EXP.BSP.CHG.basic, 2018/03/27, Add for charger */
-	if (is_recovery_mode() && !is_project(OPPO_17197) && ( !is_project(OPPO_18311) ||  (get_Operator_Version() == OPERATOR_18328_ASIA_SIMPLE_NORMALCHG)) ) {
+
+	if (is_recovery_mode() && !is_project(OPPO_17197)) {
 		battery_recovery_init();
 	}
 #endif
@@ -6589,7 +6587,7 @@ static int battery_dts_probe(struct platform_device *dev)
 	
 #ifdef VENDOR_EDIT
 	/* tongfeng.Huang@EXP.BSP.CHG.basic, 2018/03/27, Add for charger */
-	if (is_recovery_mode() && !is_project(OPPO_17197) && ( !is_project(OPPO_18311) ||  (get_Operator_Version() == OPERATOR_18328_ASIA_SIMPLE_NORMALCHG)) ) {
+	if (is_recovery_mode() && !is_project(OPPO_17197)) {
 		battery_recovery_init();
 	}
 #endif
@@ -6701,7 +6699,7 @@ static int battery_type_check(void)
 	value = value * 1500 / 4096;
 	value = value / times;
 	printk(KERN_ERR "[battery_value= %d\n", value);
-	if(is_project(OPPO_17331) || is_project(OPPO_17061) || is_project(OPPO_17175)  || (get_Operator_Version() == OPERATOR_18328_ASIA_SIMPLE_NORMALCHG)){
+	if(is_project(OPPO_17331) || is_project(OPPO_17061) || is_project(OPPO_17175)){
 		g_fg_battery_id = 1;
 		if(is_project(OPPO_17061)){
 			g_fg_battery_id = 3;
@@ -6858,7 +6856,7 @@ static int __init battery_init(void)
 		}
 	#ifdef VENDOR_EDIT
 	/* Qiao.Hu@BSP.BaseDrv.CHG.Basic, 2018/01/01, modefy for fastcharger */
-	if(is_project(OPPO_17331) || is_project(OPPO_17061) || is_project(OPPO_17175) || (get_Operator_Version() == OPERATOR_18328_ASIA_SIMPLE_NORMALCHG) ) {
+	if(is_project(OPPO_17331) || is_project(OPPO_17061) || is_project(OPPO_17175)) {
 		chip->gauge_ops = &battery_meter_fg_30_gauge;
 		oppo_gauge_init(chip);
 	}

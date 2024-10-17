@@ -47,7 +47,7 @@ static struct mutex i2c_mutex;
  * Actully, This function call i2c_transfer for IIC transfer,
  * Returning transfer length(transfer success) or most likely negative errno(transfer error)
  */
-int touch_i2c_continue_read(struct i2c_client *client, unsigned short length, unsigned char *data)
+int touch_i2c_continue_read(struct i2c_client* client, unsigned short length, unsigned char *data)
 {
     int retval;
     unsigned char retry;
@@ -84,7 +84,7 @@ int touch_i2c_continue_read(struct i2c_client *client, unsigned short length, un
  * Returning transfer length(transfer success) or most likely negative errno(transfer error)
  */
 #ifndef CONFIG_HAVE_ARCH_VMAP_STACK
-int touch_i2c_read_block(struct i2c_client *client, u16 addr, unsigned short length, unsigned char *data)
+int touch_i2c_read_block(struct i2c_client* client, u16 addr, unsigned short length, unsigned char *data)
 {
     int retval;
     unsigned char retry;
@@ -95,10 +95,13 @@ int touch_i2c_read_block(struct i2c_client *client, u16 addr, unsigned short len
     msg[0].flags = 0;
     msg[0].buf = buffer;
 
-    if (!register_is_16bit) { // if register is 8bit
+    if (!register_is_16bit)  // if register is 8bit
+    {
         msg[0].len = 1;
         msg[0].buf[0] = buffer[1];
-    } else {
+    }
+    else
+    {
         msg[0].len = 2;
         msg[0].buf[0] = buffer[0];
         msg[0].buf[1] = buffer[1];
@@ -123,27 +126,16 @@ int touch_i2c_read_block(struct i2c_client *client, u16 addr, unsigned short len
     return retval;
 }
 #else
-int touch_i2c_read_block(struct i2c_client *client, u16 addr, unsigned short length, unsigned char *data)
+int touch_i2c_read_block(struct i2c_client* client, u16 addr, unsigned short length, unsigned char *data)
 {
     int retval;
     unsigned char retry;
     static unsigned char *read_buf = NULL;
     static unsigned int read_buf_size = 0;
-    static unsigned char *buffer = NULL;
+    unsigned char buffer[2] = {(addr >> 8) & 0xff, addr & 0xff};
     struct i2c_msg msg[2];
 
     mutex_lock(&i2c_mutex);
-
-    if (!buffer) {
-        buffer = kzalloc(2, GFP_KERNEL | GFP_DMA);
-        if (!buffer) {
-            TPD_INFO("kzalloc buffer failed.\n");
-            mutex_unlock(&i2c_mutex);
-            return -ENOMEM;
-        }
-    }
-    buffer[0] = (addr >> 8) & 0xff;
-    buffer[1] = addr & 0xff;
 
     if (length > FIX_I2C_LENGTH) {
         if (read_buf_size < length) {
@@ -151,7 +143,7 @@ int touch_i2c_read_block(struct i2c_client *client, u16 addr, unsigned short len
                 kfree(read_buf);
                 TPD_INFO("read block_1, free once.\n");
             }
-            read_buf = kzalloc(length, GFP_KERNEL | GFP_DMA);
+            read_buf = kzalloc(length, GFP_KERNEL);
             if (!read_buf) {
                 read_buf_size = 0;
                 TPD_INFO("read block_1, kzalloc failed(len:%d, buf_size:%d).\n", length, read_buf_size);
@@ -166,7 +158,7 @@ int touch_i2c_read_block(struct i2c_client *client, u16 addr, unsigned short len
     } else {
         if (read_buf_size > FIX_I2C_LENGTH) {
             kfree(read_buf);
-            read_buf = kzalloc(FIX_I2C_LENGTH, GFP_KERNEL | GFP_DMA);
+            read_buf = kzalloc(FIX_I2C_LENGTH, GFP_KERNEL);
             if (!read_buf) {
                 read_buf_size = 0;
                 TPD_INFO("read block_2, kzalloc failed(len:%d, buf_size:%d).\n", length, read_buf_size);
@@ -177,7 +169,7 @@ int touch_i2c_read_block(struct i2c_client *client, u16 addr, unsigned short len
             TPD_INFO("read block_2, kzalloc success(len:%d, buf_size:%d).\n", length, read_buf_size);
         } else {
             if (!read_buf) {
-                read_buf = kzalloc(FIX_I2C_LENGTH, GFP_KERNEL | GFP_DMA);
+                read_buf = kzalloc(FIX_I2C_LENGTH, GFP_KERNEL);
                 if (!read_buf) {
                     read_buf_size = 0;
                     TPD_INFO("read block_3, kzalloc failed(len:%d, buf_size:%d).\n", length, read_buf_size);
@@ -196,10 +188,13 @@ int touch_i2c_read_block(struct i2c_client *client, u16 addr, unsigned short len
     msg[0].flags = 0;
     msg[0].buf = buffer;
 
-    if (!register_is_16bit) { // if register is 8bit
+    if (!register_is_16bit)  // if register is 8bit
+    {
         msg[0].len = 1;
         msg[0].buf[0] = buffer[1];
-    } else {
+    }
+    else
+    {
         msg[0].len = 2;
         msg[0].buf[0] = buffer[0];
         msg[0].buf[1] = buffer[1];
@@ -237,7 +232,7 @@ int touch_i2c_read_block(struct i2c_client *client, u16 addr, unsigned short len
  * Actully, This function call i2c_transfer for IIC transfer,
  * Returning transfer length(transfer success) or most likely negative errno(transfer error)
  */
-int touch_i2c_continue_write(struct i2c_client *client, unsigned short length, unsigned char *data)
+int touch_i2c_continue_write(struct i2c_client* client, unsigned short length, unsigned char *data)
 {
     int retval;
     unsigned char retry;
@@ -273,7 +268,7 @@ int touch_i2c_continue_write(struct i2c_client *client, unsigned short length, u
  * Returning transfer length(transfer success) or most likely negative errno(transfer error)
  */
 #ifndef CONFIG_HAVE_ARCH_VMAP_STACK
-int touch_i2c_write_block(struct i2c_client *client, u16 addr, unsigned short length, unsigned char const *data)
+int touch_i2c_write_block(struct i2c_client* client, u16 addr, unsigned short length, unsigned char const *data)
 {
     int retval;
     unsigned char retry;
@@ -284,12 +279,15 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr, unsigned short le
     msg[0].flags = 0;
     msg[0].buf = buffer;
 
-    if (!register_is_16bit) { // if register is 8bit
+    if (!register_is_16bit)  // if register is 8bit
+    {
         msg[0].len = length + 1;
         msg[0].buf[0] = addr & 0xff;
 
         memcpy(&buffer[1], &data[0], length);
-    } else {
+    }
+    else
+    {
         msg[0].len = length + 2;
         msg[0].buf[0] = (addr >> 8) & 0xff;
         msg[0].buf[1] = addr & 0xff;
@@ -311,7 +309,7 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr, unsigned short le
     return retval;
 }
 #else
-int touch_i2c_write_block(struct i2c_client *client, u16 addr, unsigned short length, unsigned char const *data)
+int touch_i2c_write_block(struct i2c_client* client, u16 addr, unsigned short length, unsigned char const *data)
 {
     int retval;
     unsigned char retry;
@@ -329,7 +327,7 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr, unsigned short le
                 kfree(write_buf);
                 TPD_INFO("write block_1, free once.\n");
             }
-            write_buf = kzalloc(total_length, GFP_KERNEL | GFP_DMA);
+            write_buf = kzalloc(total_length, GFP_KERNEL);
             if (!write_buf) {
                 write_buf_size = 0;
                 TPD_INFO("write block_1, kzalloc failed(len:%d, buf_size:%d).\n", total_length, write_buf_size);
@@ -344,7 +342,7 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr, unsigned short le
     } else {
         if (write_buf_size > FIX_I2C_LENGTH) {
             kfree(write_buf);
-            write_buf = kzalloc(FIX_I2C_LENGTH, GFP_KERNEL | GFP_DMA);
+            write_buf = kzalloc(FIX_I2C_LENGTH, GFP_KERNEL);
             if (!write_buf) {
                 write_buf_size = 0;
                 TPD_INFO("write block_2, kzalloc failed(len:%d, buf_size:%d).\n", total_length, write_buf_size);
@@ -355,7 +353,7 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr, unsigned short le
             TPD_INFO("write block_2, kzalloc success(len:%d, buf_size:%d).\n", total_length, write_buf_size);
         } else {
             if (!write_buf) {
-                write_buf = kzalloc(FIX_I2C_LENGTH, GFP_KERNEL | GFP_DMA);
+                write_buf = kzalloc(FIX_I2C_LENGTH, GFP_KERNEL);
                 if (!write_buf) {
                     write_buf_size = 0;
                     TPD_INFO("write block_3, kzalloc failed(len:%d, buf_size:%d).\n", total_length, write_buf_size);
@@ -374,12 +372,15 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr, unsigned short le
     msg[0].flags = 0;
     msg[0].buf = write_buf;
 
-    if (!register_is_16bit) { // if register is 8bit
+    if (!register_is_16bit)  // if register is 8bit
+    {
         msg[0].len = length + 1;
         msg[0].buf[0] = addr & 0xff;
 
         memcpy(&write_buf[1], &data[0], length);
-    } else {
+    }
+    else
+    {
         msg[0].len = length + 2;
         msg[0].buf[0] = (addr >> 8) & 0xff;
         msg[0].buf[1] = addr & 0xff;
@@ -412,7 +413,7 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr, unsigned short le
  * Actully, This function call touch_i2c_read_block for IIC transfer,
  * Returning zero(transfer success) or most likely negative errno(transfer error)
  */
-int touch_i2c_read_byte(struct i2c_client *client, unsigned short addr)
+int touch_i2c_read_byte(struct i2c_client* client, unsigned short addr)
 {
     int retval = 0;
     unsigned char buf[2] = {0};
@@ -438,7 +439,7 @@ int touch_i2c_read_byte(struct i2c_client *client, unsigned short addr)
  * Actully, This function call touch_i2c_write_block for IIC transfer,
  * Returning zero(transfer success) or most likely negative errno(transfer error)
  */
-int touch_i2c_write_byte(struct i2c_client *client, unsigned short addr, unsigned char data)
+int touch_i2c_write_byte(struct i2c_client* client, unsigned short addr, unsigned char data)
 {
     int retval;
     int length_trans = 1;
@@ -464,7 +465,7 @@ int touch_i2c_write_byte(struct i2c_client *client, unsigned short addr, unsigne
  * Actully, This func call touch_i2c_Read_block for IIC transfer,
  * Returning negative errno else a 16-bit unsigned "word" received from the device.
  */
-int touch_i2c_read_word(struct i2c_client *client, unsigned short addr)
+int touch_i2c_read_word(struct i2c_client* client, unsigned short addr)
 {
     int retval;
     unsigned char buf[2] = {0};
@@ -489,7 +490,7 @@ int touch_i2c_read_word(struct i2c_client *client, unsigned short addr)
  * Actully, This function call touch_i2c_write_block for IIC transfer,
  * Returning zero(transfer success) or most likely negative errno(transfer error)
  */
-int touch_i2c_write_word(struct i2c_client *client, unsigned short addr, unsigned short data)
+int touch_i2c_write_word(struct i2c_client* client, unsigned short addr, unsigned short data)
 {
     int retval;
     int length_trans = 2;
@@ -523,16 +524,15 @@ int touch_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char
     int retval = 0;
     int retry = 0;
 
-    mutex_lock(&i2c_mutex);
     if (client == NULL) {
         TPD_INFO("%s: i2c_client == NULL!\n", __func__);
-        mutex_unlock(&i2c_mutex);
         return -1;
     }
 
     if (readlen > 0) {
         if (writelen > 0) {
-            struct i2c_msg msgs[] = {
+            struct i2c_msg msgs[] =
+            {
                 {
                     .addr = client->addr,
                     .flags = 0,
@@ -555,7 +555,8 @@ int touch_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char
                 msleep(20);
             }
         } else {
-            struct i2c_msg msgs[] = {
+            struct i2c_msg msgs[] =
+            {
                 {
                     .addr = client->addr,
                     .flags = I2C_M_RD,
@@ -579,7 +580,6 @@ int touch_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char
         }
     }
 
-    mutex_unlock(&i2c_mutex);
     return retval;
 }
 
@@ -597,15 +597,14 @@ int touch_i2c_write(struct i2c_client *client, char *writebuf, int writelen)
     int retval = 0;
     int retry = 0;
 
-    mutex_lock(&i2c_mutex);
     if (client == NULL) {
         TPD_INFO("%s: i2c_client == NULL!", __func__);
-        mutex_unlock(&i2c_mutex);
         return -1;
     }
 
     if (writelen > 0) {
-        struct i2c_msg msgs[] = {
+        struct i2c_msg msgs[] =
+        {
             {
                 .addr = client->addr,
                 .flags = 0,
@@ -626,7 +625,6 @@ int touch_i2c_write(struct i2c_client *client, char *writebuf, int writelen)
             retval = -EIO;
         }
     }
-    mutex_unlock(&i2c_mutex);
 
     return retval;
 }
@@ -648,70 +646,6 @@ int init_touch_interfaces(struct device *dev, bool flag_register_16bit)
     return 0;
 }
 
-#ifdef CONFIG_VMAP_STACK
-int32_t spi_read_write(struct spi_device *client, uint8_t *buf, size_t len, uint8_t *rbuf, SPI_RW rw)
-{
-
-    struct spi_message m;
-    struct spi_transfer t = {
-        .len    = len,
-    };
-    u8 *tx_buf = NULL;
-    u8 *rx_buf = NULL;
-    int status;
-
-    switch (rw) {
-    case SPIREAD:
-        tx_buf = kmalloc(len + DUMMY_BYTES, GFP_KERNEL | GFP_DMA);
-        if (!tx_buf) {
-            status = -ENOMEM;
-            goto spi_out;
-        }
-        memset(tx_buf, 0xFF, len + DUMMY_BYTES);
-        memcpy(tx_buf, buf, len + DUMMY_BYTES);
-        rx_buf = kmalloc(len + DUMMY_BYTES, GFP_KERNEL | GFP_DMA);
-        if (!rx_buf) {
-            status = -ENOMEM;
-            goto spi_out;
-        }
-        memset(rx_buf, 0xFF, len + DUMMY_BYTES);
-        t.tx_buf = tx_buf;
-        t.rx_buf = rx_buf;
-        t.len    = (len + DUMMY_BYTES);
-        break;
-
-    case SPIWRITE:
-        tx_buf = kmalloc(len, GFP_KERNEL | GFP_DMA);
-        if (!tx_buf) {
-            status = -ENOMEM;
-            goto spi_out;
-        }
-        memcpy(tx_buf, buf, len);
-        t.tx_buf = tx_buf;
-        break;
-    }
-
-    spi_message_init(&m);
-    spi_message_add_tail(&t, &m);
-    status = spi_sync(client, &m);
-    if (status == 0) {
-        if (rw == SPIREAD) {
-            memcpy(rbuf, rx_buf, len + DUMMY_BYTES);
-
-        }
-    }
-
-spi_out:
-    if (tx_buf) {
-        kfree(tx_buf);
-    }
-    if (rx_buf) {
-        kfree(rx_buf);
-    }
-    return status;
-}
-
-#else
 /*******************************************************
 Description:
 	Novatek touchscreen spi read/write core function.
@@ -719,30 +653,29 @@ Description:
 return:
 	Executive outcomes. 0---succeed.
 *******************************************************/
-int32_t spi_read_write(struct spi_device *client, uint8_t *buf, size_t len, uint8_t *rbuf, SPI_RW rw)
+int32_t spi_read_write(struct spi_device *client, uint8_t *buf, size_t len , uint8_t *rbuf, SPI_RW rw)
 {
-    struct spi_message m;
-    struct spi_transfer t = {
-        .len    = len,
-    };
+	struct spi_message m;
+	struct spi_transfer t = {
+		.len    = len,
+	};
 
-    switch (rw) {
-    case SPIREAD:
-        t.tx_buf = &buf[0];
-        t.rx_buf = rbuf;
-        t.len    = (len + DUMMY_BYTES);
-        break;
+	switch (rw) {
+		case SPIREAD:
+			t.tx_buf = &buf[0];
+			t.rx_buf = rbuf;
+			t.len    = (len + DUMMY_BYTES);
+			break;
 
-    case SPIWRITE:
-        t.tx_buf = buf;
-        break;
-    }
+		case SPIWRITE:
+			t.tx_buf = buf;
+			break;
+	}
 
-    spi_message_init(&m);
-    spi_message_add_tail(&t, &m);
-    return spi_sync(client, &m);
+	spi_message_init(&m);
+	spi_message_add_tail(&t, &m);
+	return spi_sync(client, &m);
 }
-#endif
 
 /*******************************************************
 Description:
@@ -753,26 +686,26 @@ return:
 *******************************************************/
 int32_t CTP_SPI_READ(struct spi_device *client, uint8_t *buf, uint16_t len)
 {
-    int32_t ret = -1;
-    int32_t retries = 0;
-    uint8_t rbuf[SPI_TANSFER_LEN + 1] = {0};
+	int32_t ret = -1;
+	int32_t retries = 0;
+        uint8_t rbuf[SPI_TANSFER_LEN+1] = {0};
 
-    buf[0] = SPI_READ_MASK(buf[0]);
+	buf[0] = SPI_READ_MASK(buf[0]);
 
-    while (retries < 5) {
-        ret = spi_read_write(client, buf, len, rbuf, SPIREAD);
-        if (ret == 0) break;
-        retries++;
-    }
+	while (retries < 5) {
+		ret = spi_read_write(client, buf, len, rbuf, SPIREAD);
+		if (ret == 0) break;
+		retries++;
+	}
 
-    if (unlikely(retries == 5)) {
-        TPD_INFO("read error, ret=%d\n", ret);
-        ret = -EIO;
-    } else {
-        memcpy((buf + 1), (rbuf + 2), (len - 1));
-    }
+	if (unlikely(retries == 5)) {
+		TPD_INFO("read error, ret=%d\n", ret);
+		ret = -EIO;
+	} else {
+		memcpy((buf+1), (rbuf+2), (len-1));
+	}
 
-    return ret;
+	return ret;
 }
 
 /*******************************************************
@@ -784,73 +717,22 @@ return:
 *******************************************************/
 int32_t CTP_SPI_WRITE(struct spi_device *client, uint8_t *buf, uint16_t len)
 {
-    int32_t ret = -1;
-    int32_t retries = 0;
+	int32_t ret = -1;
+	int32_t retries = 0;
 
-    buf[0] = SPI_WRITE_MASK(buf[0]);
+	buf[0] = SPI_WRITE_MASK(buf[0]);
 
-    while (retries < 5) {
-        ret = spi_read_write(client, buf, len, NULL, SPIWRITE);
-        if (ret == 0)	break;
-        retries++;
-    }
+	while (retries < 5) {
+		ret = spi_read_write(client, buf, len, NULL, SPIWRITE);
+		if (ret == 0)	break;
+		retries++;
+	}
 
-    if (unlikely(retries == 5)) {
-        TPD_INFO("error, ret=%d\n", ret);
-        ret = -EIO;
-    }
+	if (unlikely(retries == 5)) {
+		TPD_INFO("error, ret=%d\n", ret);
+		ret = -EIO;
+	}
 
-    return ret;
+	return ret;
 }
-
-/*******************************************************
-Description:
-	Download fw by spi. Please cheak the fw buf is dma!
-
-return:
-	Executive outcomes. 0---succeed. -5---I/O error
-*******************************************************/
-int spi_write_firmware(struct spi_device *client, u8 *fw, u32 *len_array, u8 array_len)
-{
-    int ret = 0;
-    int retry = 0;
-    int i = 0;
-    u8 *buf = NULL;
-    //unsigned	cs_change:1;
-    struct spi_message m;
-    struct spi_transfer *t;
-
-    t = kzalloc(sizeof(struct spi_transfer)*array_len, GFP_KERNEL | GFP_DMA);
-    if (!t) {
-        TPD_INFO("error, no mem!");
-        return -ENOMEM;
-    }
-
-    spi_message_init(&m);
-    //memset(t, 0, sizeof(t));
-
-    buf = fw;
-    for (i = 0; i < array_len; i++) {
-        t[i].len = len_array[i];
-        t[i].tx_buf = buf;
-        t[i].cs_change = 1;
-        spi_message_add_tail(&t[i], &m);
-        //TPD_INFO("i=%d, len=%d, buf[0]=%x\n", i, len_array[i], buf[0]);
-        buf = buf + len_array[i];
-    }
-
-    while(retry < 5) {
-        ret = spi_sync(client, &m);
-        if (ret == 0) {
-            break;
-        }
-        retry++;
-    }
-    if (unlikely(retry == 5)) {
-        TPD_INFO("error, ret=%d\n", ret);
-    }
-    kfree(t);
-    return ret;
-}
-
 

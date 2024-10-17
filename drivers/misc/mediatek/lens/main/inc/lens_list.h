@@ -35,16 +35,6 @@ extern long AK7374AF_Ioctl(struct file *a_pstFile, unsigned int a_u4Command, uns
 extern int AK7374AF_Release(struct inode *a_pstInode, struct file *a_pstFile);
 extern int AK7374AF_PowerDown(void);
 
-#ifdef VENDOR_EDIT
-/*Longyuan.Yang@Camera add for FP5516 20190227*/
-#define FP5516AF_SetI2Cclient FP5516AF_SetI2Cclient_Main
-#define FP5516AF_Ioctl FP5516AF_Ioctl_Main
-#define FP5516AF_Release FP5516AF_Release_Main
-extern int FP5516AF_SetI2Cclient(struct i2c_client *pstAF_I2Cclient, spinlock_t *pAF_SpinLock, int *pAF_Opened);
-extern long FP5516AF_Ioctl(struct file *a_pstFile, unsigned int a_u4Command, unsigned long a_u4Param);
-extern int FP5516AF_Release(struct inode *a_pstInode, struct file *a_pstFile);
-#endif
-
 #define BU6424AF_SetI2Cclient BU6424AF_SetI2Cclient_Main
 #define BU6424AF_Ioctl BU6424AF_Ioctl_Main
 #define BU6424AF_Release BU6424AF_Release_Main

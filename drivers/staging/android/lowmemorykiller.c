@@ -1,3 +1,4 @@
+
 /* drivers/misc/lowmemorykiller.c
  *
  * The lowmemorykiller driver lets user-space specify a set of memory thresholds
@@ -63,26 +64,6 @@ static u32 in_lowmem;
 #ifdef CONFIG_MTK_GPU_SUPPORT
 #include <mt-plat/mtk_gpu_utility.h>
 #endif
-#ifdef VENDOR_EDIT
-//Jiemin.Zhu@PSW.AD.Performance.Memory.1139862, 2016/05/31, Add for lowmemorykiller uevent
-#include <linux/module.h>
-#endif /* VENDOR_EDIT */
-
-#ifdef VENDOR_EDIT
-/*huacai.zhou@PSW.BSP.Kernel.MM 2018/02/11 modify for get some data about performance */
-#include <linux/proc_fs.h>
-static bool lmk_cnt_enable = true;
-static unsigned long tatal_lowmem_kill_count = 0;
-#endif /*VENDOR_EDIT*/
-
-#ifdef VENDOR_EDIT
-/*huacai.zhou@PSW.BSP.Kernel.MM 2018-03-12 modify for using aggressive for lowmem*/
-static unsigned int almk_swap_ratio1 = 4;
-static unsigned int almk_totalram_ratio = 6;
-static bool almk_enable = true;
-#define K(x) ((x) << (PAGE_SHIFT - 10))
-#define TOTALRAM_3GB 3145728
-#endif /*VENDOR_EDIT*/
 
 #ifdef CONFIG_64BIT
 #define ENABLE_AMR_RAMSIZE	(0x80000)	/* > 2GB */
@@ -104,28 +85,19 @@ static u8 lmk_log_buf[LMK_LOG_BUF_SIZE];
 static u32 enable_candidate_log;
 #endif
 static DEFINE_SPINLOCK(lowmem_shrink_lock);
+#include <linux/circ_buf.h>
+#include <linux/proc_fs.h>
+#include <linux/slab.h>
+#include <linux/poll.h>
 
 #define CREATE_TRACE_POINTS
 #include "trace/lowmemorykiller.h"
-#ifdef VENDOR_EDIT
-//Jiemin.Zhu@PSW.AD.Performance.Memory.1139862, 2017/06/29, Add for monitor memleak
-#include "oppo_lowmemorymonitor.h"
-#endif /* VENDOR_EDIT */
-
-#ifdef VENDOR_EDIT
-//Jiemin.Zhu@PSW.AD.Performance.Memory.1139862, 2016/05/31, Add for lowmemorykiller uevent
-static struct kobject *lmk_module_kobj = NULL;
-static struct work_struct lowmemorykiller_work;
-static char *lmklowmem[2] = { "LMK=LOWMEM", NULL };
-static int uevent_threshold[6] = {0, 0, 0, 0, }; // 1: 58, 2: 117, 3: 176
-static int last_selected_adj = 0;
-static void lowmemorykiller_uevent(short adj, int index);
-#endif /* VENDOR_EDIT */
 
 #include "internal.h"
 
-static u32 lowmem_debug_level = 1;
+static u32 lowmem_debug_level = 0;
 static short lowmem_adj[9] = {
+
 	0,
 	1,
 	6,
@@ -150,6 +122,140 @@ static unsigned long lowmem_deathpending_timeout;
 		if (lowmem_debug_level >= (level))	\
 			pr_info(x);			\
 	} while (0)
+
+
+static DECLARE_WAIT_QUEUE_HEAD(event_wait);
+static DEFINE_SPINLOCK(lmk_event_lock);
+static struct circ_buf event_buffer;
+#define MAX_BUFFERED_EVENTS 8
+#define MAX_TASKNAME 128
+
+struct lmk_event {
+	char taskname[MAX_TASKNAME];
+	pid_t pid;
+	uid_t uid;
+	pid_t group_leader_pid;
+	unsigned long min_flt;
+	unsigned long maj_flt;
+	unsigned long rss_in_pages;
+	short oom_score_adj;
+	short min_score_adj;
+	unsigned long long start_time;
+	struct list_head list;
+};
+
+void handle_lmk_event(struct task_struct *selected, int selected_tasksize,
+		      short min_score_adj)
+{
+	int head;
+	int tail;
+	struct lmk_event *events;
+	struct lmk_event *event;
+
+	spin_lock(&lmk_event_lock);
+
+	head = event_buffer.head;
+	tail = READ_ONCE(event_buffer.tail);
+
+	/* Do not continue to log if no space remains in the buffer. */
+	if (CIRC_SPACE(head, tail, MAX_BUFFERED_EVENTS) < 1) {
+		spin_unlock(&lmk_event_lock);
+		return;
+	}
+
+	events = (struct lmk_event *) event_buffer.buf;
+	event = &events[head];
+
+	strncpy(event->taskname, selected->comm, MAX_TASKNAME);
+
+	event->pid = selected->pid;
+	event->uid = from_kuid_munged(current_user_ns(), task_uid(selected));
+	if (selected->group_leader)
+		event->group_leader_pid = selected->group_leader->pid;
+	else
+		event->group_leader_pid = -1;
+	event->min_flt = selected->min_flt;
+	event->maj_flt = selected->maj_flt;
+	event->oom_score_adj = selected->signal->oom_score_adj;
+	event->start_time = nsec_to_clock_t(selected->real_start_time);
+	event->rss_in_pages = selected_tasksize;
+	event->min_score_adj = min_score_adj;
+
+	event_buffer.head = (head + 1) & (MAX_BUFFERED_EVENTS - 1);
+
+	spin_unlock(&lmk_event_lock);
+
+	wake_up_interruptible(&event_wait);
+}
+
+static int lmk_event_show(struct seq_file *s, void *unused)
+{
+	struct lmk_event *events = (struct lmk_event *) event_buffer.buf;
+	int head;
+	int tail;
+	struct lmk_event *event;
+
+	spin_lock(&lmk_event_lock);
+
+	head = event_buffer.head;
+	tail = event_buffer.tail;
+
+	if (head == tail) {
+		spin_unlock(&lmk_event_lock);
+		return -EAGAIN;
+	}
+
+	event = &events[tail];
+
+	seq_printf(s, "%lu %lu %lu %lu %lu %lu %hd %hd %llu\n%s\n",
+		(unsigned long) event->pid, (unsigned long) event->uid,
+		(unsigned long) event->group_leader_pid, event->min_flt,
+		event->maj_flt, event->rss_in_pages, event->oom_score_adj,
+		event->min_score_adj, event->start_time, event->taskname);
+
+	event_buffer.tail = (tail + 1) & (MAX_BUFFERED_EVENTS - 1);
+
+	spin_unlock(&lmk_event_lock);
+	return 0;
+}
+
+static unsigned int lmk_event_poll(struct file *file, poll_table *wait)
+{
+	int ret = 0;
+
+	poll_wait(file, &event_wait, wait);
+	spin_lock(&lmk_event_lock);
+	if (event_buffer.head != event_buffer.tail)
+		ret = POLLIN;
+	spin_unlock(&lmk_event_lock);
+	return ret;
+}
+
+static int lmk_event_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, lmk_event_show, inode->i_private);
+}
+
+static const struct file_operations event_file_ops = {
+	.open = lmk_event_open,
+	.poll = lmk_event_poll,
+	.read = seq_read
+};
+
+static void lmk_event_init(void)
+{
+	struct proc_dir_entry *entry;
+
+	event_buffer.head = 0;
+	event_buffer.tail = 0;
+	event_buffer.buf = kmalloc(
+		sizeof(struct lmk_event) * MAX_BUFFERED_EVENTS, GFP_KERNEL);
+	if (!event_buffer.buf)
+		return;
+	entry = proc_create("lowmemorykiller", 0, NULL, &event_file_ops);
+	if (!entry)
+		pr_err("error creating kernel lmk event file\n");
+}
 
 static unsigned long lowmem_count(struct shrinker *s,
 				  struct shrink_control *sc)
@@ -229,58 +335,6 @@ static void dump_memory_status(void)
 #endif
 }
 
-#ifdef VENDOR_EDIT
-//Jiemin.Zhu@PSW.AD.Performance.Memory.1139862, 2015/06/17, Modify for 8939/16 5.1 for orphan task
-static void orphan_foreground_task_kill(struct task_struct *task, short adj, short min_score_adj)
-{
-		if (min_score_adj == 0)
-		return;
-
-		if (task->parent->pid == 1 && adj == 0) {
-		lowmem_print(1, "kill orphan foreground task %s, pid %d, adj %hd, min_score_adj %hd\n",
-			task->comm, task->pid, adj, min_score_adj);
-		send_sig(SIGKILL, task, 0);
-		}
-}
-#endif /* VENDOR_EDIT */
-
-#ifdef VENDOR_EDIT
-/*huacai.zhou@PSW.BSP.Kernel.MM 2018-02-11 modify for get some data about performance */
-static ssize_t lowmem_kill_count_proc_read(struct file *file, char __user *buf,
-		size_t count,loff_t *off)
-{
-	char page[256] = {0};
-	int len = 0;
-
-	if (!lmk_cnt_enable)
-		return 0;
-
-	len = snprintf(&page[len], 256, "total_lowmem_kill_count:%lu\n", tatal_lowmem_kill_count);
-	if(len > 256) {
-		len = 256;
-	}
-	return simple_read_from_buffer(buf, count, off, page, len);
-}
-
-struct file_operations lowmem_kill_count_proc_fops = {
-	.read = lowmem_kill_count_proc_read,
-};
-
-static int __init setup_lowmem_killinfo(void)
-{
-
-	proc_create("lowmemkillcounts", S_IRUGO, NULL, &lowmem_kill_count_proc_fops);
-	return 0;
-}
-module_init(setup_lowmem_killinfo);
-#endif /* VENDOR_EDIT */
-
-#ifdef VENDOR_EDIT
-/*Wen.Luo@BSP.Kernel.Stability 2019/03/26 , almk_swap_ratio1 for difference TOTALRAM */
-#define SZ_1G_PAGES (SZ_1G >> PAGE_SHIFT)
-#define TOTALRAM_4GB (4*SZ_1G_PAGES)
-#define TOTALRAM_6GB (6*SZ_1G_PAGES)
-#endif
 static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 {
 #define LOWMEM_P_STATE_D	(0x1)
@@ -330,15 +384,8 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		lowmem_print(4, "lowmem_shrink lock failed\n");
 		return SHRINK_STOP;
 	}
-#ifdef VENDOR_EDIT
-/* Wen.Luo@BSP.Kernel.Stability 2019/1/07 add for bug-id:1757111, alloc order 0 fail,but oppo2 has 25M memory */
-	if (IS_ENABLED(CONFIG_CMA)) {
-		if (!(sc->gfp_mask & __GFP_MOVABLE)) {
-			other_free -= global_page_state(NR_FREE_OPPO2_PAGES);
-			other_free -= global_page_state(NR_FREE_OPPO0_PAGES);
-		}
-	}
-#endif /* VENDOR_EDIT */
+
+
 	/*
 	 * Check whether it is caused by low memory in lower zone(s)!
 	 * This will help solve over-reclaiming situation while total number
@@ -361,11 +408,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 				new_other_free -= high_wmark_pages(z);
 				new_other_file += zone_page_state(z, NR_FILE_PAGES);
 				new_other_file -= zone_page_state(z, NR_SHMEM);
-				#ifdef VENDOR_EDIT
-				/* Wen.Luo@BSP.Kernel.Stability 2019/1/07 add for bug-id:1757111, alloc order 0 fail,but oppo2 has 25M memory */
-				new_other_free -= zone_page_state(z, NR_FREE_OPPO2_PAGES);
-				new_other_free -= zone_page_state(z, NR_FREE_OPPO0_PAGES);
-				#endif /* VENDOR_EDIT */
+
 				/* Compute memory pressure level */
 				memory_pressure += zone_page_state(z, NR_ACTIVE_FILE) +
 					zone_page_state(z, NR_INACTIVE_FILE) +
@@ -414,21 +457,13 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 
 #ifdef CONFIG_SWAP
 	swap_pages = atomic_long_read(&nr_swap_pages);
-#ifndef VENDOR_EDIT
-/*huacai.zhou@PSW.BSP.Kernel.MM, 2018/03/01, mask aggressive lmk*/
 	/* More than 1/2 swap usage */
 	if (swap_pages * 2 < total_swap_pages)
 		to_be_aggressive++;
 	/* More than 3/4 swap usage */
 	if (swap_pages * 4 < total_swap_pages)
 		to_be_aggressive++;
-#endif /*VENDOR_EDIT*/
 
-#ifdef VENDOR_EDIT
-/*huacai.zhou@PSW.BSP.Kernel.MM, 2018/03/12, use aggressive for lowmem*/
-	if (almk_enable && (swap_pages * almk_swap_ratio1 < total_swap_pages))
-		to_be_aggressive++;
-#endif /*VENDOR_EDIT*/
 
 #ifndef CONFIG_MTK_GMO_RAM_OPTIMIZE
 	/* Try to enable AMR when we have enough memory */
@@ -436,16 +471,8 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		to_be_aggressive = 0;
 	} else {
 		i = lowmem_adj_size - 1 - to_be_aggressive;
-#ifdef VENDOR_EDIT
-/*Huacai.Zhou@PSW.Tech.Performance, 2019-01-31, check free and file pages before almk*/
-		if (to_be_aggressive > 0 && i >= 0) {
-			if ((other_free + other_file) < totalram_pages/almk_totalram_ratio)
-				amr_adj = lowmem_adj[i];
-		}
-#else
 		if (to_be_aggressive > 0 && i >= 0)
 			amr_adj = lowmem_adj[i];
-#endif /*VENDOR_EDIT*/
 	}
 #endif
 #endif
@@ -495,6 +522,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		spin_unlock(&lowmem_shrink_lock);
 		return 0;
 	}
+
 
 	selected_oom_score_adj = min_score_adj;
 
@@ -620,19 +648,8 @@ log_again:
 		}
 #endif
 		if (oom_score_adj < min_score_adj) {
-#ifdef VENDOR_EDIT
-//Jiemin.Zhu@PSW.AD.Performance.Memory.1139862, 2015/06/17, Modify for 8939/16 5.1 for orphan task
-			tasksize = get_mm_rss(p->mm);
-#endif /* VENDOR_EIDT */
+
 			task_unlock(p);
-#ifdef VENDOR_EDIT
-//Jiemin.Zhu@PSW.AD.Performance.Memory.1139862, 2015/06/17, Modify for 8939/16 5.1 for orphan task
-			if (tasksize > 0) {
-				orphan_foreground_task_kill(p, oom_score_adj, min_score_adj);
-			}
-//Jiemin.Zhu@PSW.AD.Performance.Memory.1139862, 2017/06/29, Add for monitor memleak
-			oppo_lowmemory_detect(p, tasksize);
-#endif /* VENDOR_EIDT */
 			continue;
 		}
 
@@ -642,12 +659,6 @@ log_again:
 		task_unlock(p);
 		if (tasksize <= 0)
 			continue;
-#ifdef VENDOR_EDIT
-//Jiemin.Zhu@PSW.AD.Performance.Memory.1139862, 2017/06/29, Add for monitor memleak
-		if (oppo_lowmemory_detect(p, tasksize)) {
-			continue;
-		}
-#endif /* VENDOR_EDIT */
 		if (selected) {
 			if (oom_score_adj < selected_oom_score_adj)
 				continue;
@@ -672,16 +683,15 @@ log_again:
 		long cache_limit = minfree * (long)(PAGE_SIZE / 1024);
 		long free = other_free * (long)(PAGE_SIZE / 1024);
 
+        if(selected_oom_score_adj<=200) {
+            dump_memory_status();
+        }
+
 		task_lock(selected);
 		send_sig(SIGKILL, selected, 0);
 		if (selected->mm)
 			task_set_lmk_waiting(selected);
 		task_unlock(selected);
-#ifdef VENDOR_EDIT
-/*huacai.zhou@PSW.BSP.Kernel.MM 2018/02/11 modify for get some data about performance */
-		if (lmk_cnt_enable)
-			tatal_lowmem_kill_count++;
-#endif /* VENDOR_EDIT */
 
 		trace_lowmemory_kill(selected, cache_size, cache_limit, free);
 		lowmem_print(1, "Killing '%s' (%d), adj %hd, state(%ld)\n"
@@ -703,20 +713,9 @@ log_again:
 			     , to_be_aggressive, amr_adj
 #endif
 			     );
+
 		lowmem_deathpending_timeout = jiffies + LOWMEM_DEATHPENDING_TIMEOUT;
 
-#ifdef VENDOR_EDIT
-/*Wen.Luo@PSW.BSP.Kernel.Stability. 2019/03/26, modify for show more meminfo,echo 3 > /sys/module/lowmemorykiller/parameters/debug_level*/
-		show_mem(SHOW_MEM_FILTER_NODES);
-		#ifdef CONFIG_OPPO_SPECIAL_BUILD
-		if(selected_oom_score_adj < 300 ) {
-			oom_dump_extra_info();
-		}
-		#endif
-		if (lowmem_debug_level >= 2 && selected_oom_score_adj == 0) {
-			show_task_mem();
-		}
-#endif /*VENDOR_EDIT*/
 
 
 #if defined(CONFIG_MTK_AEE_FEATURE) && defined(CONFIG_MTK_ENG_BUILD)
@@ -769,33 +768,10 @@ log_again:
 		}
 #endif
 
-#ifdef VENDOR_EDIT
-//Jiemin.Zhu@PSW.AD.Performance.Memory.1139862, 2016/05/31, Add for lowmemorykiller uevent
-		if (selected_oom_score_adj == 0) {
-			lowmem_print(1, "Killing %s, adj is %hd, so send uevent to userspace\n",
-					selected->comm, selected_oom_score_adj);
-			schedule_work(&lowmemorykiller_work);
-		} else {
-			for (i = 1; i < 3; i++) {
-				if (selected_oom_score_adj == lowmem_adj[i]) {
-					//uevent must be continuous adj record
-					if (last_selected_adj != selected_oom_score_adj) {
-						last_selected_adj = selected_oom_score_adj;
-						uevent_threshold[i] = 0;
-						break;
-					}
-					uevent_threshold[i]++;
-					if (uevent_threshold[i] == i * 5) {
-						lowmemorykiller_uevent(selected_oom_score_adj, i);
-						uevent_threshold[i] = 0;
-					}
-					break;
-				}
-			}
-		}
-#endif /* VENDOR_EDIT */
-
 		rem += selected_tasksize;
+		handle_lmk_event(selected, selected_tasksize, min_score_adj);
+		lowmem_deathpending_timeout = jiffies + HZ;
+		get_task_struct(selected);
 	} else {
 		if (p_state_is_found & LOWMEM_P_STATE_D)
 			lowmem_print(2, "No selected (full of D-state processes at %d)\n", (int)min_score_adj);
@@ -821,6 +797,10 @@ log_again:
 		mtklmk_uevent(min_score_adj, minfree);
 #endif
 
+	if (selected) {
+		handle_lmk_event(selected, selected_tasksize, min_score_adj);
+		put_task_struct(selected);
+	}
 	return rem;
 
 #undef LOWMEM_P_STATE_D
@@ -828,19 +808,6 @@ log_again:
 #undef LOWMEM_P_STATE_OTHER
 }
 
-#ifdef VENDOR_EDIT
-//Jiemin.Zhu@PSW.AD.Performance.Memory.1139862, 2016/05/31, Add for lowmemorykiller uevent
-void lowmemorykiller_work_func(struct work_struct *work)
-{
-	kobject_uevent_env(lmk_module_kobj, KOBJ_CHANGE, lmklowmem);
-	lowmem_print(1, "lowmemorykiller send uevent: %s\n", lmklowmem[0]);
-}
-static void lowmemorykiller_uevent(short adj, int index)
-{
-	lowmem_print(1, "kill adj %hd more than %d times and so send uevent to userspace\n", adj, index * 5);
-	schedule_work(&lowmemorykiller_work);
-}
-#endif /* VENDOR_EDIT */
 
 static struct shrinker lowmem_shrinker = {
 	.scan_objects = lowmem_scan,
@@ -855,13 +822,6 @@ static int __init lowmem_init(void)
 #endif
 	register_shrinker(&lowmem_shrinker);
 
-#ifdef VENDOR_EDIT
-/*Wen.Luo@BSP.Kernel.Stability 2019/03/26 , almk_swap_ratio1 for difference TOTALRAM */
-	if (totalram_pages <= TOTALRAM_4GB) {
-		almk_swap_ratio1 = 3;
-	}else
-		almk_swap_ratio1 = 4;
-#endif
 #ifdef MTK_LMK_USER_EVENT
 	/* initialize work for uevent */
 	INIT_WORK(&mtklmk_work, mtklmk_async_uevent);
@@ -873,12 +833,7 @@ static int __init lowmem_init(void)
 	}
 #endif
 
-#ifdef VENDOR_EDIT
-//Jiemin.Zhu@PSW.AD.Performance.Memory.1139862, 2016/05/31, Add for lowmemorykiller uevent
-	lmk_module_kobj = kset_find_obj(module_kset, KBUILD_MODNAME);
-	lowmem_print(1, "kernel obj name %s\n", lmk_module_kobj->name);
-	INIT_WORK(&lowmemorykiller_work, lowmemorykiller_work_func);
-#endif /* VENDOR_EDIT */
+	lmk_event_init();
 	return 0;
 }
 device_initcall(lowmem_init);
@@ -1047,14 +1002,3 @@ module_param_named(debug_level, lowmem_debug_level, uint, S_IRUGO | S_IWUSR);
 module_param_named(debug_adj, lowmem_debug_adj, short, S_IRUGO | S_IWUSR);
 module_param_named(candidate_log, enable_candidate_log, uint, S_IRUGO | S_IWUSR);
 
-#ifdef VENDOR_EDIT
-/*huacai.zhou@PSW.BSP.Kernel.MM 2018-02-11 modify for lowmemkill count */
-module_param_named(lmk_cnt_enable, lmk_cnt_enable, bool, S_IRUGO | S_IWUSR);
-#endif /*VENDOR_EDIT*/
-
-#ifdef VENDOR_EDIT
-/*huacai.zhou@PSW.BSP.Kernel.MM 2018-03-12 modify for using aggressive lmk swap usage ratio*/
-module_param_named(almk_swap_ratio1, almk_swap_ratio1, uint, S_IRUGO | S_IWUSR);
-module_param_named(almk_totalram_ratio, almk_totalram_ratio, uint, S_IRUGO | S_IWUSR);
-module_param_named(almk_enable, almk_enable, bool, S_IRUGO | S_IWUSR);
-#endif /*VENDOR_EDIT*/

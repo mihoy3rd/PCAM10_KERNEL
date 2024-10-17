@@ -96,7 +96,7 @@ struct mt6370_pmu_charger_data {
 	struct device *dev;
 	wait_queue_head_t wait_queue;
 	bool err_state;
-	CHARGER_TYPE chg_type;
+	enum charger_type chg_type;
 	bool chg_online;
 	u8 irq_flag[MT6370_CHG_IRQIDX_MAX];
 	u32 zcv;
@@ -282,8 +282,7 @@ static int mt6370_set_aicr(struct mtk_charger_info *mchr_info, void *data);
 static int mt6370_get_aicr(struct mtk_charger_info *mchr_info, void *data);
 static int mt6370_set_ichg(struct mtk_charger_info *mchr_info, void *data);
 static int mt6370_get_ichg(struct mtk_charger_info *mchr_info, void *data);
-static int mt6370_enable_charging(struct mtk_charger_info *mchr_info,
-	void *data);
+static int mt6370_enable_charging(struct mtk_charger_info *mchr_info, void *data);
 
 static inline void mt6370_chg_irq_set_flag(
 	struct mt6370_pmu_charger_data *chg_data, u8 *irq, u8 mask)
@@ -483,7 +482,7 @@ static int mt6370_enable_hidden_mode(struct mt6370_pmu_charger_data *chg_data,
 	return ret;
 
 err:
-	dev_notice(chg_data->dev, "%s: en = %d failed, ret = %d\n", __func__,
+	dev_err(chg_data->dev, "%s: en = %d failed, ret = %d\n", __func__,
 		en, ret);
 	return ret;
 }
@@ -505,27 +504,25 @@ static int mt6370_chg_sw_workaround(struct mt6370_pmu_charger_data *chg_data)
 	ret = mt6370_pmu_reg_block_read(chg_data->chip,
 		MT6370_PMU_REG_ADCBATDATAH, 2, zcv_data);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: read zcv data failed\n",
-					  __func__);
+		dev_err(chg_data->dev, "%s: read zcv data failed\n", __func__);
 	else {
 		chg_data->zcv = 5000 * (zcv_data[0] * 256 + zcv_data[1]);
 
 		dev_info(chg_data->dev, "%s: zcv = (0x%02X, 0x%02X, %dmV)\n",
-			__func__, zcv_data[0], zcv_data[1],
-			chg_data->zcv / 1000);
+			__func__, zcv_data[0], zcv_data[1], chg_data->zcv / 1000);
 	}
 
 	/* Trigger any ADC before disabling ZCV */
 	ret = mt6370_pmu_reg_write(chg_data->chip, MT6370_PMU_REG_CHGADC,
 		0x11);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: trigger ADC failed\n", __func__);
+		dev_err(chg_data->dev, "%s: trigger ADC failed\n", __func__);
 
 	/* Disable ZCV */
 	ret = mt6370_pmu_reg_set_bit(chg_data->chip, MT6370_PMU_REG_OSCCTRL,
 		0x04);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: disable ZCV failed\n", __func__);
+		dev_err(chg_data->dev, "%s: disable ZCV failed\n", __func__);
 
 	/* Disable TS auto sensing */
 	ret = mt6370_pmu_reg_clr_bit(chg_data->chip,
@@ -541,7 +538,7 @@ out:
 	/* Exit hidden mode */
 	ret = mt6370_enable_hidden_mode(chg_data, false);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: exit hidden mode failed\n",
+		dev_err(chg_data->dev, "%s: exit hidden mode failed\n",
 			__func__);
 
 	return ret;
@@ -569,7 +566,7 @@ static int mt6370_get_adc(struct mt6370_pmu_charger_data *chg_data,
 	);
 
 	if (ret < 0) {
-		dev_notice(chg_data->dev, "%s: select ch to %d failed, ret = %d\n",
+		dev_err(chg_data->dev, "%s: select ch to %d failed, ret = %d\n",
 			__func__, adc_sel, ret);
 		goto out;
 	}
@@ -579,7 +576,7 @@ static int mt6370_get_adc(struct mt6370_pmu_charger_data *chg_data,
 		mutex_lock(&chg_data->aicr_access_lock);
 		ret = mt6370_get_aicr(&chg_data->mchr_info, &aicr);
 		if (ret < 0) {
-			dev_notice(chg_data->dev, "%s: get aicr failed\n",
+			dev_err(chg_data->dev, "%s: get aicr failed\n",
 				__func__);
 			goto out_unlock_all;
 		}
@@ -587,7 +584,7 @@ static int mt6370_get_adc(struct mt6370_pmu_charger_data *chg_data,
 		mutex_lock(&chg_data->ichg_access_lock);
 		ret = mt6370_get_ichg(&chg_data->mchr_info, &ichg);
 		if (ret < 0) {
-			dev_notice(chg_data->dev, "%s: get ichg failed\n",
+			dev_err(chg_data->dev, "%s: get ichg failed\n",
 				__func__);
 			goto out_unlock_all;
 		}
@@ -597,7 +594,7 @@ static int mt6370_get_adc(struct mt6370_pmu_charger_data *chg_data,
 	ret = mt6370_pmu_reg_set_bit(chg_data->chip, MT6370_PMU_REG_CHGADC,
 		MT6370_MASK_ADC_START);
 	if (ret < 0) {
-		dev_notice(chg_data->dev,
+		dev_err(chg_data->dev,
 			"%s: start conversation failed, sel = %d, ret = %d\n",
 			__func__, adc_sel, ret);
 		goto out_unlock_all;
@@ -612,7 +609,7 @@ static int mt6370_get_adc(struct mt6370_pmu_charger_data *chg_data,
 			break;
 	}
 	if (i == max_wait_times) {
-		dev_notice(chg_data->dev,
+		dev_err(chg_data->dev,
 			"%s: wait conversation failed, sel = %d, ret = %d\n",
 			__func__, adc_sel, ret);
 
@@ -622,8 +619,7 @@ static int mt6370_get_adc(struct mt6370_pmu_charger_data *chg_data,
 				ret = mt6370_pmu_reg_read(chg_data->chip,
 						mt6370_chg_reg_addr[i]);
 
-				dev_notice(chg_data->dev,
-					"%s: reg[0x%02X] = 0x%02X\n",
+				dev_err(chg_data->dev, "%s: reg[0x%02X] = 0x%02X\n",
 					__func__, mt6370_chg_reg_addr[i], ret);
 			}
 
@@ -633,24 +629,18 @@ static int mt6370_get_adc(struct mt6370_pmu_charger_data *chg_data,
 
 		/* Add for debug */
 		/* ZCV, reg0x10 */
-		ret = mt6370_pmu_reg_read(chg_data->chip,
-						MT6370_PMU_REG_OSCCTRL);
+		ret = mt6370_pmu_reg_read(chg_data->chip, MT6370_PMU_REG_OSCCTRL);
 		if (ret < 0)
-			dev_notice(chg_data->dev, "%s: read reg0x10 failed\n",
-						__func__);
+			dev_err(chg_data->dev, "%s: read reg0x10 failed\n", __func__);
 		else
-			dev_notice(chg_data->dev, "%s: reg0x10 = 0x%02X\n",
-						__func__, ret);
+			dev_err(chg_data->dev, "%s: reg0x10 = 0x%02X\n", __func__, ret);
 
 		/* TS auto sensing */
-		ret = mt6370_pmu_reg_read(chg_data->chip,
-						MT6370_PMU_REG_CHGHIDDENCTRL15);
+		ret = mt6370_pmu_reg_read(chg_data->chip, MT6370_PMU_REG_CHGHIDDENCTRL15);
 		if (ret < 0)
-			dev_notice(chg_data->dev, "%s: read reg0x3E failed\n",
-						__func__);
+			dev_err(chg_data->dev, "%s: read reg0x3E failed\n", __func__);
 		else
-			dev_notice(chg_data->dev, "%s: reg0x3E = 0x%02X\n",
-						__func__, ret);
+			dev_err(chg_data->dev, "%s: reg0x3E = 0x%02X\n", __func__, ret);
 
 	}
 	mdelay(1);
@@ -659,7 +649,7 @@ static int mt6370_get_adc(struct mt6370_pmu_charger_data *chg_data,
 	ret = mt6370_pmu_reg_block_read(chg_data->chip, MT6370_PMU_REG_ADCDATAH,
 		6, adc_data);
 	if (ret < 0) {
-		dev_notice(chg_data->dev,
+		dev_err(chg_data->dev,
 			"%s: read ADC data failed, ret = %d\n", __func__, ret);
 		goto out_unlock_all;
 	}
@@ -673,8 +663,7 @@ static int mt6370_get_adc(struct mt6370_pmu_charger_data *chg_data,
 		adc_data[2], adc_data[3], adc_data[4], adc_data[5]);
 
 	/* Calculate ADC value */
-	adc_result = (adc_data[0] * 256
-		+ adc_data[1]) * mt6370_adc_unit[adc_sel]
+	adc_result = (adc_data[0] * 256 + adc_data[1]) * mt6370_adc_unit[adc_sel]
 		+ mt6370_adc_offset[adc_sel];
 
 out_unlock_all:
@@ -758,7 +747,7 @@ static int mt6370_enable_pump_express(struct mt6370_pmu_charger_data *chg_data,
 		return ret;
 
 	ret = (en ? mt6370_pmu_reg_set_bit : mt6370_pmu_reg_clr_bit)
-	(chg_data->chip, MT6370_PMU_REG_CHGCTRL17, MT6370_MASK_PUMPX_EN);
+		(chg_data->chip, MT6370_PMU_REG_CHGCTRL17, MT6370_MASK_PUMPX_EN);
 	if (ret < 0)
 		return ret;
 
@@ -771,8 +760,7 @@ static int mt6370_enable_pump_express(struct mt6370_pmu_charger_data *chg_data,
 			break;
 	}
 	if (i == max_wait_times) {
-		dev_notice(chg_data->dev, "%s: wait failed, ret = %d\n",
-					  __func__,
+		dev_err(chg_data->dev, "%s: wait failed, ret = %d\n", __func__,
 			ret);
 		ret = -EIO;
 		return ret;
@@ -893,7 +881,7 @@ static int mt6370_enable_jeita(struct mt6370_pmu_charger_data *chg_data,
 	dev_info(chg_data->dev, "%s: en = %d\n", __func__, en);
 
 	ret = (en ? mt6370_pmu_reg_set_bit : mt6370_pmu_reg_clr_bit)
-	(chg_data->chip, MT6370_PMU_REG_CHGCTRL16, MT6370_MASK_JEITA_EN);
+		(chg_data->chip, MT6370_PMU_REG_CHGCTRL16, MT6370_MASK_JEITA_EN);
 
 	return ret;
 }
@@ -923,7 +911,7 @@ static int mt6370_set_aicl_vth(struct mt6370_pmu_charger_data *chg_data,
 	);
 
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: set aicl vth failed, ret = %d\n",
+		dev_err(chg_data->dev, "%s: set aicl vth failed, ret = %d\n",
 			__func__, ret);
 
 	return ret;
@@ -943,7 +931,7 @@ static int mt6370_enable_chgdet_flow(struct mt6370_pmu_charger_data *chg_data,
 		for (i = 0; i < max_wait_cnt; i++) {
 			if (is_usb_rdy())
 				break;
-			dev_notice(chg_data->dev, "%s: CDP block\n", __func__);
+			dev_err(chg_data->dev, "%s: CDP block\n", __func__);
 #ifdef CONFIG_TCPC_CLASS
 			ret = mt6370_get_adc(chg_data, MT6370_ADC_VBUS_DIV5,
 				&vbus);
@@ -957,8 +945,7 @@ static int mt6370_enable_chgdet_flow(struct mt6370_pmu_charger_data *chg_data,
 			msleep(100);
 		}
 		if (i == max_wait_cnt)
-			dev_notice(chg_data->dev, "%s: CDP timeout\n",
-						  __func__);
+			dev_err(chg_data->dev, "%s: CDP timeout\n", __func__);
 		else
 			dev_info(chg_data->dev, "%s: CDP free\n", __func__);
 	}
@@ -966,7 +953,7 @@ static int mt6370_enable_chgdet_flow(struct mt6370_pmu_charger_data *chg_data,
 	dev_info(chg_data->dev, "%s: en = %d\n", __func__, en);
 	mutex_lock(&chg_data->bc12_access_lock);
 	ret = (en ? mt6370_pmu_reg_set_bit : mt6370_pmu_reg_clr_bit)
-	(chg_data->chip, MT6370_PMU_REG_DEVICETYPE, MT6370_MASK_USBCHGEN);
+		(chg_data->chip, MT6370_PMU_REG_DEVICETYPE, MT6370_MASK_USBCHGEN);
 	if (ret >= 0)
 		chg_data->bc12_en = en;
 	mutex_unlock(&chg_data->bc12_access_lock);
@@ -1016,7 +1003,7 @@ static void mt6370_chgdet_work_handler(struct work_struct *work)
 	/* Enable USB charger type detection */
 	ret = mt6370_enable_chgdet_flow(chg_data, true);
 	if (ret < 0)
-		dev_notice(chg_data->dev,
+		dev_err(chg_data->dev,
 			"%s: enable usb chrdet failed\n", __func__);
 
 }
@@ -1230,17 +1217,14 @@ static int mt6370_run_aicl(struct mtk_charger_info *mchr_info, void *data)
 		(struct mt6370_pmu_charger_data *)mchr_info;
 
 	/* Check whether MIVR loop is active */
-	if (!(chg_data->irq_flag[MT6370_CHG_IRQIDX_CHGIRQ1]
-					& MT6370_MASK_CHG_MIVR)) {
-		dev_info(chg_data->dev,
-				"%s: mivr loop is not active\n", __func__);
+	if (!(chg_data->irq_flag[MT6370_CHG_IRQIDX_CHGIRQ1] & MT6370_MASK_CHG_MIVR)) {
+		dev_info(chg_data->dev, "%s: mivr loop is not active\n", __func__);
 		return 0;
 	}
 	dev_info(chg_data->dev, "%s: mivr loop is active\n", __func__);
 
 	/* Clear chg mivr event */
-	mt6370_chg_irq_clr_flag(chg_data,
-		&chg_data->irq_flag[MT6370_CHG_IRQIDX_CHGIRQ1],
+	mt6370_chg_irq_clr_flag(chg_data, &chg_data->irq_flag[MT6370_CHG_IRQIDX_CHGIRQ1],
 		MT6370_MASK_CHG_MIVR);
 
 	ret = mt6370_get_mivr(chg_data, &mivr);
@@ -1260,8 +1244,7 @@ static int mt6370_run_aicl(struct mtk_charger_info *mchr_info, void *data)
 		goto out;
 
 	/* Clear AICL measurement IRQ */
-	mt6370_chg_irq_clr_flag(chg_data,
-		&chg_data->irq_flag[MT6370_CHG_IRQIDX_CHGIRQ5],
+	mt6370_chg_irq_clr_flag(chg_data, &chg_data->irq_flag[MT6370_CHG_IRQIDX_CHGIRQ5],
 		MT6370_MASK_CHG_AICLMEASI);
 
 	ret = mt6370_pmu_reg_set_bit(chg_data->chip, MT6370_PMU_REG_CHGCTRL14,
@@ -1270,8 +1253,7 @@ static int mt6370_run_aicl(struct mtk_charger_info *mchr_info, void *data)
 		goto out;
 
 	ret = wait_event_interruptible_timeout(chg_data->wait_queue,
-		chg_data->irq_flag[MT6370_CHG_IRQIDX_CHGIRQ5] &
-		MT6370_MASK_CHG_AICLMEASI,
+		chg_data->irq_flag[MT6370_CHG_IRQIDX_CHGIRQ5] & MT6370_MASK_CHG_AICLMEASI,
 		msecs_to_jiffies(2500));
 	if (ret <= 0) {
 		pr_err("%s: wait AICL time out, ret = %d\n", __func__, ret);
@@ -1298,8 +1280,7 @@ en_mivrirq:
 	return ret;
 }
 
-static int mt6370_set_ircmp_resistor(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_set_ircmp_resistor(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	u32 uV = 0;
@@ -1313,8 +1294,7 @@ static int mt6370_set_ircmp_resistor(struct mtk_charger_info *mchr_info,
 	return ret;
 }
 
-static int mt6370_set_ircmp_vclamp(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_set_ircmp_vclamp(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	u32 uV = 0;
@@ -1328,8 +1308,7 @@ static int mt6370_set_ircmp_vclamp(struct mtk_charger_info *mchr_info,
 	return ret;
 }
 
-static int mt6370_set_error_state(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_set_error_state(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	struct mt6370_pmu_charger_data *chg_data =
@@ -1341,8 +1320,7 @@ static int mt6370_set_error_state(struct mtk_charger_info *mchr_info,
 	return ret;
 }
 
-static int mt6370_get_charger_type(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_get_charger_type(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	struct mt6370_pmu_charger_data *chg_data =
@@ -1354,8 +1332,7 @@ static int mt6370_get_charger_type(struct mtk_charger_info *mchr_info,
 	mt6370_set_usbsw_state(chg_data, MT6370_USBSW_CHG);
 
 	/* Clear attachi event */
-	mt6370_chg_irq_clr_flag(chg_data,
-		&chg_data->irq_flag[MT6370_CHG_IRQIDX_QCIRQ],
+	mt6370_chg_irq_clr_flag(chg_data, &chg_data->irq_flag[MT6370_CHG_IRQIDX_QCIRQ],
 		MT6370_MASK_ATTACHI);
 
 	/* Turn off/on USB charger detection to retrigger bc1.2 */
@@ -1369,20 +1346,19 @@ static int mt6370_get_charger_type(struct mtk_charger_info *mchr_info,
 #endif
 
 	ret = wait_event_interruptible_timeout(chg_data->wait_queue,
-	chg_data->irq_flag[MT6370_CHG_IRQIDX_QCIRQ] & MT6370_MASK_ATTACHI,
-	msecs_to_jiffies(1000));
+		chg_data->irq_flag[MT6370_CHG_IRQIDX_QCIRQ] & MT6370_MASK_ATTACHI,
+		msecs_to_jiffies(1000));
 	if (ret <= 0) {
 		pr_err("%s: wait attachi failed, ret = %d\n", __func__, ret);
 		chg_data->chg_type = CHARGER_UNKNOWN;
 	}
 
-	*(CHARGER_TYPE *)data = chg_data->chg_type;
+	*(enum charger_type *)data = chg_data->chg_type;
 	pr_info("%s: chg_type = %d\n", __func__, chg_data->chg_type);
 	return ret;
 }
 
-static int mt6370_enable_charging(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_enable_charging(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	struct mt6370_pmu_charger_data *chg_data =
@@ -1397,8 +1373,7 @@ static int mt6370_enable_charging(struct mtk_charger_info *mchr_info,
 	return ret;
 }
 
-static int mt6370_enable_safety_timer(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_enable_safety_timer(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	struct mt6370_pmu_charger_data *chg_data =
@@ -1410,8 +1385,7 @@ static int mt6370_enable_safety_timer(struct mtk_charger_info *mchr_info,
 	return ret;
 }
 
-static int mt6370_is_safety_timer_enable(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_is_safety_timer_enable(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	struct mt6370_pmu_charger_data *chg_data =
@@ -1425,8 +1399,7 @@ static int mt6370_is_safety_timer_enable(struct mtk_charger_info *mchr_info,
 	return ret;
 }
 
-static int mt6370_enable_power_path(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_enable_power_path(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	struct mt6370_pmu_charger_data *chg_data =
@@ -1453,8 +1426,7 @@ static int mt6370_enable_power_path(struct mtk_charger_info *mchr_info,
 	return ret;
 }
 
-static int mt6370_is_power_path_enable(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_is_power_path_enable(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	struct mt6370_pmu_charger_data *chg_data =
@@ -1557,7 +1529,7 @@ static int mt6370_set_mivr(struct mtk_charger_info *mchr_info, void *data)
 
 	ret = mt6370_is_power_path_enable(mchr_info, &en);
 	if (!en) {
-		dev_notice(chg_data->dev, "%s: power path is disabled\n",
+		dev_err(chg_data->dev, "%s: power path is disabled\n",
 			__func__);
 		return -EINVAL;
 	}
@@ -1612,8 +1584,7 @@ static int mt6370_set_cv(struct mtk_charger_info *mchr_info, void *data)
 	return ret;
 }
 
-static int mt6370_set_otg_current_limit(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_set_otg_current_limit(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	u8 reg_ilimit = 0;
@@ -1659,7 +1630,7 @@ static int mt6370_enable_otg(struct mtk_charger_info *mchr_info, void *data)
 	/* Set OTG_OC to 500mA */
 	ret = mt6370_set_otg_current_limit(mchr_info, &current_limit);
 	if (ret < 0) {
-		dev_notice(chg_data->dev, "%s: set otg oc failed\n", __func__);
+		dev_err(chg_data->dev, "%s: set otg oc failed\n", __func__);
 		return ret;
 	}
 
@@ -1667,13 +1638,13 @@ static int mt6370_enable_otg(struct mtk_charger_info *mchr_info, void *data)
 	if (en) {
 		ret = mt6370_enable_chgdet_flow(chg_data, false);
 		if (ret < 0)
-			dev_notice(chg_data->dev,
+			dev_err(chg_data->dev,
 				"%s: disable usb chrdet failed\n", __func__);
 
 		if (chg_data->chg_desc->en_wdt) {
 			ret = mt6370_enable_wdt(chg_data, true);
 			if (ret < 0)
-				dev_notice(chg_data->dev, "%s: en wdt failed\n",
+				dev_err(chg_data->dev, "%s: en wdt failed\n",
 					__func__);
 		}
 	}
@@ -1686,10 +1657,9 @@ static int mt6370_enable_otg(struct mtk_charger_info *mchr_info, void *data)
 
 	if (en) {
 		ret = mt6370_pmu_reg_test_bit(chg_data->chip,
-			MT6370_PMU_REG_CHGCTRL1,
-			MT6370_SHIFT_OPA_MODE, &en_otg);
+			MT6370_PMU_REG_CHGCTRL1, MT6370_SHIFT_OPA_MODE, &en_otg);
 		if (ret < 0 || !en_otg) {
-			dev_notice(chg_data->dev, "%s: failed, ret = %d\n",
+			dev_err(chg_data->dev, "%s: failed, ret = %d\n",
 				__func__, ret);
 
 			/* Disable OTG */
@@ -1699,12 +1669,12 @@ static int mt6370_enable_otg(struct mtk_charger_info *mchr_info, void *data)
 			/* Disable WDT */
 			ret = mt6370_enable_wdt(chg_data, false);
 			if (ret < 0)
-				dev_notice(chg_data->dev,
+				dev_err(chg_data->dev,
 					"%s: disable wdt failed\n", __func__);
 #ifndef CONFIG_TCPC_CLASS
 			ret = mt6370_enable_chgdet_flow(chg_data, true);
 			if (ret < 0)
-				dev_notice(chg_data->dev,
+				dev_err(chg_data->dev,
 					"%s: en usb chrdet failed\n", __func__);
 #endif
 			return -EIO;
@@ -1720,19 +1690,19 @@ static int mt6370_enable_otg(struct mtk_charger_info *mchr_info, void *data)
 	 */
 	ret = mt6370_enable_hidden_mode(chg_data, true);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: enter hidden mode failed\n",
+		dev_err(chg_data->dev, "%s: enter hidden mode failed\n",
 			__func__);
 	else {
 		ret = mt6370_pmu_reg_write(chg_data->chip,
 			MT6370_PMU_REG_CHGHIDDENCTRL6, hidden_val);
 		if (ret < 0)
-			dev_notice(chg_data->dev,
+			dev_err(chg_data->dev,
 				"%s: workaroud failed, ret = %d\n",
 				__func__, ret);
 
 		ret = mt6370_enable_hidden_mode(chg_data, false);
 		if (ret < 0)
-			dev_notice(chg_data->dev,
+			dev_err(chg_data->dev,
 				"%s: exist hidden mode failed\n", __func__);
 	}
 
@@ -1740,7 +1710,7 @@ static int mt6370_enable_otg(struct mtk_charger_info *mchr_info, void *data)
 	if (!en) {
 		ret = mt6370_enable_wdt(chg_data, false);
 		if (ret < 0)
-			dev_notice(chg_data->dev, "%s: disable wdt failed\n",
+			dev_err(chg_data->dev, "%s: disable wdt failed\n",
 				__func__);
 	}
 
@@ -1748,8 +1718,7 @@ static int mt6370_enable_otg(struct mtk_charger_info *mchr_info, void *data)
 }
 
 #if 0
-static int mt6370_enable_discharge(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_enable_discharge(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0, i = 0;
 	const u32 check_dischg_max = 3;
@@ -1768,7 +1737,7 @@ static int mt6370_enable_discharge(struct mtk_charger_info *mchr_info,
 	ret = (en ? mt6370_pmu_reg_set_bit : mt6370_pmu_reg_clr_bit)
 		(chg_data->chip, MT6370_PMU_REG_CHGHIDDENCTRL1, 0x04);
 	if (ret < 0) {
-		dev_notice(chg_data->dev, "%s: en = %d failed, ret = %d\n",
+		dev_err(chg_data->dev, "%s: en = %d failed, ret = %d\n",
 			__func__, en, ret);
 		return ret;
 	}
@@ -1783,7 +1752,7 @@ static int mt6370_enable_discharge(struct mtk_charger_info *mchr_info,
 				MT6370_PMU_REG_CHGHIDDENCTRL1, 0x04);
 		}
 		if (i == check_dischg_max)
-			dev_notice(chg_data->dev,
+			dev_err(chg_data->dev,
 				"%s: disable discharg failed, ret = %d\n",
 				__func__, ret);
 	}
@@ -1821,8 +1790,7 @@ static int mt6370_set_pep_current_pattern(struct mtk_charger_info *mchr_info,
 	return ret;
 }
 
-static int mt6370_set_pep20_reset(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_set_pep20_reset(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	u32 mivr = 4500;	/* mA */
@@ -1896,8 +1864,7 @@ static int mt6370_set_pep20_current_pattern(struct mtk_charger_info *mchr_info,
 	return ret;
 }
 
-static int mt6370_set_pep20_efficiency_table(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_set_pep20_efficiency_table(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	pep20_profile_t *profile = (pep20_profile_t *)data;
@@ -1993,8 +1960,7 @@ static int mt6370_kick_wdt(struct mtk_charger_info *mchr_info, void *data)
 	return ret;
 }
 
-static int mt6370_enable_direct_charge(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_enable_direct_charge(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	bool en = *((bool *)data);
@@ -2007,14 +1973,14 @@ static int mt6370_enable_direct_charge(struct mtk_charger_info *mchr_info,
 		ret = mt6370_pmu_reg_set_bit(chg_data->chip,
 			MT6370_PMU_CHGMASK1, MT6370_MASK_CHG_MIVRM);
 		if (ret < 0)
-			dev_notice(chg_data->dev, "%s: mask MIVR IRQ failed\n",
+			dev_err(chg_data->dev, "%s: mask MIVR IRQ failed\n",
 				__func__);
 
 		/* Enable bypass mode */
 		ret = mt6370_pmu_reg_set_bit(chg_data->chip,
 			MT6370_PMU_REG_CHGCTRL2, MT6370_MASK_BYPASS_MODE);
 		if (ret < 0) {
-			dev_notice(chg_data->dev, "%s: en bypass mode failed\n",
+			dev_err(chg_data->dev, "%s: en bypass mode failed\n",
 				__func__);
 			goto out;
 		}
@@ -2023,7 +1989,7 @@ static int mt6370_enable_direct_charge(struct mtk_charger_info *mchr_info,
 		ret = mt6370_pmu_reg_set_bit(chg_data->chip,
 			MT6370_PMU_REG_CHGPUMP, MT6370_MASK_VG_EN);
 		if (ret < 0) {
-			dev_notice(chg_data->dev, "%s: en VG_EN failed\n",
+			dev_err(chg_data->dev, "%s: en VG_EN failed\n",
 				__func__);
 			goto disable_bypass;
 		}
@@ -2036,15 +2002,14 @@ static int mt6370_enable_direct_charge(struct mtk_charger_info *mchr_info,
 	ret = mt6370_pmu_reg_clr_bit(chg_data->chip, MT6370_PMU_REG_CHGPUMP,
 		MT6370_MASK_VG_EN);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: disable VG_EN failed\n",
-					  __func__);
+		dev_err(chg_data->dev, "%s: disable VG_EN failed\n", __func__);
 
 disable_bypass:
 	/* Disable bypass mode */
 	ret = mt6370_pmu_reg_clr_bit(chg_data->chip, MT6370_PMU_REG_CHGCTRL2,
 		MT6370_MASK_BYPASS_MODE);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: disable bypass mode failed\n",
+		dev_err(chg_data->dev, "%s: disable bypass mode failed\n",
 			__func__);
 
 out:
@@ -2052,7 +2017,7 @@ out:
 	ret = mt6370_pmu_reg_clr_bit(chg_data->chip,
 		MT6370_PMU_CHGMASK1, MT6370_MASK_CHG_MIVRM);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: unmask MIVR IRQ failed\n",
+		dev_err(chg_data->dev, "%s: unmask MIVR IRQ failed\n",
 			__func__);
 	return ret;
 }
@@ -2155,8 +2120,7 @@ static int mt6370_set_dc_ibusoc(struct mtk_charger_info *mchr_info,
 	return ret;
 }
 
-static int mt6370_enable_dc_vbatov(struct mtk_charger_info *mchr_info,
-	void *data)
+static int mt6370_enable_dc_vbatov(struct mtk_charger_info *mchr_info, void *data)
 {
 	int ret = 0;
 	bool en = *((bool *)data);
@@ -2188,7 +2152,7 @@ static int mt6370_set_dc_vbatov(struct mtk_charger_info *mchr_info,
 
 	ret = mt6370_get_cv(mchr_info, &cv);
 	if (ret < 0) {
-		dev_notice(chg_data->dev, "%s: get voreg failed\n", __func__);
+		dev_err(chg_data->dev, "%s: get voreg failed\n", __func__);
 		return ret;
 	}
 
@@ -2204,8 +2168,8 @@ static int mt6370_set_dc_vbatov(struct mtk_charger_info *mchr_info,
 	if (i == ARRAY_SIZE(mt6370_dc_vbatov_lvl))
 		reg_vbatov = i;
 
-	dev_info(chg_data->dev, "%s: vbatov = %dmV (0x%02X)\n", __func__,
-		uV / 1000, reg_vbatov);
+	dev_info(chg_data->dev, "%s: vbatov = %dmV (0x%02X)\n", __func__, uV / 1000,
+		reg_vbatov);
 
 	ret = mt6370_pmu_reg_update_bits(
 		chg_data->chip,
@@ -2335,18 +2299,16 @@ static int mt6370_dump_register(struct mtk_charger_info *mchr_info,
 		}
 	}
 
-	dev_info(chg_data->dev,	"%s: ICHG = %dmA, AICR = %dmA, MIVR = %dmV,
-		IEOC = %dmA, CV = %dmV\n", __func__, ichg / 100, aicr / 100,
-		mivr / 1000, ieoc / 1000, cv / 1000);
+	dev_info(chg_data->dev,
+		"%s: ICHG = %dmA, AICR = %dmA, MIVR = %dmV, IEOC = %dmA, CV = %dmV\n",
+		__func__, ichg / 100, aicr / 100, mivr / 1000, ieoc / 1000, cv / 1000);
 
 	dev_info(chg_data->dev,
 		"%s: VSYS = %dmV, VBAT = %dmV, IBAT = %dmA, IBUS = %dmA\n",
-		__func__, adc_vsys / 1000, adc_vbat / 1000, adc_ibat / 1000,
-		adc_ibus / 1000);
+		__func__, adc_vsys / 1000, adc_vbat / 1000, adc_ibat / 1000, adc_ibus / 1000);
 
-	dev_info(chg_data->dev, "%s: CHG_EN = %d, CHG_STATUS = %s,
-		CHG_STAT = 0x%02X\n", __func__, chg_en,
-		mt6370_chg_status_name[chg_status], chg_stat);
+	dev_info(chg_data->dev, "%s: CHG_EN = %d, CHG_STATUS = %s, CHG_STAT = 0x%02X\n",
+		__func__, chg_en, mt6370_chg_status_name[chg_status], chg_stat);
 
 	ret = 0;
 	return ret;
@@ -2372,7 +2334,7 @@ static int mt6370_enable_chg_type_det(struct mtk_charger_info *mchr_info,
 	else { /* TypeC detach */
 		ret = mt6370_enable_ilim(chg_data, true);
 		if (ret < 0)
-			dev_notice(chg_data->dev, "%s: en ilim failed\n",
+			dev_err(chg_data->dev, "%s: en ilim failed\n",
 				__func__);
 
 		chg_data->chg_type = CHARGER_UNKNOWN;
@@ -2382,8 +2344,7 @@ static int mt6370_enable_chg_type_det(struct mtk_charger_info *mchr_info,
 	mt6370_set_usbsw_state(chg_data, MT6370_USBSW_CHG);
 	ret = mt6370_enable_chgdet_flow(chg_data, en);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: en = %d, failed\n",
-					  __func__, en);
+		dev_err(chg_data->dev, "%s: en = %d, failed\n", __func__, en);
 #endif
 
 	return ret;
@@ -2409,7 +2370,7 @@ static int mt6370_detect_apple_samsung_ta(
 			MT6370_PMU_REG_QCSTAT, MT6370_SHIFT_DCDTI_STAT,
 			&dcd_timeout);
 		if (ret < 0) {
-			dev_notice(chg_data->dev, "%s: read dcd timeout failed\n",
+			dev_err(chg_data->dev, "%s: read dcd timeout failed\n",
 				__func__);
 			return ret;
 		}
@@ -2505,16 +2466,15 @@ static irqreturn_t mt6370_pmu_chg_treg_irq_handler(int irq, void *data)
 	struct mt6370_pmu_charger_data *chg_data =
 		(struct mt6370_pmu_charger_data *)data;
 
-	dev_notice(chg_data->dev, "%s\n", __func__);
+	dev_err(chg_data->dev, "%s\n", __func__);
 
 	/* Read treg status */
 	ret = mt6370_pmu_reg_test_bit(chg_data->chip, MT6370_PMU_REG_CHGSTAT1,
 		MT6370_SHIFT_CHG_TREG, &treg_stat);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: read treg stat failed\n",
-					  __func__);
+		dev_err(chg_data->dev, "%s: read treg stat failed\n", __func__);
 	else
-		dev_notice(chg_data->dev, "%s: treg stat = %d\n", __func__,
+		dev_err(chg_data->dev, "%s: treg stat = %d\n", __func__,
 			treg_stat);
 
 	return IRQ_HANDLED;
@@ -2540,8 +2500,7 @@ static irqreturn_t mt6370_pmu_chg_mivr_irq_handler(int irq, void *data)
 	ret = mt6370_pmu_reg_test_bit(chg_data->chip, MT6370_PMU_REG_CHGSTAT1,
 		MT6370_SHIFT_MIVR_STAT, &mivr_stat);
 	if (ret < 0) {
-		dev_notice(chg_data->dev, "%s: read mivr stat failed\n",
-					  __func__);
+		dev_err(chg_data->dev, "%s: read mivr stat failed\n", __func__);
 		goto out;
 	}
 
@@ -2554,13 +2513,12 @@ static irqreturn_t mt6370_pmu_chg_mivr_irq_handler(int irq, void *data)
 	ret = mt6370_pmu_reg_set_bit(chg_data->chip,
 		MT6370_PMU_CHGMASK1, MT6370_MASK_CHG_MIVRM);
 	if (ret < 0) {
-		dev_notice(chg_data->dev, "%s: disable mivr IRQ failed\n",
+		dev_err(chg_data->dev, "%s: disable mivr IRQ failed\n",
 			__func__);
 		goto out;
 	}
 
-	mt6370_chg_irq_set_flag(chg_data,
-		&chg_data->irq_flag[MT6370_CHG_IRQIDX_CHGIRQ1],
+	mt6370_chg_irq_set_flag(chg_data, &chg_data->irq_flag[MT6370_CHG_IRQIDX_CHGIRQ1],
 		MT6370_MASK_CHG_MIVR);
 
 out:
@@ -2619,7 +2577,7 @@ static irqreturn_t mt6370_pmu_chg_vbusov_irq_handler(int irq, void *data)
 	struct mt6370_pmu_charger_data *chg_data =
 		(struct mt6370_pmu_charger_data *)data;
 
-	dev_notice(chg_data->dev, "%s\n", __func__);
+	dev_err(chg_data->dev, "%s\n", __func__);
 	ret = mt6370_pmu_reg_test_bit(chg_data->chip, MT6370_PMU_REG_CHGSTAT2,
 		MT6370_SHIFT_CHG_VBUSOV_STAT, &vbusov_stat);
 	if (ret < 0)
@@ -2671,7 +2629,7 @@ static irqreturn_t mt6370_pmu_chg_tmri_irq_handler(int irq, void *data)
 	struct mt6370_pmu_charger_data *chg_data =
 		(struct mt6370_pmu_charger_data *)data;
 
-	dev_notice(chg_data->dev, "%s\n", __func__);
+	dev_err(chg_data->dev, "%s\n", __func__);
 	ret = mt6370_pmu_reg_test_bit(chg_data->chip, MT6370_PMU_REG_CHGSTAT4,
 		MT6370_SHIFT_CHG_TMRI_STAT, &tmr_stat);
 	if (ret < 0)
@@ -2723,8 +2681,7 @@ static irqreturn_t mt6370_pmu_chg_aiclmeasi_irq_handler(int irq, void *data)
 		(struct mt6370_pmu_charger_data *)data;
 
 	dev_info(chg_data->dev, "%s\n", __func__);
-	mt6370_chg_irq_set_flag(chg_data,
-		&chg_data->irq_flag[MT6370_CHG_IRQIDX_CHGIRQ5],
+	mt6370_chg_irq_set_flag(chg_data, &chg_data->irq_flag[MT6370_CHG_IRQIDX_CHGIRQ5],
 		MT6370_MASK_CHG_AICLMEASI);
 
 	wake_up_interruptible(&chg_data->wait_queue);
@@ -2758,7 +2715,7 @@ static irqreturn_t mt6370_pmu_chg_wdtmri_irq_handler(int irq, void *data)
 	dev_notice(chg_data->dev, "%s\n", __func__);
 	ret = mt6370_kick_wdt(&chg_data->mchr_info, NULL);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: kick wdt failed\n", __func__);
+		dev_err(chg_data->dev, "%s: kick wdt failed\n", __func__);
 
 	return IRQ_HANDLED;
 }
@@ -2865,7 +2822,7 @@ static irqreturn_t mt6370_pmu_attachi_irq_handler(int irq, void *data)
 	/* Check bc12 enable flag */
 	mutex_lock(&chg_data->bc12_access_lock);
 	if (!chg_data->bc12_en) {
-		dev_notice(chg_data->dev, "%s: bc12 disabled, ignore irq\n",
+		dev_err(chg_data->dev, "%s: bc12 disabled, ignore irq\n",
 			__func__);
 		mutex_unlock(&chg_data->bc12_access_lock);
 		return IRQ_HANDLED;
@@ -2874,7 +2831,7 @@ static irqreturn_t mt6370_pmu_attachi_irq_handler(int irq, void *data)
 
 	ret = mt6370_pmu_reg_read(chg_data->chip, MT6370_PMU_REG_USBSTATUS1);
 	if (ret < 0) {
-		dev_notice(chg_data->dev, "%s: read charger type failed\n",
+		dev_err(chg_data->dev, "%s: read charger type failed\n",
 			__func__);
 		return IRQ_HANDLED;
 	}
@@ -2902,12 +2859,11 @@ static irqreturn_t mt6370_pmu_attachi_irq_handler(int irq, void *data)
 #ifdef MT6370_APPLE_SAMSUNG_TA_SUPPORT
 	ret = mt6370_detect_apple_samsung_ta(chg_data);
 	if (ret < 0)
-		dev_notice(chg_data->dev,
+		dev_err(chg_data->dev,
 			"%s: detect apple/samsung ta failed, ret = %d\n",
 			__func__, ret);
 #endif
-	mt6370_chg_irq_set_flag(chg_data,
-		&chg_data->irq_flag[MT6370_CHG_IRQIDX_QCIRQ],
+	mt6370_chg_irq_set_flag(chg_data, &chg_data->irq_flag[MT6370_CHG_IRQIDX_QCIRQ],
 		MT6370_MASK_ATTACHI);
 
 	wake_up_interruptible(&chg_data->wait_queue);
@@ -2915,7 +2871,7 @@ static irqreturn_t mt6370_pmu_attachi_irq_handler(int irq, void *data)
 	/* Turn off USB charger detection */
 	ret = mt6370_enable_chgdet_flow(chg_data, false);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: disable usb chrdet failed\n",
+		dev_err(chg_data->dev, "%s: disable usb chrdet failed\n",
 			__func__);
 
 	if (chg_data->chg_type == STANDARD_HOST ||
@@ -3041,7 +2997,7 @@ static irqreturn_t mt6370_pmu_ovpctrl_uvp_d_evt_irq_handler(int irq, void *data)
 	struct mt6370_pmu_charger_data *chg_data =
 		(struct mt6370_pmu_charger_data *)data;
 
-	dev_notice(chg_data->dev, "%s\n", __func__);
+	dev_err(chg_data->dev, "%s\n", __func__);
 
 	/* Check UVP_D_STAT */
 	ret = mt6370_pmu_reg_test_bit(
@@ -3061,8 +3017,7 @@ static irqreturn_t mt6370_pmu_ovpctrl_uvp_d_evt_irq_handler(int irq, void *data)
 	/* Turn on USB charger detection */
 	ret = mt6370_enable_chgdet_flow(chg_data, true);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: en usb chrdet failed\n",
-					  __func__);
+		dev_err(chg_data->dev, "%s: en usb chrdet failed\n", __func__);
 
 	/* Switch DPDM to MT6370 */
 	mt6370_set_usbsw_state(chg_data, MT6370_USBSW_CHG);
@@ -3168,8 +3123,7 @@ static void mt6370_pmu_charger_irq_register(struct platform_device *pdev)
 					mt6370_chg_irq_desc[i].name,
 					platform_get_drvdata(pdev));
 		if (ret < 0) {
-			dev_notice(&pdev->dev, "request %s irq fail\n",
-					       res->name);
+			dev_err(&pdev->dev, "request %s irq fail\n", res->name);
 			continue;
 		}
 		mt6370_chg_irq_desc[i].irq = res->start;
@@ -3195,39 +3149,39 @@ static inline int mt_parse_dt(struct device *dev,
 
 	if (of_property_read_string(np, "charger_name",
 		&(chg_data->mchr_info.name)) < 0) {
-		dev_notice(chg_data->dev, "%s: no charger name\n", __func__);
+		dev_err(chg_data->dev, "%s: no charger name\n", __func__);
 		chg_data->mchr_info.name = "mt6370_charger";
 	}
 
 	if (of_property_read_u32(np, "ichg", &chg_desc->ichg) < 0)
-		dev_notice(chg_data->dev, "%s: no ichg\n", __func__);
+		dev_err(chg_data->dev, "%s: no ichg\n", __func__);
 
 	if (of_property_read_u32(np, "aicr", &chg_desc->aicr) < 0)
-		dev_notice(chg_data->dev, "%s: no aicr\n", __func__);
+		dev_err(chg_data->dev, "%s: no aicr\n", __func__);
 
 	if (of_property_read_u32(np, "mivr", &chg_desc->mivr) < 0)
-		dev_notice(chg_data->dev, "%s: no mivr\n", __func__);
+		dev_err(chg_data->dev, "%s: no mivr\n", __func__);
 
 	if (of_property_read_u32(np, "cv", &chg_desc->cv) < 0)
-		dev_notice(chg_data->dev, "%s: no cv\n", __func__);
+		dev_err(chg_data->dev, "%s: no cv\n", __func__);
 
 	if (of_property_read_u32(np, "ieoc", &chg_desc->ieoc) < 0)
-		dev_notice(chg_data->dev, "%s: no ieoc\n", __func__);
+		dev_err(chg_data->dev, "%s: no ieoc\n", __func__);
 
 	if (of_property_read_u32(np, "safety_timer",
 		&chg_desc->safety_timer) < 0)
-		dev_notice(chg_data->dev, "%s: no safety timer\n", __func__);
+		dev_err(chg_data->dev, "%s: no safety timer\n", __func__);
 
 	if (of_property_read_u32(np, "dc_wdt", &chg_desc->dc_wdt) < 0)
-		dev_notice(chg_data->dev, "%s: no dc wdt\n", __func__);
+		dev_err(chg_data->dev, "%s: no dc wdt\n", __func__);
 
 	if (of_property_read_u32(np, "ircmp_resistor",
 		&chg_desc->ircmp_resistor) < 0)
-		dev_notice(chg_data->dev, "%s: no ircmp resistor\n", __func__);
+		dev_err(chg_data->dev, "%s: no ircmp resistor\n", __func__);
 
 	if (of_property_read_u32(np, "ircmp_vclamp",
 		&chg_desc->ircmp_vclamp) < 0)
-		dev_notice(chg_data->dev, "%s: no ircmp vclamp\n", __func__);
+		dev_err(chg_data->dev, "%s: no ircmp vclamp\n", __func__);
 
 	chg_desc->en_te = of_property_read_bool(np, "enable_te");
 	chg_desc->en_wdt = of_property_read_bool(np, "enable_wdt");
@@ -3248,7 +3202,7 @@ static int mt6370_chg_init_setting(struct mt6370_pmu_charger_data *chg_data)
 	ret = mt6370_select_input_current_limit(chg_data,
 		MT6370_IINLMTSEL_AICR);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: select iinlmtsel failed\n",
+		dev_err(chg_data->dev, "%s: select iinlmtsel failed\n",
 			__func__);
 
 	mdelay(5);
@@ -3256,79 +3210,76 @@ static int mt6370_chg_init_setting(struct mt6370_pmu_charger_data *chg_data)
 	/* Disable hardware ILIM */
 	ret = mt6370_enable_ilim(chg_data, false);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: disable ilim failed\n",
-					  __func__);
+		dev_err(chg_data->dev, "%s: disable ilim failed\n", __func__);
 
 	ret = _mt6370_set_ichg(chg_data, chg_desc->ichg);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: set ichg failed\n", __func__);
+		dev_err(chg_data->dev, "%s: set ichg failed\n", __func__);
 
 	ret = _mt6370_set_aicr(chg_data, chg_desc->aicr);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: set aicr failed\n", __func__);
+		dev_err(chg_data->dev, "%s: set aicr failed\n", __func__);
 
 	ret = _mt6370_set_mivr(chg_data, chg_desc->mivr);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: set mivr failed\n", __func__);
+		dev_err(chg_data->dev, "%s: set mivr failed\n", __func__);
 
 	ret = _mt6370_set_cv(chg_data, chg_desc->cv);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: set voreg failed\n", __func__);
+		dev_err(chg_data->dev, "%s: set voreg failed\n", __func__);
 
 	ret = mt6370_set_ieoc(chg_data, chg_desc->ieoc);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: set ieoc failed\n", __func__);
+		dev_err(chg_data->dev, "%s: set ieoc failed\n", __func__);
 
 	ret = mt6370_enable_te(chg_data, chg_desc->en_te);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: set te failed\n", __func__);
+		dev_err(chg_data->dev, "%s: set te failed\n", __func__);
 
 	ret = mt6370_set_fast_charge_timer(chg_data, chg_desc->safety_timer);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: set fast timer failed\n",
-					  __func__);
+		dev_err(chg_data->dev, "%s: set fast timer failed\n", __func__);
 
 	ret = mt6370_set_dc_wdt(chg_data, chg_desc->dc_wdt);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: set dc watch dog timer failed\n",
+		dev_err(chg_data->dev, "%s: set dc watch dog timer failed\n",
 			__func__);
 
 	ret = _mt6370_enable_safety_timer(chg_data, true);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: enable charger timer failed\n",
+		dev_err(chg_data->dev, "%s: enable charger timer failed\n",
 			__func__);
 
 	/* Initially disable WDT to prevent 1mA power consumption */
 	ret = mt6370_enable_wdt(chg_data, false);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: disable watchdog timer failed\n",
+		dev_err(chg_data->dev, "%s: disable watchdog timer failed\n",
 			__func__);
 
 	/* Disable JEITA */
 	ret = mt6370_enable_jeita(chg_data, false);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: disable jeita failed\n",
-					  __func__);
+		dev_err(chg_data->dev, "%s: disable jeita failed\n", __func__);
 
 	/* Disable HZ */
 	ret = _mt6370_enable_hz(chg_data, false);
 	if (ret < 0)
-		dev_notice(chg_data->dev, "%s: disable hz failed\n", __func__);
+		dev_err(chg_data->dev, "%s: disable hz failed\n", __func__);
 
 	ret = _mt6370_set_ircmp_resistor(chg_data, chg_desc->ircmp_resistor);
 	if (ret < 0)
-		dev_notice(chg_data->dev,
+		dev_err(chg_data->dev,
 			"%s: set IR compensation resistor failed\n", __func__);
 
 	ret = _mt6370_set_ircmp_vclamp(chg_data, chg_desc->ircmp_vclamp);
 	if (ret < 0)
-		dev_notice(chg_data->dev,
+		dev_err(chg_data->dev,
 			"%s: set IR compensation vclamp failed\n", __func__);
 
 	/* Disable USB charger type detection */
 	ret = mt6370_enable_chgdet_flow(chg_data, false);
 	if (ret < 0)
-		dev_notice(chg_data->dev,
+		dev_err(chg_data->dev,
 			"%s: disable usb chrdet failed\n", __func__);
 
 	return ret;
@@ -3351,16 +3302,14 @@ static const mtk_charger_intf mt6370_mchr_intf[CHARGING_CMD_NUMBER] = {
 	[CHARGING_CMD_SET_BOOST_CURRENT_LIMIT] = mt6370_set_otg_current_limit,
 	[CHARGING_CMD_SET_TA_CURRENT_PATTERN] = mt6370_set_pep_current_pattern,
 	[CHARGING_CMD_SET_TA20_RESET] = mt6370_set_pep20_reset,
-	[CHARGING_CMD_SET_TA20_CURRENT_PATTERN] =
-		mt6370_set_pep20_current_pattern,
+	[CHARGING_CMD_SET_TA20_CURRENT_PATTERN] = mt6370_set_pep20_current_pattern,
 	[CHARGING_CMD_SET_ERROR_STATE] = mt6370_set_error_state,
 	[CHARGING_CMD_GET_CURRENT] = mt6370_get_ichg,
 	[CHARGING_CMD_GET_INPUT_CURRENT] = mt6370_get_aicr,
 	[CHARGING_CMD_GET_CHARGER_TEMPERATURE] = mt6370_get_tchg,
 	[CHARGING_CMD_GET_CHARGING_STATUS] = mt6370_is_charging_done,
 	[CHARGING_CMD_GET_IS_POWER_PATH_ENABLE] = mt6370_is_power_path_enable,
-	[CHARGING_CMD_GET_IS_SAFETY_TIMER_ENABLE] =
-		mt6370_is_safety_timer_enable,
+	[CHARGING_CMD_GET_IS_SAFETY_TIMER_ENABLE] = mt6370_is_safety_timer_enable,
 	[CHARGING_CMD_RESET_WATCH_DOG_TIMER] = mt6370_kick_wdt,
 	[CHARGING_CMD_GET_IBUS] = mt6370_get_ibus,
 	[CHARGING_CMD_GET_VBUS] = mt6370_get_vbus,
@@ -3375,8 +3324,7 @@ static const mtk_charger_intf mt6370_mchr_intf[CHARGING_CMD_NUMBER] = {
 	[CHARGING_CMD_GET_IS_DC_ENABLE] = mt6370_is_dc_enable,
 	[CHARGING_CMD_SET_IRCMP_RESISTOR] = mt6370_set_ircmp_resistor,
 	[CHARGING_CMD_SET_IRCMP_VOLT_CLAMP] = mt6370_set_ircmp_vclamp,
-	[CHARGING_CMD_SET_PEP20_EFFICIENCY_TABLE] =
-		mt6370_set_pep20_efficiency_table,
+	[CHARGING_CMD_SET_PEP20_EFFICIENCY_TABLE] = mt6370_set_pep20_efficiency_table,
 	[CHARGING_CMD_GET_CHARGER_TYPE] = mt6370_get_charger_type,
 	[CHARGING_CMD_ENABLE_CHR_TYPE_DET] = mt6370_enable_chg_type_det,
 
@@ -3388,13 +3336,10 @@ static const mtk_charger_intf mt6370_mchr_intf[CHARGING_CMD_NUMBER] = {
 	[CHARGING_CMD_SET_HV_THRESHOLD] = mtk_charger_set_hv_threshold,
 	[CHARGING_CMD_GET_HV_STATUS] = mtk_charger_get_hv_status,
 	[CHARGING_CMD_GET_BATTERY_STATUS] = mtk_charger_get_battery_status,
-	[CHARGING_CMD_GET_CHARGER_DET_STATUS] =
-		mtk_charger_get_charger_det_status,
-	[CHARGING_CMD_GET_IS_PCM_TIMER_TRIGGER] =
-		mtk_charger_get_is_pcm_timer_trigger,
+	[CHARGING_CMD_GET_CHARGER_DET_STATUS] = mtk_charger_get_charger_det_status,
+	[CHARGING_CMD_GET_IS_PCM_TIMER_TRIGGER] = mtk_charger_get_is_pcm_timer_trigger,
 	[CHARGING_CMD_SET_PLATFORM_RESET] = mtk_charger_set_platform_reset,
-	[CHARGING_CMD_GET_PLATFORM_BOOT_MODE] =
-		mtk_charger_get_platform_boot_mode,
+	[CHARGING_CMD_GET_PLATFORM_BOOT_MODE] = mtk_charger_get_platform_boot_mode,
 	[CHARGING_CMD_SET_POWER_OFF] = mtk_charger_set_power_off,
 	[CHARGING_CMD_GET_POWER_SOURCE] = mtk_charger_get_power_source,
 	[CHARGING_CMD_GET_CSDAC_FALL_FLAG] = mtk_charger_get_csdac_full_flag,
@@ -3433,7 +3378,7 @@ static int mt6370_pmu_charger_probe(struct platform_device *pdev)
 	if (use_dt) {
 		ret = mt_parse_dt(&pdev->dev, chg_data);
 		if (ret < 0)
-			dev_notice(chg_data->dev, "%s: parse dts failed\n",
+			dev_err(chg_data->dev, "%s: parse dts failed\n",
 				__func__);
 	}
 	platform_set_drvdata(pdev, chg_data);
@@ -3447,14 +3392,14 @@ static int mt6370_pmu_charger_probe(struct platform_device *pdev)
 	/* Do initial setting */
 	ret = mt6370_chg_init_setting(chg_data);
 	if (ret < 0) {
-		dev_notice(chg_data->dev, "%s: sw init failed\n", __func__);
+		dev_err(chg_data->dev, "%s: sw init failed\n", __func__);
 		goto err_chg_init_setting;
 	}
 
 	/* SW workaround */
 	ret = mt6370_chg_sw_workaround(chg_data);
 	if (ret < 0) {
-		dev_notice(chg_data->dev, "%s: software workaround failed\n",
+		dev_err(chg_data->dev, "%s: software workaround failed\n",
 			__func__);
 		goto err_chg_sw_workaround;
 	}

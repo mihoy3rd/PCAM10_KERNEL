@@ -101,27 +101,16 @@ static bool mtk_is_pdc_ready(struct charger_manager *info)
 	if (info->tcpc == NULL)
 		return false;
 
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/08/13, sjc Modify for ZMI PD */
-	if (info->pd_type == PD_CONNECT_PE_READY_SNK ||
-		info->pd_type == PD_CONNECT_PE_READY_SNK_PD30 ||
-		info->pd_type == PD_CONNECT_PE_READY_SNK_APDO)
-		return true;
-#else
 	if (info->pd_type == PD_CONNECT_PE_READY_SNK ||
 		info->pd_type == PD_CONNECT_PE_READY_SNK_PD30)
 		return true;
-#endif /*VENDOR_EDIT*/
 
 	return false;
 }
 
 bool mtk_pdc_check_charger(struct charger_manager *info)
 {
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/31, sjc Add for PD */
-	printk(KERN_ERR "%s: pd_type[%d]\n", __func__, info->pd_type);
-#endif
+
 	if (mtk_is_pdc_ready(info) == false)
 		return false;
 
@@ -180,87 +169,6 @@ int mtk_pdc_setup(struct charger_manager *info, int idx)
 
 	return ret;
 }
-
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/31, sjc Add for PD */
-#define VBUS_5V	5000
-#define IBUS_2A	2000
-#define IBUS_3A	3000
-int oppo_pdc_setup(int *vbus_mv, int *ibus_ma)
-{
-	int ret = 0;
-	struct tcpc_device *tcpc = NULL;
-
-	tcpc = tcpc_dev_get_by_name("type_c_port0");
-	if (tcpc == NULL) {
-		printk(KERN_ERR "%s:get type_c_port0 fail\n", __func__);
-		return -EINVAL;
-	}
-
-	ret = tcpm_inquire_pd_contract(tcpc, vbus_mv, ibus_ma);
-	if (ret != TCPM_SUCCESS) {
-		printk(KERN_ERR "%s: inquire current vbus_mv and ibus_ma fail\n", __func__);
-		return -EINVAL;
-	}
-	printk(KERN_ERR "%s: default vbus_mv[%d], ibus_ma[%d]\n", __func__, *vbus_mv, *ibus_ma);
-
-	if (*vbus_mv != VBUS_5V || *ibus_ma < IBUS_3A) {
-		ret = tcpm_dpm_pd_request(tcpc, VBUS_5V, IBUS_2A, NULL);
-		if (ret != TCPM_SUCCESS) {
-			printk(KERN_ERR "%s: tcpm_dpm_pd_request fail\n", __func__);
-			return -EINVAL;
-		}
-
-		ret = tcpm_inquire_pd_contract(tcpc, vbus_mv, ibus_ma);
-		if (ret != TCPM_SUCCESS) {
-			printk(KERN_ERR "%s: inquire current vbus_mv and ibus_ma fail\n", __func__);
-			return -EINVAL;
-		}
-		printk(KERN_ERR "%s: request 5V/2A vbus_mv[%d], ibus_ma[%d]\n", __func__, *vbus_mv, *ibus_ma);
-	}
-
-	if (*ibus_ma >= IBUS_2A) {
-		return 0;
-	} else if (*ibus_ma < IBUS_2A) {
-		printk(KERN_ERR "%s: ibus_ma[%d] < IBUS_2A\n", __func__, *ibus_ma);
-		return -EINVAL;
-	} else {
-		ret = tcpm_dpm_pd_request(tcpc, VBUS_5V, IBUS_2A, NULL);
-		if (ret != TCPM_SUCCESS) {
-			printk(KERN_ERR "%s: tcpm_dpm_pd_request fail\n", __func__);
-			return -EINVAL;
-		} else {
-			ret = tcpm_inquire_pd_contract(tcpc, vbus_mv, ibus_ma);
-			if (ret != TCPM_SUCCESS) {
-				printk(KERN_ERR "%s: inquire current vbus_mv and ibus_ma fail\n", __func__);
-				return -EINVAL;
-			}
-			printk(KERN_ERR "%s: request 5V/2A again vbus_mv[%d], ibus_ma[%d]\n", __func__, *vbus_mv, *ibus_ma);
-		}
-		return 0;
-	}
-}
-
-int oppo_pdc_get(int *vbus_mv, int *ibus_ma)
-{
-	int ret = 0;
-	struct tcpc_device *tcpc = NULL;
-
-	tcpc = tcpc_dev_get_by_name("type_c_port0");
-	if (tcpc == NULL) {
-		printk(KERN_ERR "%s:get type_c_port0 fail\n", __func__);
-		return -EINVAL;
-	}
-
-	ret = tcpm_inquire_pd_contract(tcpc, vbus_mv, ibus_ma);
-	if (ret != TCPM_SUCCESS) {
-		printk(KERN_ERR "%s: inquire current vbus_mv and ibus_ma fail\n", __func__);
-		return -EINVAL;
-	}
-	printk(KERN_ERR "%s: default vbus_mv[%d], ibus_ma[%d]\n", __func__, *vbus_mv, *ibus_ma);
-	return 0;
-}
-#endif /* VENDOR_EDIT */
 
 int mtk_pdc_get_setting(struct charger_manager *info, int *vbus, int *cur, int *idx)
 {

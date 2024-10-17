@@ -154,7 +154,6 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(batt_cc),
 	POWER_SUPPLY_ATTR(batt_rm),
 	POWER_SUPPLY_ATTR(notify_code),
-	POWER_SUPPLY_ATTR(cool_down),
 	POWER_SUPPLY_ATTR(charger_ic),
 	#endif /* VENDOR_EDIT */
 
@@ -298,23 +297,10 @@ static struct device_attribute power_supply_attrs[] = {
 #ifdef CONFIG_OPPO_SHORT_IC_CHECK
 	POWER_SUPPLY_ATTR(short_ic_otp_status),
 	POWER_SUPPLY_ATTR(short_ic_volt_thresh),
-	POWER_SUPPLY_ATTR(short_ic_otp_value),
+    POWER_SUPPLY_ATTR(short_ic_otp_value),
 #endif
 	POWER_SUPPLY_ATTR(fast2normal_chg),
 	#endif /*VENDOR_EDIT*/
-
-#ifdef VENDOR_EDIT
-/* Yichun.Chen  PSW.BSP.CHG  2019-05-14  for soc node */
-	POWER_SUPPLY_ATTR(chip_soc),
-	POWER_SUPPLY_ATTR(smooth_soc),
-#endif
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/15, sjc Add for typec */
-	POWER_SUPPLY_ATTR(typec_cc_orientation),
-	POWER_SUPPLY_ATTR(usb_status),
-	POWER_SUPPLY_ATTR(usbtemp_volt_l),
-	POWER_SUPPLY_ATTR(usbtemp_volt_r),
-#endif
 	POWER_SUPPLY_ATTR(model_name),
 	POWER_SUPPLY_ATTR(manufacturer),
 	POWER_SUPPLY_ATTR(serial_number),
@@ -394,14 +380,10 @@ int power_supply_uevent(struct device *dev, struct kobj_uevent_env *env)
 	char *prop_buf;
 	char *attrname;
 
-	dev_dbg(dev, "uevent\n");
-
 	if (!psy || !psy->desc) {
 		dev_dbg(dev, "No power supply yet\n");
 		return ret;
 	}
-
-	dev_dbg(dev, "POWER_SUPPLY_NAME=%s\n", psy->desc->name);
 
 	ret = add_uevent_var(env, "POWER_SUPPLY_NAME=%s", psy->desc->name);
 	if (ret)
@@ -437,8 +419,6 @@ int power_supply_uevent(struct device *dev, struct kobj_uevent_env *env)
 			ret = -ENOMEM;
 			goto out;
 		}
-
-		dev_dbg(dev, "prop %s=%s\n", attrname, prop_buf);
 
 		ret = add_uevent_var(env, "POWER_SUPPLY_%s=%s", attrname, prop_buf);
 		kfree(attrname);

@@ -52,6 +52,10 @@
 #include "cmdq_record_private.h"
 #include "smi_public.h"
 
+#ifdef VENDOR_EDIT
+/* Ling.Guo@PSW.MM.Display.LCD.Machine, 2018/12/03,add for mm kevent fb. */
+#include <linux/oppo_mm_kevent_fb.h>
+#endif /*VENDOR_EDIT*/
 
 /* #define CMDQ_PROFILE_COMMAND_TRIGGER_LOOP */
 /* #define CMDQ_ENABLE_BUS_ULTRA */
@@ -3353,81 +3357,6 @@ static struct TaskStruct *cmdq_core_find_free_task(void)
 
 	return pTask;
 }
-
-u32 cmdq_core_get_reg_extra_size(struct TaskStruct *task,
-	struct cmdqCommandStruct *desc)
-{
-	u32 extra_size, i, pa, subsys_code;
-
-	/* calculate required buffer size
-	 * we need to consider {READ, MOVE, WRITE} for each register
-	 * and the SYNC in the begin and end
-	 */
-	if (task->regCount && task->regCount <= CMDQ_MAX_DUMP_REG_COUNT) {
-		extra_size = (3 * CMDQ_INST_SIZE * task->regCount) +
-			(2 * CMDQ_INST_SIZE);
-		/* Add move instruction count for handle Extra APB address
-		 * (add move instructions)
-		 */
-		for (i = 0; i < task->regCount; i++) {
-			pa = CMDQ_U32_PTR(
-				desc->regRequest.regAddresses)[i];
-			subsys_code = cmdq_core_subsys_from_phys_addr(pa);
-			if (subsys_code == CMDQ_SPECIAL_SUBSYS_ADDR)
-				extra_size += CMDQ_INST_SIZE;
-		}
-	} else {
-		extra_size = 0;
-	}
-
-	return extra_size;
-}
-
-void cmdq_core_append_backup_reg_inst(struct TaskStruct *task,
-	struct cmdqCommandStruct *desc)
-{
-	enum CMDQ_DATA_REGISTER_ENUM value_reg, dest_reg;
-	enum CMDQ_EVENT_ENUM access_token;
-	u32 i;
-
-	if (!task->regCount)
-		return;
-
-	CMDQ_VERBOSE("COMMAND: allocate register output section\n");
-
-	/* allocate register output section */
-	cmdq_core_alloc_reg_buffer(task);
-
-	/* allocate GPR resource */
-	cmdq_get_func()->getRegID(task->engineFlag, &value_reg,
-		&dest_reg, &access_token);
-
-	/* wait and clear access token
-	 * use SYNC TOKEN to make sure only 1 thread access at a time
-	 * bit 0-11: wait_value
-	 * bit 15: to_wait, true
-	 * bit 31: to_update, true
-	 * bit 16-27: update_value
-	 */
-	task->ctrl->append_command(task,
-		(CMDQ_CODE_WFE << 24) | access_token,
-		((1 << 31) | (1 << 15) | 1));
-
-	for (i = 0; i < task->regCount; i++) {
-		cmdq_core_insert_backup_instr(task,
-			CMDQ_U32_PTR(
-			desc->regRequest.regAddresses)[i],
-			task->regResultsMVA +
-			(i * sizeof(task->regResults[0])),
-			value_reg, dest_reg);
-	}
-
-	/* set directly */
-	task->ctrl->append_command(task,
-		(CMDQ_CODE_WFE << 24) | access_token,
-		((1 << 31) | (1 << 16)));
-}
-
 static bool cmdq_core_check_gpr_valid(const uint32_t gpr, const bool val)
 {
 	if (val)
@@ -3542,6 +3471,80 @@ static int32_t cmdq_core_check_task_valid(struct TaskStruct *pTask)
 	return ret;
 }
 
+u32 cmdq_core_get_reg_extra_size(struct TaskStruct *task,
+	struct cmdqCommandStruct *desc)
+{
+	u32 extra_size, i, pa, subsys_code;
+
+	/* calculate required buffer size
+	 * we need to consider {READ, MOVE, WRITE} for each register
+	 * and the SYNC in the begin and end
+	 */
+	if (task->regCount && task->regCount <= CMDQ_MAX_DUMP_REG_COUNT) {
+		extra_size = (3 * CMDQ_INST_SIZE * task->regCount) +
+			(2 * CMDQ_INST_SIZE);
+		/* Add move instruction count for handle Extra APB address
+		 * (add move instructions)
+		 */
+		for (i = 0; i < task->regCount; i++) {
+			pa = CMDQ_U32_PTR(
+				desc->regRequest.regAddresses)[i];
+			subsys_code = cmdq_core_subsys_from_phys_addr(pa);
+			if (subsys_code == CMDQ_SPECIAL_SUBSYS_ADDR)
+				extra_size += CMDQ_INST_SIZE;
+		}
+	} else {
+		extra_size = 0;
+	}
+
+	return extra_size;
+}
+
+void cmdq_core_append_backup_reg_inst(struct TaskStruct *task,
+	struct cmdqCommandStruct *desc)
+{
+	enum CMDQ_DATA_REGISTER_ENUM value_reg, dest_reg;
+	enum CMDQ_EVENT_ENUM access_token;
+	u32 i;
+
+	if (!task->regCount)
+		return;
+
+	CMDQ_VERBOSE("COMMAND: allocate register output section\n");
+
+	/* allocate register output section */
+	cmdq_core_alloc_reg_buffer(task);
+
+	/* allocate GPR resource */
+	cmdq_get_func()->getRegID(task->engineFlag, &value_reg,
+		&dest_reg, &access_token);
+
+	/* wait and clear access token
+	 * use SYNC TOKEN to make sure only 1 thread access at a time
+	 * bit 0-11: wait_value
+	 * bit 15: to_wait, true
+	 * bit 31: to_update, true
+	 * bit 16-27: update_value
+	 */
+	task->ctrl->append_command(task,
+		(CMDQ_CODE_WFE << 24) | access_token,
+		((1 << 31) | (1 << 15) | 1));
+
+	for (i = 0; i < task->regCount; i++) {
+		cmdq_core_insert_backup_instr(task,
+			CMDQ_U32_PTR(
+			desc->regRequest.regAddresses)[i],
+			task->regResultsMVA +
+			(i * sizeof(task->regResults[0])),
+			value_reg, dest_reg);
+	}
+
+	/* set directly */
+	task->ctrl->append_command(task,
+		(CMDQ_CODE_WFE << 24) | access_token,
+		((1 << 31) | (1 << 16)));
+}
+
 static int32_t cmdq_core_insert_read_reg_command(struct TaskStruct *pTask,
 	struct cmdqCommandStruct *pCommandDesc)
 {
@@ -3587,12 +3590,11 @@ static int32_t cmdq_core_insert_read_reg_command(struct TaskStruct *pTask,
 		"[CMD] line:%d CMDEnd:%p cmdSize:%d bufferSize:%u block size:%u\n",
 		__LINE__, pTask->pCMDEnd, pTask->commandSize,
 		pTask->bufferSize, pCommandDesc->blockSize);
-
 	if (userSpaceRequest && !cmdq_core_check_task_valid(pTask))
 		return -EFAULT;
 
 	/* If no read request, no post-process needed. Do verify and stop */
-	if (!postInstruction) {
+	if (!postInstruction && !cmdq_core_check_task_valid(pTask)) {
 		if (unlikely(!cmdq_core_task_finalize_end(pTask))) {
 			CMDQ_ERR("[CMD] with smp_mb() cmdSize:%d bufferSize:%u blockSize:%d\n",
 				pTask->commandSize, pTask->bufferSize, pCommandDesc->blockSize);
@@ -3740,7 +3742,6 @@ static struct TaskStruct *cmdq_core_acquire_task(
 	int32_t status;
 	CMDQ_TIME time_cost;
 	struct TaskPrivateStruct *private = NULL, *desc_private = NULL;
-	const u64 inorder_mask = 1ll << CMDQ_ENG_INORDER;
 
 	CMDQ_MSG(
 		"-->TASK: acquire task begin CMD:0x%p, size:%d, Eng:0x%016llx\n",
@@ -3761,7 +3762,7 @@ static struct TaskStruct *cmdq_core_acquire_task(
 		pTask->desc = pCommandDesc;
 		pTask->scenario = pCommandDesc->scenario;
 		pTask->priority = pCommandDesc->priority;
-		pTask->engineFlag = pCommandDesc->engineFlag & ~inorder_mask;
+		pTask->engineFlag = pCommandDesc->engineFlag;
 		pTask->loopCallback = loopCB;
 		pTask->loopData = loopData;
 		pTask->taskState = TASK_STATE_WAITING;
@@ -3803,9 +3804,6 @@ static struct TaskStruct *cmdq_core_acquire_task(
 			pTask->res_engine_flag_acquire = 0;
 			pTask->res_engine_flag_release = 0;
 		}
-
-		if (pCommandDesc->engineFlag & inorder_mask)
-			pTask->force_inorder = true;
 
 		/* reset private data from desc */
 		desc_private = (struct TaskPrivateStruct *)CMDQ_U32_PTR(
@@ -7148,6 +7146,10 @@ static int32_t cmdq_core_wait_task_done_with_timeout_impl(
 	s32 delay_id = cmdq_get_delay_id_by_scenario(pTask->scenario);
 	s32 slot = -1, i = 0;
 	u32 tpr_mask = 0;
+	#ifdef VENDOR_EDIT
+	/* Ling.Guo@PSW.MM.Display.LCD.Machine, 2018/12/03,add for mm kevent fb. */
+	unsigned char payload[100] = "";
+	#endif
 
 	pThread = &(gCmdqContext.thread[thread]);
 	retry_count = 0;
@@ -7215,7 +7217,12 @@ static int32_t cmdq_core_wait_task_done_with_timeout_impl(
 			} else {
 				CMDQ_LOG("delay id:%d tpr mask:0x%08x\n", delay_id, tpr_mask);
 			}
-
+			#ifdef VENDOR_EDIT
+			/* Ling.Guo@PSW.MM.Display.LCD.Machine, 2018/12/03,add for mm kevent fb. */
+			scnprintf(payload, sizeof(payload), "EventID@@%d$$CMDQSWtimeout@@task:0x%p slot:%d",
+				OPPO_MM_DIRVER_FB_EVENT_ID_MTK_CMDQ, pTask, slot);
+			upload_mm_kevent_fb_data(OPPO_MM_DIRVER_FB_EVENT_MODULE_DISPLAY,payload);
+			#endif
 		} else {
 			/* dump simple status only */
 			CMDQ_PROF_SPIN_LOCK(gCmdqExecLock, flags, wait_task_dump);
@@ -8466,7 +8473,6 @@ static s32 cmdq_core_consume_waiting_list(struct work_struct *_ignore,
 	uint32_t user_list_count = 0;
 	uint32_t index = 0;
 	CMDQ_TIME consume_cost;
-	bool force_inorder = false;
 
 	/* when we're suspending, do not execute any tasks. delay & hold them. */
 	if (gCmdqSuspended)
@@ -8485,13 +8491,6 @@ static s32 cmdq_core_consume_waiting_list(struct work_struct *_ignore,
 	list_for_each_safe(p, n, &gCmdqContext.taskWaitList) {
 		struct TaskStruct *pTask = list_entry(p, struct TaskStruct,
 			listEntry);
-
-		if (force_inorder && pTask->force_inorder) {
-			CMDQ_LOG(
-				"skip force inorder handle:0x%p engine:0x%llx\n",
-				pTask, pTask->engineFlag);
-			continue;
-		}
 
 		/* check if task from client and no buffer */
 		if (pTask->is_client_buffer &&
@@ -8533,12 +8532,6 @@ static s32 cmdq_core_consume_waiting_list(struct work_struct *_ignore,
 
 		if (thread == CMDQ_INVALID_THREAD) {
 			/* have to wait, remain in wait list */
-			if (pTask->force_inorder) {
-				CMDQ_LOG(
-					"begin force inorder handle:0x%p engine:0x%llx\n",
-					pTask, pTask->engineFlag);
-				force_inorder = true;
-			}
 			CMDQ_MSG("<--THREAD: acquire thread fail, need to wait\n");
 			if (needLog == true) {
 				/* task wait too long */

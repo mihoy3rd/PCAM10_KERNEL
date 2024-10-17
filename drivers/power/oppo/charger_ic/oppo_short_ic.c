@@ -15,7 +15,7 @@
 * Revision 1.0        2018-05-24        Tongfeng.Huang@ProDrv.CHG            Created for new architecture
 ************************************************************************************************************/
 
-#include <linux/uaccess.h>
+#include <asm/uaccess.h>
 #include <linux/proc_fs.h>
 #ifdef CONFIG_OPPO_CHARGER_MTK
 #include <linux/interrupt.h>
@@ -23,6 +23,7 @@
 #include <linux/slab.h>
 #include <linux/irq.h>
 #include <linux/miscdevice.h>
+#include <asm/uaccess.h>
 #include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/workqueue.h>
@@ -195,7 +196,7 @@ int oppo_short_ic_set_volt_threshold(struct oppo_chg_chip *chip)
                 chg_err("ERROR: oppo_short_ic OPPO_SHORT_IC_TEMP_VOLT_DROP_THRESD write err, return\n");
         }
         oppo_short_chip->volt_drop_threshold = new_threshold;
-        //chg_err("oppo_short_ic new_threshold[0x%02X]\n", new_threshold);
+        chg_err("oppo_short_ic new_threshold[0x%02X]\n", new_threshold);
 
         rc = i2c_smbus_read_byte_data(oppo_short_chip->client, OPPO_SHORT_IC_TEMP_VOLT_DROP_THRESH_REG);
         chg_err("oppo_short_ic,0x02_reg, new_threshold value [0x%02X]\n", rc);
@@ -288,7 +289,7 @@ bool oppo_short_ic_otp_check(void)
                         return false;
                 }
         } else {
-                //chg_err("oppo_short_ic OTP state rc[0x%02X]\n", rc);
+                chg_err("oppo_short_ic OTP state rc[0x%02X]\n", rc);
                 otp_st = rc & 0xF0;
                 if(otp_st != 0x00){
                         if(chip->otp_error_cnt < 3) {

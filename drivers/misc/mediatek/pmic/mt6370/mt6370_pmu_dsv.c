@@ -21,10 +21,6 @@
 #include <linux/regulator/of_regulator.h>
 #include "inc/mt6370_pmu.h"
 
-#include "inc/mt6370_pmu_debugfs.h"
-#include "inc/mt6370_pmu_dsv_debugfs.h"
-#define MT6370_PMU_DSV_DRV_VERSION	"1.0.1_MTK"
-
 struct mt6370_dsv_regulator_struct {
 	unsigned char vol_reg;
 	unsigned char vol_mask;
@@ -120,39 +116,18 @@ struct mt6370_pmu_dsv_platform_data {
 static irqreturn_t mt6370_pmu_dsv_vneg_ocp_irq_handler(int irq, void *data)
 {
 	/* Use pr_info()  instead of dev_info */
-	struct mt6370_pmu_dsv_data *dsv_data = data;
-
-	mt6370_pmu_dsv_auto_vbst_adjustment(dsv_data->chip, DSV_VNEG_OCP);
-
-	if (mt6370_pmu_dsv_scp_ocp_irq_debug(dsv_data->chip, DSV_VNEG_OCP))
-		return IRQ_HANDLED;
-
 	pr_info("%s: IRQ triggered\n", __func__);
 	return IRQ_HANDLED;
 }
 
 static irqreturn_t mt6370_pmu_dsv_vpos_ocp_irq_handler(int irq, void *data)
 {
-	struct mt6370_pmu_dsv_data *dsv_data = data;
-
-	mt6370_pmu_dsv_auto_vbst_adjustment(dsv_data->chip, DSV_VPOS_OCP);
-
-	if (mt6370_pmu_dsv_scp_ocp_irq_debug(dsv_data->chip, DSV_VPOS_OCP))
-		return IRQ_HANDLED;
-
 	pr_info("%s: IRQ triggered\n", __func__);
 	return IRQ_HANDLED;
 }
 
 static irqreturn_t mt6370_pmu_dsv_bst_ocp_irq_handler(int irq, void *data)
 {
-	struct mt6370_pmu_dsv_data *dsv_data = data;
-
-	mt6370_pmu_dsv_auto_vbst_adjustment(dsv_data->chip, DSV_BST_OCP);
-
-	if (mt6370_pmu_dsv_scp_ocp_irq_debug(dsv_data->chip, DSV_BST_OCP))
-		return IRQ_HANDLED;
-
 	pr_info("%s: IRQ triggered\n", __func__);
 	return IRQ_HANDLED;
 }
@@ -167,12 +142,6 @@ static irqreturn_t mt6370_pmu_dsv_vneg_scp_irq_handler(int irq, void *data)
 	if (ret&0x40)
 		regulator_notifier_call_chain(
 			dsv_data->dsvn->regulator, REGULATOR_EVENT_FAIL, NULL);
-
-	mt6370_pmu_dsv_auto_vbst_adjustment(dsv_data->chip, DSV_VNEG_SCP);
-
-	if (mt6370_pmu_dsv_scp_ocp_irq_debug(dsv_data->chip, DSV_VNEG_SCP))
-		return IRQ_HANDLED;
-
 	return IRQ_HANDLED;
 }
 
@@ -186,12 +155,6 @@ static irqreturn_t mt6370_pmu_dsv_vpos_scp_irq_handler(int irq, void *data)
 	if (ret&0x80)
 		regulator_notifier_call_chain(
 			dsv_data->dsvp->regulator, REGULATOR_EVENT_FAIL, NULL);
-
-	mt6370_pmu_dsv_auto_vbst_adjustment(dsv_data->chip, DSV_VPOS_SCP);
-
-	if (mt6370_pmu_dsv_scp_ocp_irq_debug(dsv_data->chip, DSV_VPOS_SCP))
-		return IRQ_HANDLED;
-
 	return IRQ_HANDLED;
 }
 
@@ -229,7 +192,7 @@ static void mt6370_pmu_dsv_irq_register(struct platform_device *pdev)
 }
 
 static int mt6370_dsv_list_voltage(struct regulator_dev *rdev,
-		unsigned int selector)
+		unsigned selector)
 {
 	int vout = 0;
 
@@ -240,7 +203,7 @@ static int mt6370_dsv_list_voltage(struct regulator_dev *rdev,
 }
 
 static int mt6370_dsv_set_voltage_sel(
-		struct regulator_dev *rdev, unsigned int selector)
+		struct regulator_dev *rdev, unsigned selector)
 {
 	struct mt6370_pmu_dsv_data *info = rdev_get_drvdata(rdev);
 	const int count = rdev->desc->n_voltages;
@@ -394,7 +357,7 @@ static inline int mt_parse_dt(struct device *dev,
 	}
 
 	if (of_property_read_u32(np, "db_vbst", &val) == 0) {
-		if (val >= 4000 && val <= 6200) {
+		if (val >= 4000 && val <= 6150) {
 			mask->db_vbst.bitfield.vbst = 0x3f;
 			pdata->db_vbst.bitfield.vbst = (val - 4000) / 50;
 		}
@@ -483,8 +446,7 @@ static int mt6370_pmu_dsv_probe(struct platform_device *pdev)
 	struct mt6370_pmu_dsv_platform_data pdata, mask;
 	int ret;
 
-	pr_info("%s: (%s)\n", __func__, MT6370_PMU_DSV_DRV_VERSION);
-
+	dev_info(&pdev->dev, "Probing....\n");
 	dsv_data = devm_kzalloc(&pdev->dev, sizeof(*dsv_data), GFP_KERNEL);
 	if (!dsv_data)
 		return -ENOMEM;
@@ -533,7 +495,7 @@ static int mt6370_pmu_dsv_probe(struct platform_device *pdev)
 
 	mt6370_pmu_dsv_irq_register(pdev);
 	dev_info(&pdev->dev, "%s successfully\n", __func__);
-	return 0;
+	return ret;
 reg_apply_dts_fail:
 reg_dsvn_register_fail:
 	regulator_unregister(dsv_data->dsvp->regulator);
@@ -576,13 +538,4 @@ module_platform_driver(mt6370_pmu_dsv);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("MediaTek MT6370 PMU DSV");
-MODULE_VERSION(MT6370_PMU_DSV_DRV_VERSION);
-
-/*
- * Version Note
- * 1.0.1_MTK
- * (1) Fix db_vbst upperbound to 6200mV
- *
- * 1.0.0_MTK
- * (1) Initial Release
- */
+MODULE_VERSION("1.0.0_G");

@@ -22,9 +22,6 @@
  **  Ran.Chen        2018/01/29      modify for fp_id, Code refactoring
  **  Ran.Chen        2018/11/27      remove define MSM_DRM_ONSCREENFINGERPRINT_EVENT
  **  Ran.Chen        2018/12/15      modify for power off in ftm mode (for SDM855)
- **  Ran.Chen        2019/03/17      remove power off in ftm mode (for SDM855)
- **  Bangxiong.Wu    2019/05/10      add for SM7150 (MSM_19031 MSM_19331)
- **  Ran.Chen        2019/05/09      add for GF_IOC_CLEAN_TOUCH_FLAG
  ************************************************************************************/
 #define pr_fmt(fmt)    KBUILD_MODNAME ": " fmt
 
@@ -65,12 +62,10 @@
 #elif defined(USE_PLATFORM_BUS)
 #include <linux/platform_device.h>
 #endif
-#ifdef CONFIG_DRM_MSM
 #include <linux/msm_drm_notify.h>
-#endif
 #include <soc/oppo/boot_mode.h>
 
-#if ((defined CONFIG_MSM_855) || (defined CONFIG_MSM_7150))
+#ifdef CONFIG_MSM_855
 #include <linux/uaccess.h>
 #endif
 
@@ -420,10 +415,6 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             pr_debug("%s GF_IOC_WAKELOCK_TIMEOUT_DISABLE\n", __func__);
             wake_unlock(&gf_cmd_wakelock);
             break;
-        case GF_IOC_CLEAN_TOUCH_FLAG:
-            lasttouchmode = 0;
-            pr_debug("%s GF_IOC_CLEAN_TOUCH_FLAG\n", __func__);
-            break;
         default:
             pr_warn("unsupport cmd:0x%x\n", cmd);
             break;
@@ -701,22 +692,26 @@ static int gf_probe(struct platform_device *pdev)
 #endif
 
     gf_dev->notifier = goodix_noti_block;
-#if defined(CONFIG_DRM_MSM)
     status = msm_drm_register_client(&gf_dev->notifier);
     if (status == -1) {
         return status;
     }
-#elif defined(CONFIG_FB)
-    status = fb_register_client(&gf_dev->notifier);
-    if (status == -1) {
-        return status;
-    }
-#endif
     wake_lock_init(&fp_wakelock, WAKE_LOCK_SUSPEND, "fp_wakelock");
     wake_lock_init(&gf_cmd_wakelock, WAKE_LOCK_SUSPEND, "gf_cmd_wakelock");
 	pr_err(" register goodix_fp_ok\n");
 
     pr_info("version V%d.%d.%02d\n", VER_MAJOR, VER_MINOR, PATCH_LEVEL);
+
+#ifdef CONFIG_MSM_855
+    boot_mode = get_boot_mode();
+
+    if (MSM_BOOT_MODE__FACTORY == boot_mode)
+    {
+        pr_err("enter in MSM_BOOT_MODE__FACTORY\n");
+        gf_parse_dts(gf_dev);
+        gf_power_off(gf_dev);
+    }
+#endif
 
     return status;
 

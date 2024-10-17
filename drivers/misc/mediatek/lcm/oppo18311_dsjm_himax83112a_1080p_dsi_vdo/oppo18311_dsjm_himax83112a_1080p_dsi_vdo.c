@@ -83,10 +83,10 @@ static LCM_UTIL_FUNCS *lcm_util = NULL;
 #define LCM_DSI_CMD_MODE 0
 #define FRAME_WIDTH (1080)
 #define FRAME_HEIGHT (2340)
-#define PHYSICAL_WIDTH (67)
-#define PHYSICAL_HEIGHT (145)
-#define PHYSICAL_WIDTH_UM (67100)
-#define PHYSICAL_HEIGHT_UM (145300)
+#define PHYSICAL_WIDTH (69)
+#define PHYSICAL_HEIGHT (150)
+#define PHYSICAL_WIDTH_UM (69498)
+#define PHYSICAL_HEIGHT_UM (150579)
 
 #ifndef TRUE
 #define TRUE 1
@@ -101,7 +101,7 @@ extern int lm3697_write_byte(unsigned char addr,  unsigned char value);
 extern int lm3697_setbacklight(unsigned int level);
 
 extern int tp_control_reset_gpio(bool enable);
-extern int is_dpt_hx83112a_lcd;
+//extern int is_dpt_hx83112a_lcd;
 
 extern void lcd_queue_load_tp_fw(void);
 
@@ -252,7 +252,6 @@ static void lcm_set_util_funcs(const LCM_UTIL_FUNCS *util)
 static void lcm_get_params(LCM_PARAMS *params)
 {
 	int boot_mode = 0;
-	int ret = 0;
 
 	memset(params, 0, sizeof(LCM_PARAMS));
 
@@ -322,10 +321,10 @@ static void lcm_get_params(LCM_PARAMS *params)
 	if (boot_mode == 0) {
 		LCD_DEBUG("neither META_BOOT or FACTORY_BOOT\n");
 		params->dsi.esd_check_enable = 1;
-		params->dsi.customization_esd_check_enable = 1;
-		params->dsi.lcm_esd_check_table[0].cmd = 0x0A;
-		params->dsi.lcm_esd_check_table[0].count = 1;
-		params->dsi.lcm_esd_check_table[0].para_list[0] = 0x9D;
+		params->dsi.customization_esd_check_enable = 0;
+		//params->dsi.lcm_esd_check_table[0].cmd = 0x0A;
+		//params->dsi.lcm_esd_check_table[0].count = 1;
+		//params->dsi.lcm_esd_check_table[0].para_list[0] = 0x9D;
 	}
 //#ifdef CONFIG_MTK_ROUND_CORNER_SUPPORT
 //	params->round_corner_en = 1;
@@ -342,19 +341,20 @@ static void lcm_get_params(LCM_PARAMS *params)
 		debug_read = kmalloc(sizeof(dsi_debug),GFP_KERNEL);
 	}
 	*/
-
+#ifndef BUILD_LK
+/*
 	if(is_dpt_hx83112a_lcd == 2){
-		ret = register_device_proc("lcd", "hx83112a_dpt", "jdi vdo mode");
+		register_device_proc("lcd", "hx83112a_dpt", "jdi vdo mode");
 	} else if(is_dpt_hx83112a_lcd == 8){
-		ret = register_device_proc("lcd", "hx83112a_2_dpt", "jdi vdo mode");
+		register_device_proc("lcd", "hx83112a_2_dpt", "jdi vdo mode");
 	} else if(is_dpt_hx83112a_lcd == 7){
-		ret = register_device_proc("lcd", "hx83112a_2", "dsjm vdo mode");
+		register_device_proc("lcd", "hx83112a_2", "dsjm vdo mode");
 	} else {
-		ret = register_device_proc("lcd", "hx83112a", "dsjm vdo mode");
+		register_device_proc("lcd", "hx83112a", "dsjm vdo mode");
 	}
-	if (ret < 0)
-		LCD_DEBUG("device register failed\n");
-
+*/
+	register_device_proc("lcd", "hx83112a_m03", "dsjm_himax_a vdo mode");
+#endif
 }
 
 static void poweron_before_ulps(void)
