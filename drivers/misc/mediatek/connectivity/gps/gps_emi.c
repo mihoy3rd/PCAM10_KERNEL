@@ -252,7 +252,7 @@ long gps_emi_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long a
 
 	case IOCTL_ADC_CAPTURE_ADDR_GET:
 		tmp = (unsigned int *)&gGpsEmiPhyBase;
-		GPS_DBG("gps_emi:gGpsEmiPhyBase (%x)\n", &gGpsEmiPhyBase);
+		GPS_DBG("gps_emi:gGpsEmiPhyBase (%x)\n", (unsigned int)gGpsEmiPhyBase);
 		GPS_DBG("gps_emi:tmp  (%x)\n", tmp);
 		if (copy_to_user((unsigned int __user *)arg, tmp, sizeof(unsigned int)))
 			retval = -1;
@@ -299,7 +299,7 @@ static ssize_t gps_emi_read(struct file *file, char __user *buf, size_t count, l
 	GPS_DBG("gps_emi_read begin\n");
 	if (count > GPS_ADC_CAPTURE_BUFF_SIZE)
 		count = GPS_ADC_CAPTURE_BUFF_SIZE;
-	if (pGpsEmibaseaddr != NULL) {
+	if (pGpsEmibaseaddr != NULL && pGpsEmibaseaddr != NULL) {
 		if (copy_to_user(buf, (char *)pGpsEmibaseaddr, count))
 			pr_err("Copy to user failed\n");
 	}
