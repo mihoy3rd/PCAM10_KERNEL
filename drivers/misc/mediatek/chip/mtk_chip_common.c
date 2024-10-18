@@ -37,10 +37,6 @@
 struct mt_chip_drv g_chip_drv = {
 	.info_bit_mask = CHIP_INFO_BIT(CHIP_INFO_ALL)
 };
-#ifdef VENDOR_EDIT
-//jie.cheng@Swdp.shanghai, 2017/06/02, export chipinfo symbol
-EXPORT_SYMBOL(g_chip_drv);
-#endif
 
 struct mt_chip_drv *get_mt_chip_drv(void)
 {

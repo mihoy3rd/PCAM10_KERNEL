@@ -67,15 +67,12 @@ static struct charger_device *primary_charger;
 static struct charger_consumer *chg_consumer;
 #endif
 
-#ifndef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/09, sjc Delete for charging */
 static void tcpc_mt_power_off(void)
 {
 #ifdef CONFIG_MTK_KERNEL_POWER_OFF_CHARGING
 	kernel_power_off();
 #endif /* CONFIG_MTK_KERNEL_POWER_OFF_CHARGING */
 }
-#endif /*VENDOR_EDIT*/
 
 #if CONFIG_MTK_GAUGE_VERSION == 20
 #ifdef CONFIG_MTK_PUMP_EXPRESS_PLUS_30_SUPPORT
@@ -275,11 +272,6 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			noti->typec_state.new_state == TYPEC_ATTACHED_CUSTOM_SRC ||
 			noti->typec_state.new_state == TYPEC_ATTACHED_NORP_SRC)) {
 			charger_ignore_usb(false);
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/08, sjc Add for charging */
-			printk(KERN_ERR "!!!!! pd_tcp_notifier_call: [1]\n");
-			msleep(450);
-#endif
 #if CONFIG_MTK_GAUGE_VERSION == 30
 			charger_dev_enable_chg_type_det(primary_charger, true);
 #else
@@ -312,17 +304,10 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 				vbus = battery_meter_get_charger_voltage();
 				pr_info("%s KPOC Plug out, vbus = %d\n",
 					__func__, vbus);
-#ifndef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/09, sjc Delete for charging */
 				tcpc_mt_power_off();
-#endif
 				break;
 			}
 			pr_info("%s USB Plug out\n", __func__);
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/08, sjc Add for charging */
-			printk(KERN_ERR "!!!!! pd_tcp_notifier_call: [0]\n");
-#endif
 			charger_ignore_usb(false);
 #if CONFIG_MTK_GAUGE_VERSION == 20
 #ifdef CONFIG_MTK_PUMP_EXPRESS_PLUS_30_SUPPORT

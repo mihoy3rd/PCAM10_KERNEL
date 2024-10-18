@@ -48,8 +48,6 @@
  */
 #include <linux/version.h>
 
-#include <soc/oppo/oppo_project.h>
-
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0))
 # define KERNEL318MTK 1
 #endif
@@ -692,9 +690,6 @@ static int st21nfc_probe(struct i2c_client *client,
 	struct st21nfc_dev *st21nfc_dev;
 	struct device_node *node;
 	struct gpio_desc *desc;
-
-    if(get_Operator_Version() != OPERATOR_19350_ASIA_CARRIER)
-        return -ENODEV;
 
 #ifdef KERNEL318MTK
 #ifdef CONFIG_MTK_I2C_EXTENSION

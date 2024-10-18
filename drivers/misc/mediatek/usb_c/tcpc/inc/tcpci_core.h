@@ -18,7 +18,7 @@
 #include <linux/hrtimer.h>
 #include <linux/alarmtimer.h>
 #include <linux/workqueue.h>
-#include <linux/pm_wakeup.h>
+#include <linux/wakelock.h>
 #include <linux/notifier.h>
 #include <linux/semaphore.h>
 #include <linux/spinlock.h>
@@ -47,7 +47,7 @@
 #define DPM_DBG_ENABLE		0
 #define PD_ERR_ENABLE		1
 #define PE_DBG_ENABLE		0
-#define TYPEC_DBG_ENABLE	1
+#define TYPEC_DBG_ENABLE	0
 
 
 #define DP_INFO_ENABLE		1
@@ -154,14 +154,8 @@ struct tcpc_desc {
 #define TCPC_FLAGS_LPM_WAKEUP_WATCHDOG		(1<<3)
 #define TCPC_FLAGS_CHECK_RA_DETACHE		(1<<4)
 #define TCPC_FLAGS_PREFER_LEGACY2		(1<<5)
-#define TCPC_FLAGS_DISABLE_LEGACY		(1<<6)
 
 #define TCPC_FLAGS_PD_REV30			(1<<7)
-
-#define TCPC_FLAGS_WATCHDOG_EN			(1<<8)
-#define TCPC_FLAGS_WATER_DETECTION		(1<<9)
-#define TCPC_FLAGS_CABLE_TYPE_DETECTION		(1<<10)
-#define TCPC_FLAGS_DISABLE_VCONN_VSAFE5V_ONLY	(1<<11)
 
 enum tcpc_cc_pull {
 	TYPEC_CC_RA = 0,
@@ -194,7 +188,6 @@ enum tcpm_rx_cap_type {
 
 struct tcpc_ops {
 	int (*init)(struct tcpc_device *tcpc, bool sw_reset);
-	int (*init_alert_mask)(struct tcpc_device *tcpc);
 	int (*alert_status_clear)(struct tcpc_device *tcpc, uint32_t mask);
 	int (*fault_status_clear)(struct tcpc_device *tcpc, uint8_t status);
 	int (*get_alert_mask)(struct tcpc_device *tcpc, uint32_t *mask);
@@ -207,16 +200,6 @@ struct tcpc_ops {
 	int (*set_low_rp_duty)(struct tcpc_device *tcpc, bool low_rp);
 	int (*set_vconn)(struct tcpc_device *tcpc, int enable);
 	int (*deinit)(struct tcpc_device *tcpc);
-	int (*alert_vendor_defined_handler)(struct tcpc_device *tcpc);
-
-#ifdef CONFIG_TCPC_VSAFE0V_DETECT_IC
-	int (*is_vsafe0v)(struct tcpc_device *tcpc);
-#endif /* CONFIG_TCPC_VSAFE0V_DETECT_IC */
-
-#ifdef CONFIG_WATER_DETECTION
-	int (*is_water_detected)(struct tcpc_device *tcpc);
-	int (*set_water_protection)(struct tcpc_device *tcpc, bool en);
-#endif /* CONFIG_WATER_DETECTION */
 
 #ifdef CONFIG_TCPC_LOW_POWER_MODE
 	int (*is_low_power_mode)(struct tcpc_device *tcpc);
@@ -227,7 +210,9 @@ struct tcpc_ops {
 	int (*set_idle_mode)(struct tcpc_device *tcpc, bool en);
 #endif /* CONFIG_TCPC_IDLE_MODE */
 
+#ifdef CONFIG_TCPC_WATCHDOG_EN
 	int (*set_watchdog)(struct tcpc_device *tcpc, bool en);
+#endif /* CONFIG_TCPC_WATCHDOG_EN */
 
 #ifdef CONFIG_TCPC_INTRST_EN
 	int (*set_intrst)(struct tcpc_device *tcpc, bool en);
@@ -301,8 +286,8 @@ struct tcpc_device {
 	struct device dev;
 	bool wake_lock_user;
 	uint8_t wake_lock_pd;
-	struct wakeup_source attach_wake_lock;
-	struct wakeup_source dettach_temp_wake_lock;
+	struct wake_lock attach_wake_lock;
+	struct wake_lock dettach_temp_wake_lock;
 
 	/* For tcpc timer & event */
 	uint32_t timer_handle_index;
@@ -310,7 +295,7 @@ struct tcpc_device {
 
 	struct alarm wake_up_timer;
 	struct delayed_work wake_up_work;
-	struct wakeup_source wakeup_wake_lock;
+	struct wake_lock wakeup_wake_lock;
 
 	ktime_t last_expire[PD_TIMER_NR];
 	struct mutex access_lock;
@@ -399,7 +384,7 @@ struct tcpc_device {
 	bool tcpc_source_vconn;
 #endif	/* CONFIG_TCPC_SOURCE_VCONN */
 
-	uint32_t tcpc_flags;
+	uint8_t tcpc_flags;
 
 #ifdef CONFIG_DUAL_ROLE_USB_INTF
 	struct dual_role_phy_instance *dr_usb;
@@ -477,18 +462,8 @@ struct tcpc_device {
 #endif /* CONFIG_USB_PD_REV30 */
 #endif /* CONFIG_USB_POWER_DELIVERY */
 	u8 vbus_level:2;
-	bool vbus_safe0v;
-	bool vbus_present;
 	u8 irq_enabled:1;
 	u8 pd_inited_flag:1; /* MTK Only */
-
-	/* TypeC Shield Protection */
-#ifdef CONFIG_WATER_DETECTION
-	int usbid_calib;
-#endif /* CONFIG_WATER_DETECTION */
-#ifdef CONFIG_CABLE_TYPE_DETECTION
-	enum tcpc_cable_type typec_cable_type;
-#endif /* CONFIG_CABLE_TYPE_DETECTION */
 };
 
 

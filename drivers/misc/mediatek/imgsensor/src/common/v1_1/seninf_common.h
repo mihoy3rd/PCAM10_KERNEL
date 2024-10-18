@@ -14,6 +14,8 @@
 #ifndef __SENINF_COMMON_H__
 #define __SENINF_COMMON_H__
 
+#ifndef VENDOR_EDIT
+/*Yongzhi.Wang@RM.Camera add the driver of sensor,20190202*/
 #define PREFIX "[seninf]"
 
 #define DEBUG_CAMERA_HW_K
@@ -27,6 +29,28 @@
 #define PK_INFO(fmt, arg...) pr_debug(PREFIX fmt, ##arg)
 #endif
 
+#else
+#ifndef PREFIX
+#define PREFIX "[seninf]"
+#endif
+
+#ifndef DEBUG_CAMERA_HW_K
+#define DEBUG_CAMERA_HW_K
+#ifdef DEBUG_CAMERA_HW_K
+#define PK_DBG(fmt, arg...)  pr_debug(PREFIX fmt, ##arg)
+#define PK_PR_ERR(fmt, arg...)  pr_err(fmt, ##arg)
+#define PK_INFO(fmt, arg...) pr_debug(PREFIX fmt, ##arg)
+#else
+#define PK_DBG(fmt, arg...)
+#define PK_PR_ERR(fmt, arg...)  pr_err(fmt, ##arg)
+#define PK_INFO(fmt, arg...) pr_debug(PREFIX fmt, ##arg)
+#endif
+#endif
+
+#define ON 1
+#define OFF 0
+#define MCLK 24
+#endif
 enum SENINF_RETURN {
 	SENINF_RETURN_SUCCESS = 0,
 	SENINF_RETURN_ERROR = -1,

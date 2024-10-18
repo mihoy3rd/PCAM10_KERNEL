@@ -11,7 +11,6 @@
  * GNU General Public License for more details.
  */
 
-
 /*****************************************************************************
  *
  * Filename:
@@ -20,11 +19,11 @@
  *
  * Project:
  * --------
- *     ALPS
+ *	 ALPS
  *
  * Description:
  * ------------
- *     Source code of Sensor driver
+ *	 Source code of Sensor driver
  *
  * Setting version:
  * ------------
@@ -33,7 +32,6 @@
  * Upper this line, this part is controlled by CC/CQ. DO NOT MODIFY!!
  *============================================================================
  ****************************************************************************/
-
 #include <linux/videodev2.h>
 #include <linux/i2c.h>
 #include <linux/platform_device.h>
@@ -238,6 +236,23 @@ static SET_PD_BLOCK_INFO_T imgsensor_pd_info_16_9 =
     .i4PosR = {{14, 2},{30, 2},{6, 14},{22, 14},{14, 18},{30, 18},{6, 30},{22, 30},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}},
     .i4Crop = {{0, 0}, {0, 0}, {0, 384}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} },
 };
+// Quarter size skip mode pd information
+static SET_PD_BLOCK_INFO_T imgsensor_pd_info_QuarterSize =
+{
+    .i4OffsetX = 0,
+    .i4OffsetY = 0,
+    .i4PitchX  = 32,
+    .i4PitchY  = 32,
+    .i4PairNum	=8,//32*32 is cropped into 16*8 sub block of 8 pairnum, per sub block includes just only one pd pair pixels
+    .i4SubBlkW	=16,
+    .i4SubBlkH	=8,
+    .i4BlockNumX = 132,
+    .i4BlockNumY = 98,
+    .i4PosL = {{14, 6},{30, 6},{6, 10},{22, 10},{14, 22},{30, 22},{6, 26},{22, 26},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}},
+    .i4PosR = {{14, 2},{30, 2},{6, 14},{22, 14},{14, 18},{30, 18},{6, 30},{22, 30},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}},
+    .i4Crop = {{0, 0}, {0, 0}, {0, 384}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} },
+};
+
 
 static kal_uint16 read_cmos_sensor(kal_uint32 addr)
 {
@@ -610,6 +625,7 @@ static void sensor_init(void)
     write_cmos_sensor(0x5182, 0x02);
     write_cmos_sensor(0x5183, 0x0f);
     write_cmos_sensor(0x5200, 0x1b);
+    write_cmos_sensor(0x5204, 0x22); // Kevin add for ITS
     write_cmos_sensor(0x520b, 0x07);
     write_cmos_sensor(0x520c, 0x0f);
     write_cmos_sensor(0x5300, 0x04);
@@ -1746,6 +1762,8 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
                 memcpy((void *)PDAFinfo,(void *)&imgsensor_pd_info_16_9,sizeof(SET_PD_BLOCK_INFO_T));
                 break;
             case MSDK_SCENARIO_ID_CAMERA_PREVIEW:
+                memcpy((void *)PDAFinfo,(void *)&imgsensor_pd_info_QuarterSize,sizeof(SET_PD_BLOCK_INFO_T));
+                break;
             case MSDK_SCENARIO_ID_HIGH_SPEED_VIDEO:
             case MSDK_SCENARIO_ID_SLIM_VIDEO:
             default:
@@ -1770,7 +1788,7 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
                     *(MUINT32 *)(uintptr_t)(*(feature_data+1)) = 0;
                     break;
                 case MSDK_SCENARIO_ID_CAMERA_PREVIEW:
-                    *(MUINT32 *)(uintptr_t)(*(feature_data+1)) = 0;// @raviprakash.dixit@oppo.com whatsapp rear video crash issues, 05/09/19 
+                    *(MUINT32 *)(uintptr_t)(*(feature_data+1)) = 1;
                     break;
                 default:
                     *(MUINT32 *)(uintptr_t)(*(feature_data+1)) = 0;

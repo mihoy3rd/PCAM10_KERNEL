@@ -20,8 +20,6 @@ ccflags-y += -I$(srctree)/drivers/misc/mediatek/dramc/$(MTK_PLATFORM)/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/base/power/include/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/emi_bwl/$(MTK_PLATFORM)/
 
-ccflags-y += -I$(srctree)/drivers/devfreq/
-
 BUILD_ALL_FILES := true
 SUPPORT_MET_SMI := false
 ifneq (,$(filter $(CONFIG_MTK_PLATFORM), "mt6757" "kiboplus"))
@@ -111,7 +109,6 @@ ccflags-y += -DSMI_SYL
 ccflags-y += -DSMI_MMU_V2
 ccflags-y += -DMMDVFS_HOOK
 ccflags-y += -DDYNAMIC_DISP_HRT
-ccflags-y += -DCHECK_VOLTAGE
 ccflags-y += -I$(srctree)/drivers/clk/mediatek
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v3/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v3/$(MTK_PLATFORM)/

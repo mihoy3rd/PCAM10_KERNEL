@@ -121,24 +121,24 @@ bool wb_gain_set(kal_uint32 r_ratio, kal_uint32 b_ratio)
              }
       }
 
-         write_cmos_sensor_8(0x3C0F, 0x01);
-         if(R_GAIN>GAIN_DEFAULT)
-         {
-                 write_cmos_sensor_8(0x0210, (R_GAIN>>8)&0x0F);
-                 write_cmos_sensor_8(0x0211, R_GAIN&0xFF);
-         }
-         if(B_GAIN>GAIN_DEFAULT)
-         {
-                 write_cmos_sensor_8(0x0212, (B_GAIN>>8)&0x0F);
-                 write_cmos_sensor_8(0x0213, B_GAIN&0xFF);
-         }
-         if(G_GAIN>GAIN_DEFAULT)
-         {
-                 write_cmos_sensor_8(0x020E, (G_GAIN>>8)&0x0F);
-                 write_cmos_sensor_8(0x020F, G_GAIN&0xFF);
-                 write_cmos_sensor_8(0x0214, (G_GAIN>>8)&0x0F);
-                 write_cmos_sensor_8(0x0215, G_GAIN&0xFF);
-         }
+	 write_cmos_sensor_8(0x3C0F, 0x01);
+	 if(R_GAIN>GAIN_DEFAULT)
+	 {
+		 write_cmos_sensor_8(0x0210, (R_GAIN>>8)&0x0F);
+		 write_cmos_sensor_8(0x0211, R_GAIN&0xFF);
+	 }
+     if(B_GAIN>GAIN_DEFAULT)
+	 {
+		 write_cmos_sensor_8(0x0212, (B_GAIN>>8)&0x0F);
+		 write_cmos_sensor_8(0x0213, B_GAIN&0xFF);
+	 }
+	 if(G_GAIN>GAIN_DEFAULT)
+	 {
+		write_cmos_sensor_8(0x020E, (G_GAIN>>8)&0x0F);
+        write_cmos_sensor_8(0x020F, G_GAIN&0xFF);
+		write_cmos_sensor_8(0x0214, (G_GAIN>>8)&0x0F);
+        write_cmos_sensor_8(0x0215, G_GAIN&0xFF);
+	 }
      return 1;
 }
 

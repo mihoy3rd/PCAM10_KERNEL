@@ -48,10 +48,6 @@
 void connectivity_export_clk_buf_ctrl(/*enum clk_buf_id*/ int id, bool onoff);
 #define KERNEL_is_clk_buf_from_pmic connectivity_export_is_clk_buf_from_pmic
 bool connectivity_export_is_clk_buf_from_pmic(void);
-#define KERNEL_clk_buf_show_status_info connectivity_export_clk_buf_show_status_info
-void connectivity_export_clk_buf_show_status_info(void);
-#define KERNEL_clk_buf_get_xo_wcn_ctrl connectivity_export_clk_buf_get_xo_wcn_ctrl
-int connectivity_export_clk_buf_get_xo_wcn_ctrl(void);
 #endif
 
 /*******************************************************************************
@@ -131,6 +127,10 @@ void connectivity_export_mt6306_set_gpio_dir(unsigned long pin, unsigned long di
 #include "mtk_spm_resource_req.h"
 #endif
 
+#ifndef CONFIG_MACH_MT8167
+#define KERNEL_slp_get_wake_reason connectivity_export_slp_get_wake_reason
+#define KERNEL_spm_get_last_wakeup_src connectivity_export_spm_get_last_wakeup_src
+#endif
 #define KERNEL_show_stack connectivity_export_show_stack
 #define KERNEL_tracing_record_cmdline connectivity_export_tracing_record_cmdline
 #define KERNEL_dump_thread_state connectivity_export_dump_thread_state
@@ -149,6 +149,10 @@ void connectivity_export_mt6306_set_gpio_dir(unsigned long pin, unsigned long di
 #define KERNEL_spm_resource_req
 #endif
 
+#ifndef CONFIG_MACH_MT8167
+unsigned int connectivity_export_slp_get_wake_reason(void);
+unsigned int connectivity_export_spm_get_last_wakeup_src(void);
+#endif
 extern void tracing_record_cmdline(struct task_struct *tsk);
 extern void show_stack(struct task_struct *tsk, unsigned long *sp);
 #ifdef CPU_BOOST
@@ -195,8 +199,6 @@ do {                                                              \
 		__trace_printk(ip, fmt, ##args);                  \
 } while (0)
 
-#endif /* CONNECTIVITY_BUILD_IN_ADAPTER_H */
-
 /******************************************************************************
  * GPIO dump information
  ******************************************************************************/
@@ -205,3 +207,7 @@ do {                                                              \
 extern void gpio_dump_regs_range(int start, int end);
 void connectivity_export_dump_gpio_info(int start, int end);
 #endif
+
+int connectivity_export_gpio_get_tristate_input(unsigned int pin);
+
+#endif /* CONNECTIVITY_BUILD_IN_ADAPTER_H */

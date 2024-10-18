@@ -61,10 +61,6 @@
 #define AFDRV_OV5645AF "OV5645AF"
 #define AFDRV_OV8825AF "OV8825AF"
 #define AFDRV_WV511AAF "WV511AAF"
-#ifdef VENDOR_EDIT
-/*Longyuna.Yang@Camera add for FP5516 driver 20190227*/
-#define AFDRV_FP5516AF "FP5516AF"
-#endif
 
 /* Structures */
 struct stAF_MotorInfo {

@@ -237,10 +237,6 @@ struct display_primary_path_context {
 	unsigned long framebuffer_mva;
 	unsigned long framebuffer_va;
 	unsigned long framebuffer_pa;
-#ifdef VENDOR_EDIT
-	/* jie.cheng@swdp.shanghai,2017/06/02,add frame cnt variable to summarize all frame updates on MTK platform */
-	unsigned long frame_cnt;
-#endif
 	struct mutex lock;
 	struct mutex capture_lock;
 	struct mutex switch_dst_lock;
@@ -430,15 +426,6 @@ void _primary_path_switch_dst_unlock(void);
 */
 void ffl_set_init(void);
 void ffl_set_enable(unsigned int enable);
-/*
-* Ling.Guo@PSW.MM.Display.LCD.Feature, 2019/06/12,
-* add for get dimming layer hbm state
-*/
-int primary_display_set_lcm_hbm(bool en);
-int primary_display_hbm_wait(bool en);
-int primary_display_setbacklight_nolock(unsigned int level);
-int primary_display_set_aod_mode_nolock(unsigned int mode);
-
 #endif /* VENDOR_EDIT */
 
 /* AOD */
@@ -495,12 +482,4 @@ int display_freeze_mode(int enable, int need_lock);
 int primary_display_recovery(enum DISP_MODULE_ENUM module);
 int primary_display_wdma_recovery(void);
 void primary_display_set_recovery_module(enum DISP_MODULE_ENUM module);
-#ifdef VENDOR_EDIT
-/*
-* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/01/21,
-* add for fingerprint notify frigger
-*/
-void fpd_notify_check_trig(void);
-void fpd_notify(void);
-#endif
 #endif

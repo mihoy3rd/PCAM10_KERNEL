@@ -17,17 +17,23 @@
 #define VENDOR_EDIT
 #endif
 
-
 #ifdef VENDOR_EDIT
 /*Feng.Hu@Camera.Driver 20171213 add for evb and t0 board both work well*/
 #include<soc/oppo/oppo_project.h>
 #endif
+
 struct GPIO_PINCTRL gpio_pinctrl_list[GPIO_CTRL_STATE_MAX_NUM] = {
 	/* Main */
 	{"cam0_pnd1"},
 	{"cam0_pnd0"},
+	#ifndef VENDOR_EDIT
+	/*Feng.Hu@Camera.Driver 20171206 modify for TO board power up*/
 	{"cam0_rst1"},
 	{"cam0_rst0"},
+	#else
+	{"cam1_rst1"},
+	{"cam1_rst0"},
+	#endif
 	{"cam_ldo_vcama_1"},
 	{"cam_ldo_vcama_0"},
 	{"cam_ldo_vcamd_1"},
@@ -37,8 +43,14 @@ struct GPIO_PINCTRL gpio_pinctrl_list[GPIO_CTRL_STATE_MAX_NUM] = {
 	/* Sub */
 	{"cam1_pnd1"},
 	{"cam1_pnd0"},
+	#ifndef VENDOR_EDIT
+	/*Feng.Hu@Camera.Driver 20171206 modify for TO board power up*/
 	{"cam1_rst1"},
 	{"cam1_rst0"},
+	#else
+	{"cam2_rst1"},
+	{"cam2_rst0"},
+	#endif
 	{"cam_ldo_sub_vcama_1"},
 	{"cam_ldo_sub_vcama_0"},
 	{"cam_ldo_sub_vcamd_1"},
@@ -67,17 +79,6 @@ struct GPIO_PINCTRL gpio_pinctrl_list[GPIO_CTRL_STATE_MAX_NUM] = {
 	{"cam_ldo_sub2_vcamd_0"},
 	{"cam_ldo_sub2_vcamio_1"},
 	{"cam_ldo_sub2_vcamio_0"},
-	/*main3*/
-	{"cam4_pnd1"},
-	{"cam4_pnd0"},
-	{"cam4_rst1"},
-	{"cam4_rst0"},
-	{"cam_ldo_main3_vcama_1"},
-	{"cam_ldo_main3_vcama_0"},
-	{"cam_ldo_main3_vcamd_1"},
-	{"cam_ldo_main3_vcamd_0"},
-	{"cam_ldo_main3_vcamio_1"},
-	{"cam_ldo_main3_vcamio_0"},
 
 #ifdef MIPI_SWITCH
 	{"cam_mipi_switch_en_1"},
@@ -88,198 +89,6 @@ struct GPIO_PINCTRL gpio_pinctrl_list[GPIO_CTRL_STATE_MAX_NUM] = {
 };
 
 #ifdef VENDOR_EDIT
-/*Vikrant.gupta@Camera.Driver 20180402 modify for 17061 board power up*/
-struct GPIO_PINCTRL gpio_pinctrl_list_17061[GPIO_CTRL_STATE_MAX_NUM] = {
-	/* Main */
-	{"cam0_pnd1"},
-	{"cam0_pnd0"},
-	#ifndef VENDOR_EDIT
-	/*Feng.Hu@Camera.Driver 20171206 modify for TO board power up*/
-	{"cam0_rst1"},
-	{"cam0_rst0"},
-	#else
-	{"cam1_rst1"},
-	{"cam1_rst0"},
-	#endif
-	{"cam_ldo_vcama_1"},
-	{"cam_ldo_vcama_0"},
-	{"cam_ldo_vcamd_1"},
-	{"cam_ldo_vcamd_0"},
-	{"cam_ldo_vcamio_1"},
-	{"cam_ldo_vcamio_0"},
-	/* Sub */
-	{"cam1_pnd1"},
-	{"cam1_pnd0"},
-	#ifndef VENDOR_EDIT
-	/*Feng.Hu@Camera.Driver 20171206 modify for TO board power up*/
-	{"cam1_rst1"},
-	{"cam1_rst0"},
-	#else
-	{"cam2_rst1"},
-	{"cam2_rst0"},
-	#endif
-	{"cam_ldo_sub_vcama_1"},
-	{"cam_ldo_sub_vcama_0"},
-	{"cam_ldo_sub_vcamd_1"},
-	{"cam_ldo_sub_vcamd_0"},
-	{"cam_ldo_sub_vcamio_1"},
-	{"cam_ldo_sub_vcamio_0"},
-	/* Main2 */
-	{"cam2_pnd1"},
-	{"cam2_pnd0"},
-	{"cam2_rst1"},
-	{"cam2_rst0"},
-	{"cam_ldo_main2_vcama_1"},
-	{"cam_ldo_main2_vcama_0"},
-	{"cam_ldo_main2_vcamd_1"},
-	{"cam_ldo_main2_vcamd_0"},
-	{"cam_ldo_main2_vcamio_1"},
-	{"cam_ldo_main2_vcamio_0"},
-	/* Sub2 */
-	{"cam3_pnd1"},
-	{"cam3_pnd0"},
-	{"cam3_rst1"},
-	{"cam3_rst0"},
-	{"cam_ldo_sub2_vcama_1"},
-	{"cam_ldo_sub2_vcama_0"},
-	{"cam_ldo_sub2_vcamd_1"},
-	{"cam_ldo_sub2_vcamd_0"},
-	{"cam_ldo_sub2_vcamio_1"},
-	{"cam_ldo_sub2_vcamio_0"},
-
-#ifdef MIPI_SWITCH
-	{"cam_mipi_switch_en_1"},
-	{"cam_mipi_switch_en_0"},
-	{"cam_mipi_switch_sel_1"},
-	{"cam_mipi_switch_sel_0"}
-#endif
-
-};
-#endif
-
-#ifdef VENDOR_EDIT
-/*Feng.Hu@Camera.Driver 20171213 add for evb and t0 board both work well*/
-struct GPIO_PINCTRL gpio_pinctrl_list_evb[GPIO_CTRL_STATE_MAX_NUM] = {
-	/* Main */
-	{"cam0_pnd1"},
-	{"cam0_pnd0"},
-	{"cam0_rst1"},
-	{"cam0_rst0"},
-	{"cam_ldo_vcama_1"},
-	{"cam_ldo_vcama_0"},
-	{"cam_ldo_vcamd_1"},
-	{"cam_ldo_vcamd_0"},
-	{"cam_ldo_vcamio_1"},
-	{"cam_ldo_vcamio_0"},
-	/* Sub */
-	{"cam1_pnd1"},
-	{"cam1_pnd0"},
-	{"cam1_rst1"},
-	{"cam1_rst0"},
-	{"cam_ldo_sub_vcama_1"},
-	{"cam_ldo_sub_vcama_0"},
-	{"cam_ldo_sub_vcamd_1"},
-	{"cam_ldo_sub_vcamd_0"},
-	{"cam_ldo_sub_vcamio_1"},
-	{"cam_ldo_sub_vcamio_0"},
-	/* Main2 */
-	{"cam2_pnd1"},
-	{"cam2_pnd0"},
-	{"cam2_rst1"},
-	{"cam2_rst0"},
-	{"cam_ldo_main2_vcama_1"},
-	{"cam_ldo_main2_vcama_0"},
-	{"cam_ldo_main2_vcamd_1"},
-	{"cam_ldo_main2_vcamd_0"},
-	{"cam_ldo_main2_vcamio_1"},
-	{"cam_ldo_main2_vcamio_0"},
-	/* Sub2 */
-	{"cam3_pnd1"},
-	{"cam3_pnd0"},
-	{"cam3_rst1"},
-	{"cam3_rst0"},
-	{"cam_ldo_sub2_vcama_1"},
-	{"cam_ldo_sub2_vcama_0"},
-	{"cam_ldo_sub2_vcamd_1"},
-	{"cam_ldo_sub2_vcamd_0"},
-	{"cam_ldo_sub2_vcamio_1"},
-	{"cam_ldo_sub2_vcamio_0"},
-
-#ifdef MIPI_SWITCH
-	{"cam_mipi_switch_en_1"},
-	{"cam_mipi_switch_en_0"},
-	{"cam_mipi_switch_sel_1"},
-	{"cam_mipi_switch_sel_0"}
-#endif
-};
-
-/* added for 17311_P Bringup */
-struct GPIO_PINCTRL gpio_pinctrl_list_17331[GPIO_CTRL_STATE_MAX_NUM] = {
-	/* Main */
-	{"cam0_pnd1"},
-	{"cam0_pnd0"},
-	#ifndef VENDOR_EDIT
-	/*Feng.Hu@Camera.Driver 20171206 modify for TO board power up*/
-	{"cam0_rst1"},
-	{"cam0_rst0"},
-	#else
-	{"cam1_rst1"},
-	{"cam1_rst0"},
-	#endif
-	{"cam_ldo_vcama_1"},
-	{"cam_ldo_vcama_0"},
-	{"cam_ldo_vcamd_1"},
-	{"cam_ldo_vcamd_0"},
-	{"cam_ldo_vcamio_1"},
-	{"cam_ldo_vcamio_0"},
-	/* Sub */
-	{"cam1_pnd1"},
-	{"cam1_pnd0"},
-	#ifndef VENDOR_EDIT
-	/*Feng.Hu@Camera.Driver 20171206 modify for TO board power up*/
-	{"cam1_rst1"},
-	{"cam1_rst0"},
-	#else
-	{"cam2_rst1"},
-	{"cam2_rst0"},
-	#endif
-	{"cam_ldo_sub_vcama_1"},
-	{"cam_ldo_sub_vcama_0"},
-	{"cam_ldo_sub_vcamd_1"},
-	{"cam_ldo_sub_vcamd_0"},
-	{"cam_ldo_sub_vcamio_1"},
-	{"cam_ldo_sub_vcamio_0"},
-	/* Main2 */
-	{"cam2_pnd1"},
-	{"cam2_pnd0"},
-	{"cam2_rst1"},
-	{"cam2_rst0"},
-	{"cam_ldo_main2_vcama_1"},
-	{"cam_ldo_main2_vcama_0"},
-	{"cam_ldo_main2_vcamd_1"},
-	{"cam_ldo_main2_vcamd_0"},
-	{"cam_ldo_main2_vcamio_1"},
-	{"cam_ldo_main2_vcamio_0"},
-	/* Sub2 */
-	{"cam3_pnd1"},
-	{"cam3_pnd0"},
-	{"cam3_rst1"},
-	{"cam3_rst0"},
-	{"cam_ldo_sub2_vcama_1"},
-	{"cam_ldo_sub2_vcama_0"},
-	{"cam_ldo_sub2_vcamd_1"},
-	{"cam_ldo_sub2_vcamd_0"},
-	{"cam_ldo_sub2_vcamio_1"},
-	{"cam_ldo_sub2_vcamio_0"},
-
-#ifdef MIPI_SWITCH
-	{"cam_mipi_switch_en_1"},
-	{"cam_mipi_switch_en_0"},
-	{"cam_mipi_switch_sel_1"},
-	{"cam_mipi_switch_sel_0"}
-#endif
-};
-
 struct GPIO_PINCTRL gpio_pinctrl_list_17197[GPIO_CTRL_STATE_MAX_NUM] = {
 	/* Main */
 	{"cam0_pnd1"},
@@ -333,7 +142,10 @@ struct GPIO_PINCTRL gpio_pinctrl_list_17197[GPIO_CTRL_STATE_MAX_NUM] = {
 	{"cam_mipi_switch_sel_0"}
 #endif
 };
-struct GPIO_PINCTRL gpio_pinctrl_list_18311[GPIO_CTRL_STATE_MAX_NUM] = {
+
+
+/*Xiaoyang.Huang@RM.Camera add for 18611 board,20190304*/
+struct GPIO_PINCTRL gpio_pinctrl_list_18611[GPIO_CTRL_STATE_MAX_NUM] = {
 	/* Main */
 	{"cam0_pnd1"},
 	{"cam0_pnd0"},
@@ -386,7 +198,6 @@ struct GPIO_PINCTRL gpio_pinctrl_list_18311[GPIO_CTRL_STATE_MAX_NUM] = {
 	{"cam_mipi_switch_sel_0"}
 #endif
 };
-
 #endif
 static struct GPIO gpio_instance;
 
@@ -406,34 +217,13 @@ static enum IMGSENSOR_RETURN gpio_init(
 		PK_PR_ERR("This is 17197 board\n");
 		pgpio_pinctrl    = gpio_pinctrl_list_17197;
 	}
-	else if (is_project(OPPO_18311) || is_project(OPPO_18011))
-	{
-		PK_PR_ERR("This is 18311/18011 board\n");
-		pgpio_pinctrl = gpio_pinctrl_list_18311;
+
+	/*Yongzhi.Wang@RM.Camera add the driver of sensor,20190202*/
+	if (is_project(OPPO_18611)) {
+		PK_PR_ERR("This is 18611 board GPIO\n");
+		pgpio_pinctrl    = gpio_pinctrl_list_18611;
 	}
-	else if (is_project(OPPO_17175) || is_project(OPPO_17061))
-	{
-		PK_PR_ERR("This is 17061/17175 GPIO board\n");
-		pgpio_pinctrl = gpio_pinctrl_list_17061;
-	}
-	else if (is_project(OPPO_17331))
-	{
-		if((get_PCB_Version() == HW_VERSION__10))
-		{
-			PK_PR_ERR("This is 17331 evb board\n");
-			pgpio_pinctrl = gpio_pinctrl_list_evb;
-		}
-		else
-		{
-			PK_PR_ERR("This is 17331 board\n");
-			pgpio_pinctrl = gpio_pinctrl_list_17331;
-		}
-	}
-	else
-	{
-		PK_PR_ERR("This is default board\n");
-		pgpio_pinctrl = gpio_pinctrl_list;
-	}
+
 	#endif
 	pgpio->pgpio_mutex = &pcommon->pinctrl_mutex;
 
@@ -466,14 +256,6 @@ static enum IMGSENSOR_RETURN gpio_release(void *pinstance)
 	struct GPIO	     *pgpio = (struct GPIO *)pinstance;
 
 	for (i = GPIO_CTRL_STATE_CAM0_PDN_L; i < GPIO_CTRL_STATE_MAX_NUM; i += 2) {
-		#ifdef  VENDOR_EDIT
-		/*Riqin@camera.driver, 2019/08/18, add for ov02a10 rst pin was pull high level*/
-		if(is_project(OPPO_19531) || is_project(OPPO_19151) || is_project(OPPO_19350)){
-		    if((i == GPIO_CTRL_STATE_CAM3_RST_L) || (i == GPIO_CTRL_STATE_CAM4_RST_L)) {
-		        continue;
-		    }
-		}
-		#endif
 		ppinctrl_state = pgpio->ppinctrl_state[i];
 
 		mutex_lock(pgpio->pgpio_mutex);
@@ -499,19 +281,10 @@ static enum IMGSENSOR_RETURN gpio_set(
 	enum   GPIO_CTRL_STATE ctrl_state_offset;
 
 	if (pin < IMGSENSOR_HW_PIN_PDN ||
-#ifdef VENDOR_EDIT
-/* weiriqin@Camera.Driver add for 19531 19391 special mipi switch 20190521 */
 #ifdef MIPI_SWITCH
-            pin > IMGSENSOR_HW_PIN_MIPI_SWITCH_EN ||
+	    pin > IMGSENSOR_HW_PIN_MIPI_SWITCH_SEL ||
 #else
 	   pin > IMGSENSOR_HW_PIN_DOVDD ||
-#endif
-#else
-#ifdef MIPI_SWITCH
-           pin > IMGSENSOR_HW_PIN_MIPI_SWITCH_SEL ||
-#else
-           pin > IMGSENSOR_HW_PIN_DOVDD ||
-#endif
 #endif
 	   pin_state < IMGSENSOR_HW_PIN_STATE_LEVEL_0 ||
 	   pin_state > IMGSENSOR_HW_PIN_STATE_LEVEL_HIGH)

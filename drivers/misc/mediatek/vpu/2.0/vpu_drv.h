@@ -345,9 +345,6 @@ struct vpu_dev_debug_info {
 	pid_t open_pid;
 	pid_t open_tgid;
 };
-#ifdef CONFIG_GZ_SUPPORT_SDSP
-extern int mtee_sdsp_enable(u32 on);
-#endif
 
 /*---------------------------------------------------------------------------*/
 /*  IOCTL Command                                                            */
@@ -367,8 +364,5 @@ extern int mtee_sdsp_enable(u32 on);
 #define VPU_IOCTL_OPEN_DEV_NOTICE   _IOWR(VPU_MAGICNO,  11, int)
 #define VPU_IOCTL_CLOSE_DEV_NOTICE  _IOWR(VPU_MAGICNO,  12, int)
 
-
-#define VPU_IOCTL_SDSP_SEC_LOCK     _IOW(VPU_MAGICNO,   60, int)
-#define VPU_IOCTL_SDSP_SEC_UNLOCK   _IOW(VPU_MAGICNO,   61, int)
 
 #endif

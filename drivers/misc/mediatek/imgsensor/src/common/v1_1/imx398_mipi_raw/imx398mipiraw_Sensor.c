@@ -53,6 +53,7 @@
 #define LOG_1 LOG_INF("IMX398,MIPI 4LANE\n")
 /****************************   Modify end    *******************************************/
 
+#define IMX398_HS_VIDEO_115FPS
 
 #ifndef VENDOR_EDIT
 #define VENDOR_EDIT
@@ -91,7 +92,7 @@ static struct imgsensor_info_struct imgsensor_info = {
 	.cap = {		/* 30  fps  capture */
 		.pclk = 590400000,
 		.linelength = 5536,
-		.framelength = 3552,
+		.framelength = 4440,
 		.startx = 0,
 		.starty = 0,
 		.grabwindow_width = 4608,	/* 4192, */
@@ -116,32 +117,46 @@ static struct imgsensor_info_struct imgsensor_info = {
 		.framelength = 2888,
 		.startx = 0,
 		.starty = 0,
-		.grabwindow_width = 4608,	/* 4192, */
+		.grabwindow_width = 4656,	/* 4192, */
 		.grabwindow_height = 2608,	/* 3104, */
 		.mipi_data_lp2hs_settle_dc = 30,
 		.max_framerate = 300,
 	},
+#ifdef IMX398_HS_VIDEO_115FPS
 	.hs_video = {		/* 120 fps */
-		.pclk = 552000000,
+		.pclk = 600000000,
 		.linelength = 5536,
-		.framelength = 830,
+		.framelength = 944,
 		.startx = 0,
 		.starty = 0,
-		.grabwindow_width = 1280,
-		.grabwindow_height = 720,
+		.grabwindow_width = 1476,
+		.grabwindow_height = 834,
+		.mipi_data_lp2hs_settle_dc = 30,
+		.max_framerate = 1150,
+	},
+#else
+	.hs_video = {		/* 120 fps */
+		.pclk = 600000000,
+		.linelength = 5536,
+		.framelength = 902,
+		.startx = 0,
+		.starty = 0,
+		.grabwindow_width = 1476,
+		.grabwindow_height = 834,
 		.mipi_data_lp2hs_settle_dc = 30,
 		.max_framerate = 1200,
 	},
+#endif
 	.slim_video = {
-		.pclk = 600000000,
+		.pclk = 240000000,
 		.linelength = 5536,
-		.framelength = 1354,
+		.framelength = 1444,	/* 1640, */
 		.startx = 0,
 		.starty = 0,
-		.grabwindow_width = 2328,
-		.grabwindow_height = 1304,
+		.grabwindow_width = 1476,
+		.grabwindow_height = 834,
 		.mipi_data_lp2hs_settle_dc = 30,
-		.max_framerate = 800,
+		.max_framerate = 300,
 	},
 	#if 0
 	.custom1 = {
@@ -287,11 +302,11 @@ static struct imgsensor_struct imgsensor = {
 /* Sensor output window information */
 static SENSOR_WINSIZE_INFO_STRUCT imgsensor_winsize_info[10] = {
 	{4656, 3496, 0000, 0000, 4656, 3496, 2328, 1748, 0000, 0000, 2328, 1748, 0000, 0000, 2328, 1748},/* Preview */
-	{4656, 3496, 0000, 0000, 4656, 3496, 4656, 3496, 0030, 0024, 4608, 3456, 0000, 0000, 4608, 3456},/* capture */
-	{4656, 3496, 0000, 0674, 4656, 2608, 4656, 2608, 0030, 0000, 4608, 2608, 0000, 0000, 4608, 2608},/* video */
-	{4656, 3496, 0000, 1008, 4656, 1480, 2328, 740, 524, 10, 1280, 720, 0000, 0000, 1280, 720},/* hs video */
-	{4656, 3496, 0000, 0674, 4656, 2608, 2328, 1304, 0000, 0000, 2328, 1304, 0000, 0000, 2328, 1304},/* slim video */
-	{4656, 3496, 0000, 0024, 4656, 3456, 4656, 3456, 0030, 0000, 4608, 3456, 0000, 0000, 4608, 3456},/* Custom1 */
+	{4656, 3496, 0000, 0000, 4656, 3496, 4656, 3496, 0024, 0020, 4608, 3456, 0000, 0000, 4608, 3456},/* capture */
+	{4656, 3496, 0000, 0000, 4656, 3496, 4656, 3496, 0000, 0000, 4656, 3496, 0000, 0000, 4656, 2608},/* video */
+	{4656, 3496, 0000, 492, 4656, 2500, 2216, 834, 0000, 0000, 2216, 834, 370, 0000, 1476, 834},/* hs video */
+	{4656, 3496, 0000, 492, 4656, 2500, 2216, 834, 0000, 0000, 2216, 834, 370, 0000, 1476, 834},/* slim video */
+	{4656, 3496, 0000, 0020, 4656, 3456, 4656, 3456, 0024, 0000, 4608, 3456, 0000, 0000, 4608, 3456},/* Custom1 */
 	{4656, 3496, 0000, 0000, 4656, 3496, 2328, 1748, 0000, 0000, 2328, 1748, 0000, 0000, 2328, 1748},/* Custom2 */
 	{4656, 3496, 0000, 0000, 4656, 3496, 2328, 1748, 0000, 0000, 2328, 1748, 0000, 0000, 2328, 1748},/* Custom3 */
 	{4656, 3496, 0000, 0000, 4656, 3496, 2328, 1748, 0000, 0000, 2328, 1748, 0000, 0000, 2328, 1748},/* Custom4 */
@@ -322,88 +337,25 @@ static SENSOR_VC_INFO_STRUCT SENSOR_VC_INFO[3] = {
 };
 
 static SET_PD_BLOCK_INFO_T imgsensor_pd_info = {
-	.i4OffsetX = 88,
-	.i4OffsetY = 72,
+	.i4OffsetX = 64,
+	.i4OffsetY = 52,
 	.i4PitchX = 32,
 	.i4PitchY = 32,
 	.i4PairNum = 16,
 	.i4SubBlkW = 8,
 	.i4SubBlkH = 8,
 	.i4PosL = {
-		{91, 73}, {99, 73}, {107, 73}, {115, 73}, {95, 81}, {103, 81}, {111, 81}, {119, 81},
-		{91, 89}, {99, 89}, {107, 89}, {115, 89}, {95, 97}, {103, 97}, {111, 97}, {119, 97} },
+		{67, 53}, {75, 53}, {83, 53}, {91, 53}, {71, 61}, {79, 61}, {87, 61}, {95, 61},
+		{67, 69}, {75, 69}, {83, 69}, {91, 69}, {71, 77}, {79, 77}, {87, 77}, {95, 77} },
 	.i4PosR = {
-		{90, 73}, {98, 73}, {106, 73}, {114, 73}, {94, 81}, {102, 81}, {110, 81}, {118, 81},
-		{90, 89}, {98, 89}, {106, 89}, {114, 89}, {94, 97}, {102, 97}, {110, 97}, {118, 97} },
+		{66, 53}, {74, 53}, {82, 53}, {90, 53}, {70, 61}, {78, 61}, {86, 61}, {94, 61},
+		{66, 69}, {74, 69}, {82, 69}, {90, 69}, {70, 77}, {78, 77}, {86, 77}, {94, 77} },
 	.iMirrorFlip = 0,	/* 0:IMAGE_NORMAL,1:IMAGE_H_MIRROR,2:IMAGE_V_MIRROR,3:IMAGE_HV_MIRROR */
 
 	.i4BlockNumX = 140,
-	.i4BlockNumY = 104,
-	.i4Crop = { {0, 0}, {24, 20}, {0, 0}, {0, 0}, {0, 0}, {24, 20}, {0, 0}, {0, 0}, {0, 0}, {0, 0} }
+	.i4BlockNumY = 104
 };
 
-static SET_PD_BLOCK_INFO_T imgsensor_pd_info_video = {
-	.i4OffsetX = 88,
-	.i4OffsetY = 72,
-	.i4PitchX = 32,
-	.i4PitchY = 32,
-	.i4PairNum = 16,
-	.i4SubBlkW = 8,
-	.i4SubBlkH = 8,
-	.i4PosL = {
-		{91, 73}, {99, 73}, {107, 73}, {115, 73}, {95, 81}, {103, 81}, {111, 81}, {119, 81},
-		{91, 89}, {99, 89}, {107, 89}, {115, 89}, {95, 97}, {103, 97}, {111, 97}, {119, 97} },
-	.i4PosR = {
-		{90, 73}, {98, 73}, {106, 73}, {114, 73}, {94, 81}, {102, 81}, {110, 81}, {118, 81},
-		{90, 89}, {98, 89}, {106, 89}, {114, 89}, {94, 97}, {102, 97}, {110, 97}, {118, 97} },
-	.iMirrorFlip = 0,	/* 0:IMAGE_NORMAL,1:IMAGE_H_MIRROR,2:IMAGE_V_MIRROR,3:IMAGE_HV_MIRROR */
-
-	.i4BlockNumX = 140,
-	.i4BlockNumY =  81,
-	.i4Crop = { {0, 0}, {0, 0}, {0, 444}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} }
-};
-
-static SET_PD_BLOCK_INFO_T imgsensor_pd_info_hs_video = {
-	.i4OffsetX = 44,
-	.i4OffsetY = 36,
-	.i4PitchX = 16,
-	.i4PitchY = 16,
-	.i4PairNum = 16,
-	.i4SubBlkW = 4,
-	.i4SubBlkH = 4,
-	.i4PosL = {
-		{45, 37}, {49, 37}, {53, 37}, {57, 37}, {47, 41}, {51, 41}, {55, 41}, {59, 41},
-		{45, 45}, {49, 45}, {53, 45}, {57, 45}, {47, 49}, {51, 49}, {55, 49}, {59, 49} },
-	.i4PosR = {
-		{44, 37}, {48, 37}, {52, 37}, {56, 37}, {46, 41}, {50, 41}, {54, 41}, {58, 41},
-		{44, 45}, {48, 45}, {52, 45}, {56, 45}, {46, 49}, {50, 49}, {54, 49}, {58, 49} },
-	.iMirrorFlip = 0,	/* 0:IMAGE_NORMAL,1:IMAGE_H_MIRROR,2:IMAGE_V_MIRROR,3:IMAGE_HV_MIRROR */
-
-	.i4BlockNumX = 80,
-	.i4BlockNumY = 44,
-	.i4Crop = { {0, 0}, {0, 0}, {0, 0}, {524, 514}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} }
-};
-
-static SET_PD_BLOCK_INFO_T imgsensor_pd_info_slim_video = {
-	.i4OffsetX = 44,
-	.i4OffsetY = 36,
-	.i4PitchX = 16,
-	.i4PitchY = 16,
-	.i4PairNum = 16,
-	.i4SubBlkW = 4,
-	.i4SubBlkH = 4,
-	.i4PosL = {
-		{45, 37}, {49, 37}, {53, 37}, {57, 37}, {47, 41}, {51, 41}, {55, 41}, {59, 41},
-		{45, 45}, {49, 45}, {53, 45}, {57, 45}, {47, 49}, {51, 49}, {55, 49}, {59, 49} },
-	.i4PosR = {
-		{44, 37}, {48, 37}, {52, 37}, {56, 37}, {46, 41}, {50, 41}, {54, 41}, {58, 41},
-		{44, 45}, {48, 45}, {52, 45}, {56, 45}, {46, 49}, {50, 49}, {54, 49}, {58, 49} },
-	.iMirrorFlip = 0,	/* 0:IMAGE_NORMAL,1:IMAGE_H_MIRROR,2:IMAGE_V_MIRROR,3:IMAGE_HV_MIRROR */
-
-	.i4BlockNumX = 140,
-	.i4BlockNumY =  80,
-	.i4Crop = { {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 222}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} }
-};
 
 struct SENSOR_ATR_INFO {
 	MUINT16 DarkLimit_H;
@@ -726,35 +678,12 @@ static void imx398_apply_SPC(void)
 
 #ifdef VENDOR_EDIT
 /*Henry.Chang@Camera.Driver add for 18531 ModuleSN*/
-static kal_uint8 gImx398_SN[CAMERA_MODULE_SN_LENGTH];
-/*Riqin.Wei@Camera.Driver, 2019/08/08, add for google ARCode Feature verify*/
-#define  CAMERA_MODULE_INFO_LENGTH  (8)
-static kal_uint8 gImx398_CamInfo[CAMERA_MODULE_INFO_LENGTH];
-static void read_eeprom_CamInfo(void)
-{
-	kal_uint16 idx = 0;
-	kal_uint8 get_byte[12];
-	for (idx = 0; idx <12; idx++) {
-		char pusendcmd[2] = {0x00 , (char)((0x00 + idx) & 0xFF) };
-		iReadRegI2C(pusendcmd , 2, (u8*)&get_byte[idx],1, 0xA0);
-		printk("Imx398_info[%d]: 0x%x\n", idx, get_byte[idx]);
-	}
-
-	gImx398_CamInfo[0] = get_byte[0];
-	gImx398_CamInfo[1] = get_byte[1];
-	gImx398_CamInfo[2] = get_byte[6];
-	gImx398_CamInfo[3] = get_byte[7];
-	gImx398_CamInfo[4] = get_byte[8];
-	gImx398_CamInfo[5] = get_byte[9];
-	gImx398_CamInfo[6] = get_byte[10];
-	gImx398_CamInfo[7] = get_byte[11];
-}
-
+static kal_uint8 gImx398_SN[16];
 static void read_eeprom_SN(void)
 {
 	kal_uint16 idx = 0;
 	kal_uint8 *get_byte= &gImx398_SN[0];
-	for (idx = 0; idx <CAMERA_MODULE_SN_LENGTH; idx++) {
+	for (idx = 0; idx <16; idx++) {
 		char pusendcmd[2] = {0x00 , (char)((0xE0 + idx) & 0xFF) };
 		iReadRegI2C(pusendcmd , 2, (u8*)&get_byte[idx],1, 0xA0);
 		LOG_INF("imx398_SN[%d]: 0x%x  0x%x\n", idx, get_byte[idx], gImx398_SN[idx]);
@@ -785,26 +714,6 @@ static kal_uint16 read_cmos_eeprom_8(kal_uint16 addr)
 	return get_byte;
 }
 
-static kal_uint16 imx398_i2c_unprotect(void)
-{
-	kal_int32 ret = IMGSENSOR_RETURN_SUCCESS;
-	char pusendcmd[3] = {(char)(0x8000 >> 8), (char)(0x8000 & 0xFF), 0x00};
-
-	ret = iBurstWriteReg((kal_uint8 *)pusendcmd , 3, 0xA0);
-
-	return ret;
-}
-
-static kal_uint16 imx398_i2c_protect(void)
-{
-	kal_int32 ret = IMGSENSOR_RETURN_SUCCESS;
-	char pusendcmd[3] = {(char)(0x8000 >> 8), (char)(0x8000 & 0xFF), 0x0E};
-
-	ret = iBurstWriteReg((kal_uint8 *)pusendcmd , 3, 0xA0);
-
-	return ret;
-}
-
 /*Henry.Chang@camera.driver 20181129, add for sensor Module SET*/
 static kal_int32 write_Module_data(ACDK_SENSOR_ENGMODE_STEREO_STRUCT * pStereodata)
 {
@@ -830,15 +739,11 @@ static kal_int32 write_Module_data(ACDK_SENSOR_ENGMODE_STEREO_STRUCT * pStereoda
 					pData[1557], pData[1558], pData[1559], pData[1560]);
 			idx = data_length/WRITE_DATA_MAX_LENGTH;
 			idy = data_length%WRITE_DATA_MAX_LENGTH;
-			imx398_i2c_unprotect();
-			msleep(6);
 			for (i = 0; i < idx; i++ ) {
 				ret = table_write_eeprom_30Bytes((data_base+WRITE_DATA_MAX_LENGTH*i),
 					    &pData[WRITE_DATA_MAX_LENGTH*i], WRITE_DATA_MAX_LENGTH);
 				if (ret != IMGSENSOR_RETURN_SUCCESS) {
 				    pr_err("write_eeprom error: i= %d\n", i);
-					msleep(6);
-					imx398_i2c_protect();
 					return IMGSENSOR_RETURN_ERROR;
 				}
 				msleep(6);
@@ -847,8 +752,6 @@ static kal_int32 write_Module_data(ACDK_SENSOR_ENGMODE_STEREO_STRUCT * pStereoda
 				      &pData[WRITE_DATA_MAX_LENGTH*idx], idy);
 			if (ret != IMGSENSOR_RETURN_SUCCESS) {
 				pr_err("write_eeprom error: idx= %d idy= %d\n", idx, idy);
-				msleep(6);
-				imx398_i2c_protect();
 				return IMGSENSOR_RETURN_ERROR;
 			}
 			msleep(6);
@@ -869,8 +772,6 @@ static kal_int32 write_Module_data(ACDK_SENSOR_ENGMODE_STEREO_STRUCT * pStereoda
 			pr_debug("tail4 0x1C58:0x%x\n", read_cmos_eeprom_8(0x1C58));
 			msleep(6);
 			pr_debug("s5kgm1write_Module_data Write end\n");
-			imx398_i2c_protect();
-			msleep(6);
 		}else {
 			pr_err("Invalid Sensor id:0x%x write_398 eeprom\n", pStereodata->uSensorId);
 			return IMGSENSOR_RETURN_ERROR;
@@ -962,15 +863,10 @@ static void set_max_framerate(UINT16 framerate, kal_bool min_framelength_en)
  * GLOBALS AFFECTED
  *
  *************************************************************************/
-static void set_shutter(kal_uint32 shutter)
+static void set_shutter(kal_uint16 shutter)
 {
 	unsigned long flags;
 	kal_uint16 realtime_fps = 0;
-	#ifdef VENDOR_EDIT
-	/*Yijun.Tan@camera.driver,20180116,add for slow shutter */
-	int longexposure_times = 0;
-	static int long_exposure_status = 0;
-	#endif
 
 	spin_lock_irqsave(&imgsensor_drv_lock, flags);
 	imgsensor.shutter = shutter;
@@ -990,8 +886,9 @@ static void set_shutter(kal_uint32 shutter)
 	if (imgsensor.frame_length > imgsensor_info.max_frame_length)
 		imgsensor.frame_length = imgsensor_info.max_frame_length;
 	spin_unlock(&imgsensor_drv_lock);
-	if (shutter < imgsensor_info.min_shutter)
-		shutter = imgsensor_info.min_shutter;
+	shutter = (shutter < imgsensor_info.min_shutter) ? imgsensor_info.min_shutter : shutter;
+	shutter = (shutter > (imgsensor_info.max_frame_length - imgsensor_info.margin))
+		? (imgsensor_info.max_frame_length - imgsensor_info.margin) : shutter;
 
 	if (imgsensor.autoflicker_en) {
 		realtime_fps = imgsensor.pclk / imgsensor.line_length * 10 / imgsensor.frame_length;
@@ -1013,34 +910,7 @@ static void set_shutter(kal_uint32 shutter)
 		write_cmos_sensor(0x0341, imgsensor.frame_length & 0xFF);
 		write_cmos_sensor(0x0104, 0x00);
 	}
-	#ifdef VENDOR_EDIT
-	/*Yijun.Tan@camera.driver,20180116,add for slow shutter */
-	while (shutter >= 65535) {
-		shutter = shutter / 2;
-		longexposure_times += 1;
-	}
 
-	if (longexposure_times > 0) {
-		LOG_INF("enter long exposure mode, time is %d",
-			longexposure_times);
-		long_exposure_status = 1;
-		imgsensor.frame_length = shutter + 32;
-		write_cmos_sensor(0x0104, 0x01);
-		write_cmos_sensor(0x3002, longexposure_times & 0x07);
-		write_cmos_sensor(0x0340, imgsensor.frame_length >> 8);
-		write_cmos_sensor(0x0341, imgsensor.frame_length & 0xFF);
-		write_cmos_sensor(0x0104, 0x00);
-	} else if (long_exposure_status == 1) {
-		long_exposure_status = 0;
-		write_cmos_sensor(0x0104, 0x01);
-		write_cmos_sensor(0x3002, 0x00);
-		write_cmos_sensor(0x0340, imgsensor.frame_length >> 8);
-		write_cmos_sensor(0x0341, imgsensor.frame_length & 0xFF);
-		write_cmos_sensor(0x0104, 0x00);
-
-		LOG_INF("exit long exposure mode");
-	}
-	#endif
 	/* Update Shutter */
 	write_cmos_sensor(0x0104, 0x01);
 	write_cmos_sensor(0x0202, (shutter >> 8) & 0xFF);
@@ -2831,8 +2701,9 @@ kal_uint16 addr_data_pair_capture_imx398_pdaf[] = {
 	0x0220, 0x00,
 	0x0221, 0x11,
 	0x0222, 0x10,
-	0x0340, 0x0D,
-	0x0341, 0xE0,
+	0x302b, 0x00,
+	0x0340, 0x0E,
+	0x0341, 0x1C,
 	0x0342, 0x15,
 	0x0343, 0xA0,
 	0x0344, 0x00,
@@ -2862,40 +2733,40 @@ kal_uint16 addr_data_pair_capture_imx398_pdaf[] = {
 	0x0112, 0x0A,
 	0x0113, 0x0A,
 	0x034C, 0x12,
-	0x034D, 0x00,
+	0x034D, 0x30,
 	0x034E, 0x0D,
-	0x034F, 0x80,
+	0x034F, 0xA8,
 	0x0401, 0x00,
 	0x0404, 0x00,
 	0x0405, 0x10,
 	0x0408, 0x00,
-	0x0409, 0x18,
+	0x0409, 0x00,
 	0x040A, 0x00,
-	0x040B, 0x14,
+	0x040B, 0x00,
 	0x040C, 0x12,
-	0x040D, 0x00,
+	0x040D, 0x30,
 	0x040E, 0x0D,
-	0x040F, 0x80,
+	0x040F, 0xA8,
 	/***********clock setting************/
 	0x0301, 0x05,
 	0x0303, 0x02,
 	0x0305, 0x04,
 	0x0306, 0x00,
-	0x0307, 0xF6,
+	0x0307, 0xFA,
 	0x0309, 0x0A,
 	0x030B, 0x01,
-	0x030D, 0x04,
-	0x030E, 0x00,
-	0x030F, 0xDE,
-	0x0310, 0x01,
+	0x030D, 0x0F,
+	0x030E, 0x03,
+	0x030F, 0x41,
+	0x0310, 0x00,
 	/*************data rateing setting*********/
-	0x0820, 0x14,
-	0x0821, 0xD0,
+	0x0820, 0x17,
+	0x0821, 0x70,
 	0x0822, 0x00,
 	0x0823, 0x00,
 	/*************integration time setting******/
-	0x0202, 0x0D,
-	0x0203, 0xD6,
+	0x0202, 0x0E,
+	0x0203, 0x12,
 	0x0224, 0x01,
 	0x0225, 0xF4,
 	/************gain setting****************/
@@ -2987,18 +2858,18 @@ kal_uint16 addr_data_pair_video_imx398[] = {
 	0x0112, 0x0A,
 	0x0113, 0x0A,
 	0x034C, 0x12,
-	0x034D, 0x00,
+	0x034D, 0x30,
 	0x034E, 0x0A,
 	0x034F, 0x30,
 	0x0401, 0x00,
 	0x0404, 0x00,
 	0x0405, 0x10,
 	0x0408, 0x00,
-	0x0409, 0x18,
+	0x0409, 0x00,
 	0x040A, 0x00,
 	0x040B, 0x00,
 	0x040C, 0x12,
-	0x040D, 0x00,
+	0x040D, 0x30,
 	0x040E, 0x0A,
 	0x040F, 0x30,
 	/***********clock setting************/
@@ -3047,34 +2918,39 @@ static void normal_video_setting(kal_uint16 currefps)
 }
 
 kal_uint16 addr_data_pair_hs_video_imx398[] = {
-	/*************mode setting*********/
+	/*************mode setting******/
 	0x0114, 0x03,
 	0x0220, 0x00,
 	0x0221, 0x11,
 	0x0222, 0x10,
+#ifdef IMX398_HS_VIDEO_115FPS
 	0x0340, 0x03,
-	0x0341, 0x3E,
+	0x0341, 0xB0,
+#else
+	0x0340, 0x03,
+	0x0341, 0x86,
+#endif
 	0x0342, 0x15,
 	0x0343, 0xA0,
 	0x0344, 0x00,
 	0x0345, 0x00,
-	0x0346, 0x03,
-	0x0347, 0xF0,
+	0x0346, 0x01,
+	0x0347, 0xEC,
 	0x0348, 0x12,
 	0x0349, 0x2F,
-	0x034A, 0x09,
-	0x034B, 0xB7,
+	0x034A, 0x0B,
+	0x034B, 0xAF,
 	0x0381, 0x01,
 	0x0383, 0x01,
-	0x0385, 0x01,
-	0x0387, 0x01,
+	0x0385, 0x03,
+	0x0387, 0x03,
 	0x0900, 0x01,
 	0x0901, 0x22,
-	0x0902, 0x02,
+	0x0902, 0x00,
 	0x3010, 0x65,
 	0x3011, 0x01,
 	0x30C0, 0x11,
-	0x300D, 0x00,
+	0x300D, 0x01,
 	0x30FD, 0x00,
 	0x8493, 0x00,
 	0x8863, 0x00,
@@ -3083,40 +2959,40 @@ kal_uint16 addr_data_pair_hs_video_imx398[] = {
 	0x0112, 0x0A,
 	0x0113, 0x0A,
 	0x034C, 0x05,
-	0x034D, 0x00,
-	0x034E, 0x02,
-	0x034F, 0xD0,
-	0x0401, 0x00,
+	0x034D, 0xC4,
+	0x034E, 0x03,
+	0x034F, 0x42,
+	0x0401, 0x01,
 	0x0404, 0x00,
-	0x0405, 0x10,
-	0x0408, 0x02,
-	0x0409, 0x0C,
+	0x0405, 0x18,
+	0x0408, 0x00,
+	0x0409, 0x38,
 	0x040A, 0x00,
-	0x040B, 0x0A,
-	0x040C, 0x05,
-	0x040D, 0x00,
-	0x040E, 0x02,
-	0x040F, 0xD0,
+	0x040B, 0x00,
+	0x040C, 0x08,
+	0x040D, 0xA8,
+	0x040E, 0x03,
+	0x040F, 0x42,
 	/***********clock setting**************/
 	0x0301, 0x05,
 	0x0303, 0x02,
 	0x0305, 0x04,
 	0x0306, 0x00,
-	0x0307, 0xE6,
+	0x0307, 0xFA,
 	0x0309, 0x0A,
 	0x030B, 0x01,
-	0x030D, 0x04,
-	0x030E, 0x00,
-	0x030F, 0xC8,
-	0x0310, 0x01,
+	0x030D, 0x0F,
+	0x030E, 0x03,
+	0x030F, 0x41,
+	0x0310, 0x00,
 	/*************data rateing setting**********/
-	0x0820, 0x12,
-	0x0821, 0xC0,
+	0x0820, 0x17,
+	0x0821, 0x70,
 	0x0822, 0x00,
 	0x0823, 0x00,
 	/*************integration time **/
 	0x0202, 0x03,
-	0x0203, 0x34,
+	0x0203, 0x7C,
 	0x0224, 0x01,
 	0x0225, 0xF4,
 	/************gain setting******* **/
@@ -3149,28 +3025,28 @@ kal_uint16 addr_data_pair_slim_video_imx398[] = {
 	0x0221, 0x11,
 	0x0222, 0x10,
 	0x0340, 0x05,
-	0x0341, 0x4A,
+	0x0341, 0xA4,
 	0x0342, 0x15,
 	0x0343, 0xA0,
 	0x0344, 0x00,
 	0x0345, 0x00,
 	0x0346, 0x01,
-	0x0347, 0xBC,
+	0x0347, 0xEC,
 	0x0348, 0x12,
 	0x0349, 0x2F,
 	0x034A, 0x0B,
-	0x034B, 0xEB,
+	0x034B, 0xAF,
 	0x0381, 0x01,
 	0x0383, 0x01,
-	0x0385, 0x01,
-	0x0387, 0x01,
+	0x0385, 0x03,
+	0x0387, 0x03,
 	0x0900, 0x01,
 	0x0901, 0x22,
 	0x0902, 0x00,
 	0x3010, 0x65,
 	0x3011, 0x01,
 	0x30C0, 0x11,
-	0x300D, 0x00,
+	0x300D, 0x01,
 	0x30FD, 0x00,
 	0x8493, 0x00,
 	0x8863, 0x00,
@@ -3178,41 +3054,41 @@ kal_uint16 addr_data_pair_slim_video_imx398[] = {
 	/************output size setting*********/
 	0x0112, 0x0A,
 	0x0113, 0x0A,
-	0x034C, 0x09,
-	0x034D, 0x18,
-	0x034E, 0x05,
-	0x034F, 0x18,
-	0x0401, 0x00,
+	0x034C, 0x05,
+	0x034D, 0xC4,
+	0x034E, 0x03,
+	0x034F, 0x42,
+	0x0401, 0x01,
 	0x0404, 0x00,
-	0x0405, 0x10,
+	0x0405, 0x18,
 	0x0408, 0x00,
-	0x0409, 0x00,
+	0x0409, 0x38,
 	0x040A, 0x00,
 	0x040B, 0x00,
-	0x040C, 0x09,
-	0x040D, 0x18,
-	0x040E, 0x05,
-	0x040F, 0x18,
+	0x040C, 0x08,
+	0x040D, 0xA8,
+	0x040E, 0x03,
+	0x040F, 0x42,
 	/***********clock setting****************/
 	0x0301, 0x05,
 	0x0303, 0x02,
 	0x0305, 0x04,
 	0x0306, 0x00,
-	0x0307, 0xFA,
+	0x0307, 0x64,
 	0x0309, 0x0A,
 	0x030B, 0x01,
-	0x030D, 0x04,
-	0x030E, 0x00,
-	0x030F, 0x7D,
-	0x0310, 0x01,
+	0x030D, 0x0F,
+	0x030E, 0x03,
+	0x030F, 0x41,
+	0x0310, 0x00,
 	/*************data rateing setting*********/
-	0x0820, 0x0B,
-	0x0821, 0xB8,
+	0x0820, 0x09,
+	0x0821, 0x60,
 	0x0822, 0x00,
 	0x0823, 0x00,
 	/*************integration time setting*********/
 	0x0202, 0x05,
-	0x0203, 0x40,
+	0x0203, 0x9A,
 	0x0224, 0x01,
 	0x0225, 0xF4,
 	/************gain setting*********/
@@ -3380,8 +3256,6 @@ static kal_uint32 get_imgsensor_id(UINT32 *sensor_id)
 				LOG_INF("i2c write id: 0x%x, sensor id: 0x%x\n",
 					imgsensor.i2c_write_id, *sensor_id);
 				read_eeprom_SN();
-				/*Riqin.Wei@Camera.Driver, 2019/08/08, add for google ARCode Feature verify*/
-				read_eeprom_CamInfo();
 				return ERROR_NONE;
 			}
 			LOG_INF("Read sensor id fail, write id: 0x%x, id: 0x%x\n",
@@ -4097,27 +3971,14 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 
 	LOG_INF("feature_id = %d\n", feature_id);
 	switch (feature_id) {
-	/*Riqin.Wei@Camera.Driver, 2019/08/08, add for google ARCode Feature verify*/
-	case SENSOR_FEATURE_GET_MODULE_INFO:
-		LOG_INF("imx398 GET_MODULE_CamInfo:%d %d\n", *feature_para_len, *feature_data_32);
-		*(feature_data_32 + 1) = (gImx398_CamInfo[1] << 24)
-					| (gImx398_CamInfo[0] << 16)
-					| (gImx398_CamInfo[3] << 8)
-					| (gImx398_CamInfo[2] & 0xFF);
-		*(feature_data_32 + 2) = (gImx398_CamInfo[5] << 24)
-					| (gImx398_CamInfo[4] << 16)
-					| (gImx398_CamInfo[7] << 8)
-					| (gImx398_CamInfo[6] & 0xFF);
-		break;
 	/*Henry.Chang@Camera.Driver add for 18531 ModuleSN*/
 	case SENSOR_FEATURE_GET_MODULE_SN:
 		LOG_INF("imx398 GET_MODULE_SN:%d %d\n", *feature_para_len, *feature_data_32);
-		if (*feature_data_32 < CAMERA_MODULE_SN_LENGTH/4) {
+		if (*feature_data_32 < 4)
 			*(feature_data_32 + 1) = (gImx398_SN[4*(*feature_data_32) + 3] << 24)
 						| (gImx398_SN[4*(*feature_data_32) + 2] << 16)
 						| (gImx398_SN[4*(*feature_data_32) + 1] << 8)
 						| (gImx398_SN[4*(*feature_data_32)] & 0xFF);
-		}
 		break;
 	/*Henry.Chang@camera.driver 20181129, add for sensor Module SET*/
 	case SENSOR_FEATURE_SET_SENSOR_OTP:
@@ -4125,10 +3986,15 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 		kal_int32 ret = IMGSENSOR_RETURN_SUCCESS;
 		LOG_INF("SENSOR_FEATURE_SET_SENSOR_OTP length :%d\n", (UINT32)*feature_para_len);
 		ret = write_Module_data((ACDK_SENSOR_ENGMODE_STEREO_STRUCT *)(feature_para));
+		#if 1
+		/*for 18161 dualcam calibration*/
+		return ERROR_NONE;
+		#else
 		if (ret == ERROR_NONE)
 			return ERROR_NONE;
 		else
 			return ERROR_MSDK_IS_ACTIVED;
+		#endif
 	}
 	case SENOSR_FEATURE_GET_OFFSET_TO_START_OF_EXPOSURE:
 		*(MUINT32 *)(uintptr_t)(*(feature_data + 1)) = 0;
@@ -4262,22 +4128,12 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 
 		switch (*feature_data) {
 		case MSDK_SCENARIO_ID_CAMERA_CAPTURE_JPEG:
-		case MSDK_SCENARIO_ID_CUSTOM1:
 			memcpy((void *)PDAFinfo, (void *)&imgsensor_pd_info,
 			       sizeof(SET_PD_BLOCK_INFO_T));
 			break;
 		case MSDK_SCENARIO_ID_VIDEO_PREVIEW:
-			memcpy((void *)PDAFinfo, (void *)&imgsensor_pd_info_video,
-			       sizeof(SET_PD_BLOCK_INFO_T));
-			break;
 		case MSDK_SCENARIO_ID_HIGH_SPEED_VIDEO:
-			memcpy((void *)PDAFinfo, (void *)&imgsensor_pd_info_hs_video,
-			       sizeof(SET_PD_BLOCK_INFO_T));
-			break;
 		case MSDK_SCENARIO_ID_SLIM_VIDEO:
-			memcpy((void *)PDAFinfo, (void *)&imgsensor_pd_info_slim_video,
-			       sizeof(SET_PD_BLOCK_INFO_T));
-			break;
 		case MSDK_SCENARIO_ID_CAMERA_PREVIEW:
 		default:
 			break;
@@ -4327,7 +4183,7 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 			*(MUINT32 *) (uintptr_t) (*(feature_data + 1)) = 1;
 			break;
 		case MSDK_SCENARIO_ID_VIDEO_PREVIEW:
-			*(MUINT32 *) (uintptr_t) (*(feature_data + 1)) = 1;
+			*(MUINT32 *) (uintptr_t) (*(feature_data + 1)) = 0;
 			break;
 		case MSDK_SCENARIO_ID_HIGH_SPEED_VIDEO:
 			*(MUINT32 *) (uintptr_t) (*(feature_data + 1)) = 0;
@@ -4359,9 +4215,7 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 		streaming_control(KAL_FALSE);
 		break;
 	case SENSOR_FEATURE_SET_STREAMING_RESUME:
-		LOG_INF("SENSOR_FEATURE_SET_STREAMING_RESUME, shutter:%llu\n",*feature_data);
-		if (*feature_data != 0)
-			set_shutter(*feature_data);
+		LOG_INF("SENSOR_FEATURE_SET_STREAMING_RESUME\n");
 		streaming_control(KAL_TRUE);
 		break;
 

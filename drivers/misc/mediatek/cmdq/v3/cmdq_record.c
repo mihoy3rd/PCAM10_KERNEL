@@ -3339,31 +3339,3 @@ s32 cmdq_task_update_property(struct cmdqRecStruct *handle, void *prop_addr, u32
 
 	return 0;
 }
-
-s32 cmdq_op_read_mem_to_mem(struct cmdqRecStruct *handle,
-	cmdqBackupSlotHandle h_backup_slot, u32 slot_index, u32 addr)
-{
-	const dma_addr_t dram_addr = h_backup_slot + slot_index * sizeof(u32);
-	CMDQ_VARIABLE var_mem_addr = CMDQ_TASK_TEMP_CPR_VAR;
-	s32 status;
-
-	do {
-		status = cmdq_create_variable_if_need(handle, &handle->arg_value);
-		CMDQ_CHECK_AND_BREAK_STATUS(status);
-		status = cmdq_op_assign(handle, &var_mem_addr, (u32)dram_addr);
-		CMDQ_CHECK_AND_BREAK_STATUS(status);
-
-		/* read dram to temp var */
-		status = cmdq_append_command(handle, CMDQ_CODE_READ_S,
-					(u32)(handle->arg_value & 0xFFFF),
-					(u32)(var_mem_addr & 0xFFFF), 1, 1);
-		CMDQ_CHECK_AND_BREAK_STATUS(status);
-		status = cmdq_op_assign(handle, &var_mem_addr, (u32)addr);
-		CMDQ_CHECK_AND_BREAK_STATUS(status);
-
-		status = cmdq_append_command(handle, CMDQ_CODE_WRITE_S,
-		var_mem_addr, handle->arg_value, 1, 1);
-	} while (0);
-
-	return status;
-}

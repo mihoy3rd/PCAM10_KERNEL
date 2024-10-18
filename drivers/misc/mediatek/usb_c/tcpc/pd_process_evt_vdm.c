@@ -287,7 +287,6 @@ static bool pd_make_vdm_state_transit(
 	int i;
 	bool check_tx;
 	uint8_t vdm_cmdt;
-	bool unsupported_msg = true;
 	const struct vdm_state_transition *state_transition;
 
 	uint8_t nr_transition = ARRAY_SIZE(pe_vdm_state_reactions);
@@ -303,8 +302,6 @@ static bool pd_make_vdm_state_transit(
 			pd_port, transit_type, &vdm_cmdt, state_transition))
 			continue;
 
-		unsupported_msg = false;
-
 		if (check_tx) {
 			return vdm_is_state_transition_available(
 				pd_port, false, state_transition);
@@ -314,7 +311,6 @@ static bool pd_make_vdm_state_transit(
 		}
 	}
 
-	pd_port->curr_unsupported_msg = unsupported_msg;
 	return false;
 }
 
@@ -381,10 +377,6 @@ static inline bool pd_process_ctrl_msg(
 
 	if (pd_event->msg != PD_CTRL_GOOD_CRC)
 		return false;
-
-	if (pd_port->pe_data.vdm_state_flags &
-		VDM_STATE_FLAG_ENABLE_VDM_RESPONSE_TIMER)
-		pd_enable_timer(pd_port, pd_port->pe_data.vdm_state_timer);
 
 	switch (pd_port->pe_state_curr) {
 #ifdef CONFIG_USB_PD_ALT_MODE
@@ -460,7 +452,7 @@ bool pd_process_custom_vdm(struct pd_port *pd_port, bool svdm)
 		return true;
 	}
 
-	PE_DBG("Ignore Custom VDM\r\n");
+	pd_put_dpm_event(pd_port, PD_DPM_NOT_SUPPORT);
 	return false;
 }
 
@@ -474,14 +466,14 @@ static inline bool pd_process_uvdm(
 	if (pd_event->pd_msg->frame_type != TCPC_TX_SOP)
 		return false;
 
-	/* Unsupported UVDM will be handled by PE_UFP_CUSTOM_VDM_RECV */
 	if (pd_process_custom_vdm(pd_port, false))
 		return true;
 #else
-	PE_DBG("Unsupported UVDM\r\n");
 	pd_put_dpm_event(pd_port, PD_DPM_NOT_SUPPORT);
 #endif	/* CONFIG_USB_PD_UVDM */
 
+	/* TODO: Reply Not_Supported Message*/
+	PE_DBG("659 : Invalid UVDM\r\n");
 	return false;
 }
 
@@ -575,21 +567,11 @@ static inline bool pd_process_sop_vdm(
 		return true;
 
 #ifdef CONFIG_USB_PD_SVDM
-	/* Unsupported SVID specific VDM
-	 * will be handled by PE_UFP_CUSTOM_VDM_RECV
-	 */
-	if (PD_VDO_CMD(pd_port->curr_vdm_hdr) >= CMD_SVID_SPECIFIC) {
-		pd_port->curr_unsupported_msg = false;
-		if (pd_process_custom_vdm(pd_port, true))
-			return true;
-	}
+	if (pd_process_custom_vdm(pd_port, true))
+		return true;
 #endif	/* CONFIG_USB_PD_SVDM */
 
-	if (pd_port->curr_unsupported_msg) {
-		PE_DBG("Unsupported SVDM\r\n");
-		pd_put_dpm_event(pd_port, PD_DPM_NOT_SUPPORT);
-	}
-
+	PE_DBG("Unknown SVDM\r\n");
 	return false;
 }
 

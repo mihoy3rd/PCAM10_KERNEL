@@ -78,15 +78,12 @@ enum CMDQ_SEC_ENG_ENUM {
 	CMDQ_SEC_ISP_IMG2O,	/* 18 */
 	CMDQ_SEC_ISP_IMG3O,	/* 19 */
 	CMDQ_SEC_ISP_SMXIO,	/* 20 */
-	CMDQ_SEC_ISP_DMGI_DEPI,	/* 21 */
-	CMDQ_SEC_ISP_IMGCI,	/* 22 */
-	CMDQ_SEC_ISP_TIMGO,	/* 23 */
-	CMDQ_SEC_DPE,		/* 24 */
-	CMDQ_SEC_OWE,		/* 25 */
-	CMDQ_SEC_WPEI,		/* 26 */
-	CMDQ_SEC_WPEO,		/* 27 */
-	CMDQ_SEC_WPEI2,		/* 28 */
-	CMDQ_SEC_WPEO2,		/* 29 */
+	CMDQ_SEC_DPE,		/* 21 */
+	CMDQ_SEC_OWE,		/* 22 */
+	CMDQ_SEC_WPEI,		/* 23 */
+	CMDQ_SEC_WPEO,		/* 24 */
+	CMDQ_SEC_WPEI2,		/* 25 */
+	CMDQ_SEC_WPEO2,		/* 26 */
 
 	CMDQ_SEC_MAX_ENG_COUNT	/* ALWAYS keep at the end */
 };

@@ -35,65 +35,6 @@ LCM_DSI_MODE_CON lcm_dsi_mode;
 
 LCM_DRIVER *lcm_driver_list[] = {
 #ifdef VENDOR_EDIT
-
-/* Adding Lcd Drivers for 18311 */
-#if defined(OPPO17321_TIANMA_TD4310_1080P_DSI_VDO)
-	&oppo17321_tianma_td4310_1080p_dsi_vdo_lcm_drv,
-#endif
-#if defined(OPPO17321_BOE_TD4310_1080P_DSI_VDO)
-	&oppo17321_boe_td4310_1080p_dsi_vdo_lcm_drv,
-#endif
-#if defined(OPPO17321_DSJM_TD4310_1080P_DSI_VDO)
-	&oppo17321_dsjm_td4310_1080p_dsi_vdo_lcm_drv,
-#endif
-/* LiPing-m@PSW.MM.Display.LCD.Machine 2017/12/08, Add for lcm ic himax83221b */
-#if defined(OPPO_HIMAX83112B_1080P_DSI_CMD)
-	&oppo_himax83112b_1080p_dsi_cmd_lcm_drv,
-#endif
-#if defined(OPPO_JDI_TD4330_1080P_DSI_CMD)
-	&oppo_jdi_td4330_1080p_dsi_cmd_lcm_drv,
-#endif
-/* LiPing-m@PSW.MM.Display.LCD.Machine 2018/1/20, Add for lcm ic jdi td4310 */
-#if defined(OPPO_JDI_TD4310_1080P_DSI_VDO)
-	&oppo_jdi_td4310_1080p_dsi_vdo_lcm_drv,
-#endif
-#if defined(OPPO_TRULY_NT36672_AUO_1080P_DSI_VDO)
-	&oppo_truly_nt36672_auo_1080p_dsi_vdo_lcm_drv,
-#endif
-/* LiPing-m@PSW.MM.Display.LCD.Machine 2018/2/5, Add for lcm ic auo nt36672 */
-#if defined(OPPO_AUO_NT36672_1080P_DSI_VDO)
-	&oppo_auo_nt36672_1080p_dsi_vdo_lcm_drv,
-#endif
-/* LiPing-m@PSW.MM.Display.LCD.Machine 2018/2/27, Add for lcm ic dsjm nt36672 */
-#if defined(OPPO_DSJM_NT36672_1080P_DSI_VDO)
-	&oppo_dsjm_nt36672_1080p_dsi_vdo_lcm_drv,
-#endif
-/* Guoqiang.jiang@PSW.MM.Display.LCD.Machine 2018/4/13, Add for lcm ic dpt hx83112a */
-#if defined(OPPO_DPT_JDI_HX83112A_1080P_DSI_VDO)
-	&oppo_dpt_jdi_hx83112a_1080p_dsi_vdo_lcm_drv,
-#endif
-/* LiPing-m@PSW.MM.Display.LCD.Machine 2018/2/5, Add for lcm ic jdi nt36672 */
-#if defined(OPPO_JDI_NT36672_1080P_DSI_VDO)
-	&oppo_jdi_nt36672_1080p_dsi_vdo_lcm_drv,
-#endif
-/* Guoqiang.jiang@PSW.MM.Display.LCD.Machine 2018/5/21, Add for lcm ic dpt jdi td4330*/
-#if defined(OPPO_DPT_JDI_TD4330_1080P_DSI_CMD)
-	&oppo_dpt_jdi_td4330_1080p_dsi_cmd_lcm_drv,
-#endif
-#if defined(OPPO_DPT_JDI_NT36672_1080P_DSI_VDO)
-	&oppo_dpt_jdi_nt36672_1080p_dsi_vdo_lcm_drv,
-#endif
-#if defined(OPPO_TIANMA_NT36672_1080P_DSI_VDO)
-	&oppo_tianma_nt36672_1080p_dsi_vdo_lcm_drv,
-#endif
-#if defined(OPPO18311_TIANMA_NT36672_1080P_DSI_VDO)
-	&oppo18311_tianma_nt36672_1080p_dsi_vdo_lcm_drv,
-#endif
-#if defined(OPPO18311_DEPUTE_NT36672_1080P_DSI_VDO)
-	&oppo18311_depute_nt36672_1080p_dsi_vdo_lcm_drv,
-#endif
-/* Adding Lcd Drivers for 18311 */
-
 /* YongPeng.Yi@PSW.MM.Display.LCD.Machine 2018/10/15, Add for lcm ic tm himax83112a*/
 #if defined(OPPO18531_TM_HIMAX83112A_2_1080P_DSI_VDO)
 	&oppo18531_tm_himax83112a_2_1080p_dsi_vdo_lcm_drv,
@@ -151,40 +92,19 @@ LCM_DRIVER *lcm_driver_list[] = {
 	&oppo18561_djn_jdi_himax83112b_1080p_dsi_cmd_lcm_drv,
 #endif
 
-/* YongPeng.Yi@PSW.MM.Display.LCD.Machine 2018/11/05, Add for lcm ic tianma td4330*/
-#if defined(OPPO18561_TIANMA_TD4330_1080P_DSI_CMD)
-	&oppo18561_tianma_td4330_1080p_dsi_cmd_lcm_drv,
+/* Shizeke@PSW.MM.Display.LCD.Machine 2018/8/24, Add for lcm ic dsjm himax83112a in 18611 */
+#if defined(OPPO18611_DSJM_HIMAX83112A_1080P_DSI_VDO)
+	&oppo18611_dsjm_himax83112a_1080p_dsi_vdo_lcm_drv,
 #endif
 
-/* YongPeng.Yi@PSW.MM.Display.LCD.Machine 2018/10/22, Add for lcm ic dsjm td4330*/
-#if defined(OPPO18561_DSJM_JDI_TD4330_1080P_DSI_CMD)
-	&oppo18561_dsjm_jdi_td4330_1080p_dsi_cmd_lcm_drv,
+/* Shizeke@PSW.MM.Display.LCD.Machine 2019/01/29, Add for lcm ic Truly AUO NT36672 */
+#if defined(OPPO_TRULY_NT36672_AUO_1080P_DSI_VDO)
+	&oppo_truly_nt36672_auo_1080p_dsi_vdo_lcm_drv,
+#endif
+#if defined(OPPO_JDI_TD4310_1080P_DSI_VDO)
+	&oppo_jdi_td4310_1080p_dsi_vdo_lcm_drv,
 #endif
 
-/* YongPeng.Yi@PSW.MM.Display.LCD.Machine 2019/03/22, Add for dpt lcm ic dsjm td4330*/
-#if defined(OPPO18561_DPT_JDI_TD4330_1080P_DSI_CMD)
-	&oppo18561_dpt_jdi_td4330_1080p_dsi_cmd_lcm_drv,
-#endif
-
-/* YongPeng.Yi@PSW.MM.Display.LCD.Machine 2019/04/28, Add for dsjm lcm ic himax83112a*/
-#if defined(OPPO18561_DSJM_JDI_HIMAX83112A_1080P_DSI_VDO)
-	&oppo18561_dsjm_jdi_himax83112a_1080p_dsi_vdo_lcm_drv,
-#endif
-
-/* YongPeng.Yi@PSW.MM.Display.LCD.Machine 2019/04/28, Add for tianma lcm ic himax83112a*/
-#if defined(OPPO18561_TIANMA_HIMAX83112A_1080P_DSI_VDO)
-	&oppo18561_tianma_himax83112a_1080p_dsi_vdo_lcm_drv,
-#endif
-
-/* Ling.Guo@PSW.MM.Display.LCD.Machine 2019/01/08, Add for lcm ic samsung*/
-#if defined(OPPO19531_SAMSUNG_AMS641RW01_1080P_DSI_CMD)
-	&oppo19531_samsung_ams641rw01_1080p_dsi_cmd_lcm_drv,
-#endif
-
-/* Ling.Guo@PSW.MM.Display.LCD.Machine 2019/09/21, Add for 19151 lcm ic samsung*/
-#if defined(OPPO19151_SAMSUNG_AMS644VA04_1080P_DSI_CMD)
-	&oppo19151_samsung_ams644va04_1080p_dsi_cmd_lcm_drv,
-#endif
 #endif /* VENDOR_EDIT */
 #if defined(OTM1284A_HD720_DSI_VDO_TM)
 	&otm1284a_hd720_dsi_vdo_tm_lcm_drv,
@@ -1300,6 +1220,7 @@ LCM_DRIVER *lcm_driver_list[] = {
 #if defined(ES6311_ANX6585_ZIGZAG_WXGA)
 	&es6311_anx6585_zigzag_wxga_lcm_drv,
 #endif
+
 };
 
 unsigned char lcm_name_list[][128] = {

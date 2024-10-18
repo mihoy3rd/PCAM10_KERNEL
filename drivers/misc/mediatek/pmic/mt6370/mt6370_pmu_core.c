@@ -21,8 +21,6 @@
 #include "inc/mt6370_pmu.h"
 #include "inc/mt6370_pmu_core.h"
 
-#define MT6370_PMU_CORE_DRV_VERSION	"1.0.0_MTK"
-
 struct mt6370_pmu_core_data {
 	struct mt6370_pmu_chip *chip;
 	struct device *dev;
@@ -32,7 +30,7 @@ static irqreturn_t mt6370_pmu_otp_irq_handler(int irq, void *data)
 {
 	struct mt6370_pmu_core_data *core_data = data;
 
-	dev_notice(core_data->dev, "%s\n", __func__);
+	dev_err(core_data->dev, "%s\n", __func__);
 	return IRQ_HANDLED;
 }
 
@@ -40,7 +38,7 @@ static irqreturn_t mt6370_pmu_vdda_ovp_irq_handler(int irq, void *data)
 {
 	struct mt6370_pmu_core_data *core_data = data;
 
-	dev_notice(core_data->dev, "%s\n", __func__);
+	dev_err(core_data->dev, "%s\n", __func__);
 	return IRQ_HANDLED;
 }
 
@@ -48,7 +46,7 @@ static irqreturn_t mt6370_pmu_vdda_uv_irq_handler(int irq, void *data)
 {
 	struct mt6370_pmu_core_data *core_data = data;
 
-	dev_notice(core_data->dev, "%s\n", __func__);
+	dev_err(core_data->dev, "%s\n", __func__);
 	return IRQ_HANDLED;
 }
 
@@ -76,8 +74,7 @@ static void mt6370_pmu_core_irq_register(struct platform_device *pdev)
 					mt6370_core_irq_desc[i].name,
 					platform_get_drvdata(pdev));
 		if (ret < 0) {
-			dev_notice(&pdev->dev, "request %s irq fail\n",
-					       res->name);
+			dev_err(&pdev->dev, "request %s irq fail\n", res->name);
 			continue;
 		}
 		mt6370_core_irq_desc[i].irq = res->start;
@@ -150,41 +147,36 @@ static inline int mt_parse_dt(struct device *dev)
 static int mt6370_pmu_core_reset(struct mt6370_pmu_core_data *core_data)
 {
 	const u8 pascode[2] = {0xC5, 0x7E};
-	u8 chip_vid = core_data->chip->chip_vid;
 	int ret = 0;
 
 	dev_info(core_data->dev, "%s\n", __func__);
-
-	if (chip_vid == MT6372_VENDOR_ID || chip_vid == MT6372C_VENDOR_ID)
-		return 0;
-
 	ret = mt6370_pmu_reg_write(core_data->chip,
 				   MT6370_PMU_REG_RSTPASCODE1, 0xA9);
 	if (ret < 0)
-		dev_notice(core_data->dev, "set passcode1 fail\n");
+		dev_err(core_data->dev, "set passcode1 fail\n");
 	ret = mt6370_pmu_reg_write(core_data->chip,
 				   MT6370_PMU_REG_RSTPASCODE2, 0x96);
 	if (ret < 0)
-		dev_notice(core_data->dev, "set passcode2 fail\n");
-	/* reset chg/fled/ldo/rgb/bl/dsv logic and all pmu register */
+		dev_err(core_data->dev, "set passcode2 fail\n");
+	/* reset all fled/ldo/rgb/bl/db reg and logic, without chg */
 	ret = mt6370_pmu_reg_write(core_data->chip,
-				   MT6370_PMU_REG_CORECTRL2, 0x7F);
+				   MT6370_PMU_REG_CORECTRL2, 0x7E);
 	if (ret < 0)
-		dev_notice(core_data->dev, "reset all reg/logic fail\n");
+		dev_err(core_data->dev, "reset all reg/logic fail\n");
 	mdelay(1);
 	ret = rt_regmap_cache_reload(core_data->chip->rd);
 	if (ret < 0)
-		dev_notice(core_data->dev, "cache reload fail\n");
+		dev_err(core_data->dev, "cache reload fail\n");
 	ret = mt6370_pmu_reg_block_write(core_data->chip,
 					 MT6370_PMU_REG_RSTPASCODE1,
 					 2, pascode);
 	if (ret < 0)
-		dev_notice(core_data->dev, "excute reset pascode fail\n");
+		dev_err(core_data->dev, "excute reset pascode fail\n");
 	/* disable i2c&mrstb reset */
 	ret = mt6370_pmu_reg_write(core_data->chip,
 				   MT6370_PMU_REG_CORECTRL1, 0x06);
 	if (ret < 0)
-		dev_notice(core_data->dev, "en i2c reset fail\n");
+		dev_err(core_data->dev, "en i2c reset fail\n");
 	/* add dsvp discharge bit */
 	return mt6370_pmu_reg_write(core_data->chip,
 				    MT6370_PMU_REG_DBCTRL2, 0x32);
@@ -196,8 +188,6 @@ static int mt6370_pmu_core_probe(struct platform_device *pdev)
 	struct mt6370_pmu_core_data *core_data;
 	bool use_dt = pdev->dev.of_node;
 	int ret = 0;
-
-	pr_info("%s: (%s)\n", __func__, MT6370_PMU_CORE_DRV_VERSION);
 
 	core_data = devm_kzalloc(&pdev->dev, sizeof(*core_data), GFP_KERNEL);
 	if (!core_data)
@@ -253,7 +243,7 @@ static void mt6370_pmu_core_shutdown(struct platform_device *pdev)
 
 	ret = mt6370_pmu_core_reset(core_data);
 	if (ret < 0)
-		dev_notice(core_data->dev, "pmu core reset fail\n");
+		dev_err(core_data->dev, "pmu core reset fail\n");
 }
 
 static const struct of_device_id mt_ofid_table[] = {
@@ -283,13 +273,4 @@ module_platform_driver(mt6370_pmu_core);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("MediaTek MT6370 PMU Core");
-MODULE_VERSION(MT6370_PMU_CORE_DRV_VERSION);
-
-/*
- * Version Note
- * 1.0.1_MTK
- * (1) Do not run mt6370_pmu_core_reset() for MT6372
- *
- * 1.0.0_MTK
- * (1) Initial Release
- */
+MODULE_VERSION("1.0.0_G");

@@ -749,10 +749,11 @@ extern void oppo_chg_set_chargerid_switch_val(int);
 extern void switch_usb_state(int usb_state);
 #endif /*VENDOR_EDIT*/
 
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/11, sjc Add for charging */
-extern void oppo_chg_set_charger_type_unknown(void);
-#endif
+#ifdef VENDOR_EDIT
+//PengNan@BSP.CHG.Basic, 2018/01/20, add for bq24190 chargertype detect.
+extern void oppo_clear_usb_enum_status(void);
+extern int oppo_cancel_usb_distinguish_timerout_interrupt(void);
+#endif /*VENDOR_EDIT*/
 
 #ifdef VENDOR_EDIT
 //PengNan@BSP.CHG.Basic, 2018/01/20, add for bq24190 chargertype detect.
@@ -773,12 +774,7 @@ void chrdet_int_handler(void)
 		pr_err("[do_charger_detect] opchg_get_prop_fast_chg_started = true!\n");
        // if (get_oppo_short_check_fast_to_normal() == 0) {
             if (!upmu_get_rgs_chrdet()) {
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/11, sjc Add for charging */
-			oppo_chg_set_charger_type_unknown();
-#else
                 g_chr_type = CHARGER_UNKNOWN;
-#endif
             }
         //}
 		return;
@@ -790,16 +786,16 @@ void chrdet_int_handler(void)
 	} else {
 		pr_err("[chrdet_int_handler]charger out\n");
 		oppo_vooc_reset_fastchg_after_usbout();
+		#ifdef VENDOR_EDIT
+		//PengNan@BSP.CHG.Basic, 2018/01/20, add for bq24190 chargertype detect.
+		oppo_clear_usb_enum_status();
+		oppo_cancel_usb_distinguish_timerout_interrupt();
+		#endif /*VENDOR_EDIT*/
 		if(oppo_vooc_get_fastchg_started() == false) {
 				oppo_chg_set_chargerid_switch_val(0);
 				oppo_chg_clear_chargerid_info();
 		}
-#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/11, sjc Add for charging */
-		oppo_chg_set_charger_type_unknown();
-#else
 		g_chr_type = CHARGER_UNKNOWN;
-#endif
 		//mt_usb_disconnect();
 	}
 	printk("g_chr_type = %d\n",g_chr_type);

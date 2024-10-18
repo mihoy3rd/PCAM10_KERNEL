@@ -94,7 +94,7 @@ static imgsensor_info_struct imgsensor_info = {
 		.framelength = 3260,			//record different mode's framelength
 		.startx = 0,					//record different mode's startx of grabwindow
 		.starty = 0,					//record different mode's starty of grabwindow
-		.grabwindow_width  = 4208,		//record different mode's width of grabwindow
+		.grabwindow_width  = 4160,		//record different mode's width of grabwindow
 		.grabwindow_height = 3120,		//record different mode's height of grabwindow
 		.mipi_data_lp2hs_settle_dc = 85,
 		.max_framerate = 300,
@@ -113,7 +113,7 @@ static imgsensor_info_struct imgsensor_info = {
 		.max_framerate = 300,
 		.mipi_pixel_rate = 480000000,
 	},
-#ifndef VENDOR_EDIT
+#ifdef VENDOR_EDIT
 	/*Xiaoyang.Huang @RM.Camera add to modify hs_video framerate to 90fps,20181105*/
 	.hs_video = {
 		.pclk = 480000000,				/* record different mode's pclk */
@@ -163,7 +163,7 @@ static imgsensor_info_struct imgsensor_info = {
 		.framelength = 4084,
 		.startx = 0,					/* record different mode's startx of grabwindow */
 		.starty = 0,					/* record different mode's starty of grabwindow */
-		.grabwindow_width  = 4208,		/* record different mode's width of grabwindow */
+		.grabwindow_width  = 4160,		/* record different mode's width of grabwindow */
 		.grabwindow_height = 3120,		/* record different mode's height of grabwindow */
 		/* following for MIPIDataLowPwr2HighSpeedSettleDelayCount by different scenario	*/
 		.mipi_data_lp2hs_settle_dc = 85,
@@ -218,6 +218,10 @@ static imgsensor_struct imgsensor = {
 	.current_scenario_id = MSDK_SCENARIO_ID_CAMERA_PREVIEW,//current scenario id
 	.ihdr_mode = 0,
 	.i2c_write_id = 0x5a,  /*record current sensor's i2c write id*/
+	#ifdef VENDOR_EDIT
+	//dingpeifei@hq 20181222 add for long exp n+1 or n+2
+	.current_ae_effective_frame = 1,
+	#endif
 };
 
 
@@ -225,17 +229,17 @@ static imgsensor_struct imgsensor = {
 static SENSOR_WINSIZE_INFO_STRUCT imgsensor_winsize_info[6] =
 {
 	{4208, 3120, 0,    0,   4208,  3120,  2104,  1560,   0,  0, 2104, 1560,  0, 0, 2104, 1560}, // Preview
-	{4208, 3120, 0,    0,   4208,  3120,  4208,  3120,   0,  0, 4208, 3120,  0, 0, 4208, 3120}, // capture
+	{4208, 3120, 24,    0,   4160,  3120,  4160,  3120,   0,  0, 4160, 3120,  0, 0, 4160, 3120}, // capture
 	{4208, 3120, 0,   376,  4208,  2368,  4208,  2368,   0,  0, 4208, 2368,  0, 0, 4208, 2368}, // normal video
 	{4208, 3120, 824, 840,  2560,  1440,  1280,   720,   0,  0, 1280, 720,   0, 0, 1280, 720}, /* HS_hight speed video */
 	{4208, 3120, 0,	   0,   4208,  3120,  2104,  1560,   0,  0, 2104, 1560,  0, 0, 2104, 1560}, /* slim video */
-	{4208, 3120, 0,	   0,   4208,  3120,  4208,  3120,   0,  0, 4208, 3120,  0, 0, 4208, 3120},//custom1
+	{4208, 3120, 24,	0,   4160,  3120,  4160,  3120,   0,  0, 4160, 3120,  0, 0, 4160, 3120},//custom1
 };
 
  static SET_PD_BLOCK_INFO_T imgsensor_pd_info =
  //for 3l6
 {
-	.i4OffsetX = 24,
+	.i4OffsetX = 0,
 	.i4OffsetY = 24,
 	.i4PitchX = 64,
 	.i4PitchY = 64,
@@ -244,8 +248,8 @@ static SENSOR_WINSIZE_INFO_STRUCT imgsensor_winsize_info[6] =
 	.i4SubBlkH =16,
 	.i4BlockNumX = 65,
 	.i4BlockNumY = 48,
-	.i4PosL = {{28,31},{44,35},{64,35},{80,31},{32,51},{48,55},{60,55},{76,51},{32,67},{48,63},{60,63},{76,67},{28,87},{44,83},{64,83},{80,87}},
-	.i4PosR = {{28,35},{44,39},{64,39},{80,35},{32,47},{48,51},{60,51},{76,47},{32,71},{48,67},{60,67},{76,71},{28,83},{44,79},{64,79},{80,83}},
+	.i4PosL = {{4 ,31},{20,35},{40,35},{56,31},{8 ,51},{24,55},{36,55},{52,51},{8 ,67},{24,63},{36,63},{52,67},{4 ,87},{20,83},{40,83},{56,87}},
+         .i4PosR = {{4 ,35},{20,39},{40,39},{56,35},{8 ,47},{24,51},{36,51},{52,47},{8 ,71},{24,67},{36,67},{52,71},{4 ,83},{20,79},{40,79},{56,83}},
 	.iMirrorFlip = 0,
 };
 
@@ -584,7 +588,6 @@ static void set_shutter(kal_uint32 shutter)
 		//exposure_time = shutter*imgsensor_info.cap.linelength/960000;//ms
 		//exposure_time = shutter/1000*4896/480;//ms
 		exposure_time = (shutter * 1) / 100;//ms
-
 		/*Modified by Xiaoyang.Huang@RM.Camera 20180913 to fix 7s long-exp problem*/
 		if (exposure_time < 6500) {
 			temp1_030F = 0x78;
@@ -961,11 +964,11 @@ static kal_uint16 addr_data_pair_preview[] = {
 };
 
 static kal_uint16 addr_data_pair_capture[] = {
-	0x0344, 0x0008,
+	0x0344, 0x0020,
 	0x0346, 0x0008,
-	0x0348, 0x1077,
+	0x0348, 0x105F,
 	0x034A, 0x0C37,
-	0x034C, 0x1070,
+	0x034C, 0x1040,
 	0x034E, 0x0C30,
 	0x0900, 0x0000,
 	0x0380, 0x0001,
@@ -1103,7 +1106,7 @@ static kal_uint16 addr_data_pair_hs_video[] = {
 	0x3C16, 0x0002,
 	0x0300, 0x0006,
 	0x0342, 0x1320,
-#ifndef VENDOR_EDIT
+#ifdef VENDOR_EDIT
 	/*Xiaoyang.Huang @RM.Camera add to modify hs_video framerate to 90fps,20181105*/
 	0x0340, 0x0330,
 #else
@@ -1206,11 +1209,11 @@ static kal_uint16 addr_data_pair_slim_video[] = {
 };
 
 static kal_uint16 addr_data_pair_custom1[] = {
-	0x0344, 0x0008,
+	0x0344, 0x0020,
 	0x0346, 0x0008,
-	0x0348, 0x1077,
+	0x0348, 0x105F,
 	0x034A, 0x0C37,
-	0x034C, 0x1070,
+	0x034C, 0x1040,
 	0x034E, 0x0C30,
 	0x0900, 0x0000,
 	0x0380, 0x0001,
@@ -2072,6 +2075,13 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 
 	LOG_INF("feature_id = %d\n", feature_id);
 	switch (feature_id) {
+		#ifdef VENDOR_EDIT
+		//dingpeifei@hq 20181222 add for long exp n+1 or n+2
+		case SENSOR_FEATURE_GET_AE_EFFECTIVE_FRAME_FOR_LE:
+			*feature_return_para_32 = imgsensor.current_ae_effective_frame;
+			pr_err("cam_dbg ae_effective_frame: %d", imgsensor.current_ae_effective_frame);
+			break;
+		#endif
 		case SENSOR_FEATURE_GET_PERIOD:
 			*feature_return_para_16++ = imgsensor.line_length;
 			*feature_return_para_16 = imgsensor.frame_length;

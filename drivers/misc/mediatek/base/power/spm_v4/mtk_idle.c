@@ -65,8 +65,6 @@
 #endif
 
 #include "mtk_mcdi_governor.h"
-#include <mt-plat/mtk_boot.h>
-
 
 #define IDLE_GPT GPT4
 #define NR_CMD_BUF		128
@@ -888,13 +886,9 @@ unsigned int ufs_cb_before_xxidle(void)
 
 #if defined(CONFIG_MTK_UFS_SUPPORT)
 	bool ufs_in_hibernate = false;
-	int boot_type;
 
-	boot_type = get_boot_type();
-	if (boot_type == BOOTDEV_UFS) {
-		ufs_in_hibernate = !ufs_mtk_deepidle_hibern8_check();
-		op_cond = ufs_in_hibernate ? DEEPIDLE_OPT_XO_UFS_ON_OFF : 0;
-	}
+	ufs_in_hibernate = !ufs_mtk_deepidle_hibern8_check();
+	op_cond = ufs_in_hibernate ? DEEPIDLE_OPT_XO_UFS_ON_OFF : 0;
 #endif
 
 	bblpm_check = !clk_buf_bblpm_enter_cond();
@@ -906,11 +900,7 @@ unsigned int ufs_cb_before_xxidle(void)
 void ufs_cb_after_xxidle(void)
 {
 #if defined(CONFIG_MTK_UFS_SUPPORT)
-	int boot_type;
-
-	boot_type = get_boot_type();
-	if (boot_type == BOOTDEV_UFS)
-		ufs_mtk_deepidle_leave();
+	ufs_mtk_deepidle_leave();
 #endif
 }
 
@@ -1047,7 +1037,6 @@ int mtk_idle_select(int cpu)
 #if defined(CONFIG_MTK_UFS_SUPPORT)
 	unsigned long flags = 0;
 	unsigned int ufs_locked;
-	int boot_type;
 #endif
 #ifdef CONFIG_MTK_DCS
 	int ch = 0, ret = -1;
@@ -1091,16 +1080,13 @@ int mtk_idle_select(int cpu)
 	}
 
 #if defined(CONFIG_MTK_UFS_SUPPORT)
-	boot_type = get_boot_type();
-	if (boot_type == BOOTDEV_UFS) {
-		spin_lock_irqsave(&idle_ufs_spin_lock, flags);
-		ufs_locked = idle_ufs_lock;
-		spin_unlock_irqrestore(&idle_ufs_spin_lock, flags);
+	spin_lock_irqsave(&idle_ufs_spin_lock, flags);
+	ufs_locked = idle_ufs_lock;
+	spin_unlock_irqrestore(&idle_ufs_spin_lock, flags);
 
-		if (ufs_locked) {
-			reason = BY_UFS;
-			goto get_idle_idx;
-		}
+	if (ufs_locked) {
+		reason = BY_UFS;
+		goto get_idle_idx;
 	}
 #endif
 
@@ -1965,30 +1951,30 @@ static int mtk_idle_hotplug_cb_init(void)
 #if defined(CONFIG_MACH_MT6763)
 void mtk_spm_dump_debug_info(void)
 {
-	pr_info("SPM_POWER_ON_VAL0     0x%08x\n", spm_read(SPM_POWER_ON_VAL0));
-	pr_info("SPM_POWER_ON_VAL1     0x%08x\n", spm_read(SPM_POWER_ON_VAL1));
-	pr_info("PCM_PWR_IO_EN         0x%08x\n", spm_read(PCM_PWR_IO_EN));
-	pr_info("PCM_REG0_DATA         0x%08x\n", spm_read(PCM_REG0_DATA));
-	pr_info("PCM_REG7_DATA         0x%08x\n", spm_read(PCM_REG7_DATA));
-	pr_info("PCM_REG12_DATA        0x%08x\n", spm_read(PCM_REG12_DATA));
-	pr_info("PCM_REG13_DATA        0x%08x\n", spm_read(PCM_REG13_DATA));
-	pr_info("PCM_REG15_DATA        0x%08x\n", spm_read(PCM_REG15_DATA));
-	pr_info("SPM_MAS_PAUSE_MASK_B  0x%08x\n", spm_read(SPM_MAS_PAUSE_MASK_B));
-	pr_info("SPM_MAS_PAUSE2_MASK_B 0x%08x\n", spm_read(SPM_MAS_PAUSE2_MASK_B));
-	pr_info("SPM_SW_FLAG           0x%08x\n", spm_read(SPM_SW_FLAG));
-	pr_info("SPM_DEBUG_FLAG        0x%08x\n", spm_read(SPM_SW_DEBUG));
-	pr_info("SPM_PC_TRACE_G0       0x%08x\n", spm_read(SPM_PC_TRACE_G0));
-	pr_info("SPM_PC_TRACE_G1       0x%08x\n", spm_read(SPM_PC_TRACE_G1));
-	pr_info("SPM_PC_TRACE_G2       0x%08x\n", spm_read(SPM_PC_TRACE_G2));
-	pr_info("SPM_PC_TRACE_G3       0x%08x\n", spm_read(SPM_PC_TRACE_G3));
-	pr_info("SPM_PC_TRACE_G4       0x%08x\n", spm_read(SPM_PC_TRACE_G4));
-	pr_info("SPM_PC_TRACE_G5       0x%08x\n", spm_read(SPM_PC_TRACE_G5));
-	pr_info("SPM_PC_TRACE_G6       0x%08x\n", spm_read(SPM_PC_TRACE_G6));
-	pr_info("SPM_PC_TRACE_G7       0x%08x\n", spm_read(SPM_PC_TRACE_G7));
-	pr_info("DCHA_GATING_LATCH_0   0x%08x\n", spm_read(DCHA_GATING_LATCH_0));
-	pr_info("DCHA_GATING_LATCH_5   0x%08x\n", spm_read(DCHA_GATING_LATCH_5));
-	pr_info("DCHB_GATING_LATCH_0   0x%08x\n", spm_read(DCHB_GATING_LATCH_0));
-	pr_info("DCHB_GATING_LATCH_5   0x%08x\n", spm_read(DCHB_GATING_LATCH_5));
+	pr_debug("SPM_POWER_ON_VAL0     0x%08x\n", spm_read(SPM_POWER_ON_VAL0));
+	pr_debug("SPM_POWER_ON_VAL1     0x%08x\n", spm_read(SPM_POWER_ON_VAL1));
+	pr_debug("PCM_PWR_IO_EN         0x%08x\n", spm_read(PCM_PWR_IO_EN));
+	pr_debug("PCM_REG0_DATA         0x%08x\n", spm_read(PCM_REG0_DATA));
+	pr_debug("PCM_REG7_DATA         0x%08x\n", spm_read(PCM_REG7_DATA));
+	pr_debug("PCM_REG12_DATA        0x%08x\n", spm_read(PCM_REG12_DATA));
+	pr_debug("PCM_REG13_DATA        0x%08x\n", spm_read(PCM_REG13_DATA));
+	pr_debug("PCM_REG15_DATA        0x%08x\n", spm_read(PCM_REG15_DATA));
+	pr_debug("SPM_MAS_PAUSE_MASK_B  0x%08x\n", spm_read(SPM_MAS_PAUSE_MASK_B));
+	pr_debug("SPM_MAS_PAUSE2_MASK_B 0x%08x\n", spm_read(SPM_MAS_PAUSE2_MASK_B));
+	pr_debug("SPM_SW_FLAG           0x%08x\n", spm_read(SPM_SW_FLAG));
+	pr_debug("SPM_DEBUG_FLAG        0x%08x\n", spm_read(SPM_SW_DEBUG));
+	pr_debug("SPM_PC_TRACE_G0       0x%08x\n", spm_read(SPM_PC_TRACE_G0));
+	pr_debug("SPM_PC_TRACE_G1       0x%08x\n", spm_read(SPM_PC_TRACE_G1));
+	pr_debug("SPM_PC_TRACE_G2       0x%08x\n", spm_read(SPM_PC_TRACE_G2));
+	pr_debug("SPM_PC_TRACE_G3       0x%08x\n", spm_read(SPM_PC_TRACE_G3));
+	pr_debug("SPM_PC_TRACE_G4       0x%08x\n", spm_read(SPM_PC_TRACE_G4));
+	pr_debug("SPM_PC_TRACE_G5       0x%08x\n", spm_read(SPM_PC_TRACE_G5));
+	pr_debug("SPM_PC_TRACE_G6       0x%08x\n", spm_read(SPM_PC_TRACE_G6));
+	pr_debug("SPM_PC_TRACE_G7       0x%08x\n", spm_read(SPM_PC_TRACE_G7));
+	pr_debug("DCHA_GATING_LATCH_0   0x%08x\n", spm_read(DCHA_GATING_LATCH_0));
+	pr_debug("DCHA_GATING_LATCH_5   0x%08x\n", spm_read(DCHA_GATING_LATCH_5));
+	pr_debug("DCHB_GATING_LATCH_0   0x%08x\n", spm_read(DCHB_GATING_LATCH_0));
+	pr_debug("DCHB_GATING_LATCH_5   0x%08x\n", spm_read(DCHB_GATING_LATCH_5));
 }
 #endif
 

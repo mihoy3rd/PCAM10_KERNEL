@@ -120,22 +120,13 @@ static void issue_vbus_work(int ops, int delay)
 			msecs_to_jiffies(delay));
 }
 
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/30, sjc Modify for OTG */
-void tcpc_vbus_enable(bool enable)
-#else
 static void tcpc_vbus_enable(bool enable)
-#endif /*VENDOR_EDIT*/
 {
 	if (enable)
 		issue_vbus_work(VBUS_OPS_ON, 0);
 	else
 		issue_vbus_work(VBUS_OPS_OFF, 0);
 }
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/30, sjc Add for OTG */
-EXPORT_SYMBOL(tcpc_vbus_enable);
-#endif
 
 static void do_otg_work(struct work_struct *data)
 {
@@ -182,12 +173,7 @@ static void issue_otg_work(int ops, int delay)
 			msecs_to_jiffies(delay));
 }
 
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/30, sjc Modify for OTG */
-void tcpc_otg_enable(bool enable)
-#else
 static void tcpc_otg_enable(bool enable)
-#endif /*VENDOR_EDIT*/
 {
 	mutex_lock(&tcpc_otg_lock);
 	tcpc_otg_attached = (enable ? true : false);
@@ -198,10 +184,6 @@ static void tcpc_otg_enable(bool enable)
 	else
 		issue_otg_work(OTG_OPS_OFF, 0);
 }
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/30, sjc Add for OTG */
-EXPORT_SYMBOL(tcpc_otg_enable);
-#endif
 
 static int otg_tcp_notifier_call(struct notifier_block *nb,
 		unsigned long event, void *data)
@@ -229,10 +211,6 @@ static int otg_tcp_notifier_call(struct notifier_block *nb,
 		if (noti->typec_state.old_state == TYPEC_UNATTACHED &&
 			noti->typec_state.new_state == TYPEC_ATTACHED_SRC) {
 			pr_info("%s OTG Plug in\n", __func__);
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/08, sjc Add for charging */
-			printk(KERN_ERR "!!!!! otg_tcp_notifier_call: [1]\n");
-#endif
 			tcpc_otg_enable(true);
 #ifdef CONFIG_USB_C_SWITCH_U3_MUX
 			usb3_switch_dps_en(false);
@@ -246,10 +224,6 @@ static int otg_tcp_notifier_call(struct notifier_block *nb,
 			noti->typec_state.new_state == TYPEC_UNATTACHED) {
 			if (otg_on) {
 				pr_info("%s OTG Plug out\n", __func__);
-#ifdef VENDOR_EDIT
-/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/08, sjc Add for charging */
-			printk(KERN_ERR "!!!!! otg_tcp_notifier_call: [0]\n");
-#endif
 				tcpc_otg_enable(false);
 			} else {
 				pr_info("%s USB Plug out\n", __func__);

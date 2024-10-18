@@ -218,6 +218,7 @@ static ssize_t run_gz_case(struct device *dev, struct device_attribute *attr, co
 		th = kthread_run(test_SecureStorageBasic, NULL, "sec_storage_ut");
 		break;
 #endif
+
 	default:
 		KREE_DEBUG("err: unknown test case\n");
 
@@ -3207,23 +3208,13 @@ static long _gz_ioctl(struct file *filep, unsigned int cmd, unsigned long arg, u
 
 static long gz_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
-	long ret;
-
-	set_gz_bind_cpu(1);
-	ret = _gz_ioctl(filep, cmd, arg, 0);
-	set_gz_bind_cpu(0);
-	return ret;
+	return _gz_ioctl(filep, cmd, arg, 0);
 }
 
 #if defined(CONFIG_COMPAT)
 static long gz_compat_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
-	long ret;
-
-	set_gz_bind_cpu(1);
-	ret = _gz_ioctl(filep, cmd, arg, 1);
-	set_gz_bind_cpu(0);
-	return ret;
+	return _gz_ioctl(filep, cmd, arg, 1);
 }
 #endif
 

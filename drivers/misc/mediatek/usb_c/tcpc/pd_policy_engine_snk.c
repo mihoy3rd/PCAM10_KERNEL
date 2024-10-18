@@ -45,9 +45,13 @@ void pe_snk_startup_entry(struct pd_port *pd_port)
 #endif	/* CONFIG_USB_PD_IGNORE_PS_RDY_AFTER_PR_SWAP */
 	}
 
+#ifdef CONFIG_USB_PD_SNK_HRESET_KEEP_DRAW
 	/* iSafe0mA: Maximum current a Sink
 	 * is allowed to draw when VBUS is driven to vSafe0V
 	 */
+	if (pd_check_pe_during_hard_reset(pd_port))
+		pd_dpm_sink_vbus(pd_port, false);
+#endif	/* CONFIG_USB_PD_SNK_HRESET_KEEP_DRAW */
 
 	pd_set_rx_enable(pd_port, rx_cap);
 	pd_put_pe_event(pd_port, PD_PE_RESET_PRL_COMPLETED);
@@ -55,21 +59,7 @@ void pe_snk_startup_entry(struct pd_port *pd_port)
 
 void pe_snk_discovery_entry(struct pd_port *pd_port)
 {
-	bool wait_valid = true;
-
-	/*
-	 * During a Hard Reset the Source voltage will transition to vSafe0V
-	 * and then transition to vSafe5V. Sinks need to ensure that VBUS
-	 * present is not indicated until after the Source has completed the
-	 * Hard Reset process by detecting both of these transitions
-	 */
-
-	if (pd_check_pe_during_hard_reset(pd_port)) {
-		wait_valid = false;
-		pd_enable_pe_state_timer(pd_port, PD_TIMER_PS_TRANSITION);
-	}
-
-	pd_enable_vbus_valid_detection(pd_port, wait_valid);
+	pd_enable_vbus_valid_detection(pd_port, true);
 }
 
 void pe_snk_wait_for_capabilities_entry(
@@ -123,20 +113,9 @@ void pe_snk_select_capability_entry(struct pd_port *pd_port)
 
 void pe_snk_select_capability_exit(struct pd_port *pd_port)
 {
-	if (pd_check_ctrl_msg_event(pd_port, PD_CTRL_ACCEPT)) {
+	if (pd_check_ctrl_msg_event(pd_port, PD_CTRL_ACCEPT))
 		pd_port->pe_data.remote_selected_cap =
 					RDO_POS(pd_port->last_rdo);
-		pd_port->cap_miss_match = 0;
-	} else if (pd_check_ctrl_msg_event(pd_port, PD_CTRL_REJECT)) {
-#ifdef CONFIG_USB_PD_RENEGOTIATION_COUNTER
-		if (pd_port->cap_miss_match == 0x01) {
-			PE_INFO("reset renegotiation cnt by cap mismatch\r\n");
-			pd_port->pe_data.renegotiation_count = 0;
-		}
-#endif /* CONFIG_USB_PD_RENEGOTIATION_COUNTER */
-		pd_port->cap_miss_match |= (1 << 1);
-	} else
-		pd_port->cap_miss_match = 0;
 
 	/* Waiting for Hard-Reset Done */
 	if (!pd_check_timer_msg_event(pd_port, PD_TIMER_SENDER_RESPONSE))
@@ -175,6 +154,15 @@ void pe_snk_transition_to_default_entry(struct pd_port *pd_port)
 {
 	pd_reset_local_hw(pd_port);
 	pd_dpm_snk_hard_reset(pd_port);
+
+	/*
+	 * Sink PE will wait vSafe0v in this state,
+	 * So original exit action be executed in here too.
+	 */
+
+	pd_enable_timer(pd_port, PD_TIMER_NO_RESPONSE);
+	pd_set_rx_enable(pd_port, PD_RX_CAP_PE_STARTUP);
+	pd_enable_vbus_valid_detection(pd_port, false);
 }
 
 void pe_snk_give_sink_cap_entry(struct pd_port *pd_port)

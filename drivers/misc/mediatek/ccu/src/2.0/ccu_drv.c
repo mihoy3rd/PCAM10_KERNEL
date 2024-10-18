@@ -792,12 +792,11 @@ static long ccu_ioctl(struct file *flip, unsigned int cmd, unsigned long arg)
 		}
 	case CCU_IOCTL_GET_SENSOR_I2C_SLAVE_ADDR:
 		{
-			int32_t sensorI2cSlaveAddr[5];
+			int32_t sensorI2cSlaveAddr[4];
 
 			ccu_get_sensor_i2c_slave_addr(&sensorI2cSlaveAddr[0]);
 
-			ret = copy_to_user((void *)arg, &sensorI2cSlaveAddr,
-				sizeof(int32_t) * 5);
+			ret = copy_to_user((void *)arg, &sensorI2cSlaveAddr, sizeof(int32_t) * 4);
 
 			break;
 		}
@@ -806,7 +805,7 @@ static long ccu_ioctl(struct file *flip, unsigned int cmd, unsigned long arg)
 		{
 			#define SENSOR_NAME_MAX_LEN 32
 
-			char *sensor_names[5];
+			char *sensor_names[4];
 
 			ccu_get_sensor_name(sensor_names);
 
@@ -841,15 +840,6 @@ static long ccu_ioctl(struct file *flip, unsigned int cmd, unsigned long arg)
 					sensor_names[3], strlen(sensor_names[3])+1);
 				if (ret != 0) {
 					LOG_ERR("copy_to_user 4 failed: %d\n", ret);
-					break;
-				}
-			}
-
-			if (sensor_names[4] != NULL) {
-				ret = copy_to_user(((char *)arg+SENSOR_NAME_MAX_LEN*4),
-					sensor_names[4], strlen(sensor_names[4])+1);
-				if (ret != 0) {
-					LOG_ERR("copy_to_user 5 failed: %d\n", ret);
 					break;
 				}
 			}

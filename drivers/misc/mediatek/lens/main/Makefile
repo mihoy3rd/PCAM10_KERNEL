@@ -66,9 +66,6 @@ MAIN_CFILES  += common/ad5820af/AD5820AF.c
 MAIN_CFILES  += common/wv511aaf/WV511AAF.c
 MAIN_CFILES  += common/ak7371af/AK7371AF.c
 MAIN_CFILES  += common/ak7374af/AK7374AF.c
-#ifdef VENDOR_EDIT
-MAIN_CFILES  += common/fp5516af/FP5516AF.c
-#endif
 ifeq ($(CONFIG_MTK_LENS_DW9800WAF_SUPPORT), y)
 MAIN_CFILES  += common/dw9800waf/DW9800WAF.c
 endif
@@ -113,9 +110,6 @@ obj-y  += common/ad5820af/
 obj-y  += common/wv511aaf/
 obj-y  += common/ak7371af/
 obj-y  += common/ak7374af/
-#ifdef VENDOR_EDIT
-obj-y  += common/fp5516af/
-#endif
 ifeq ($(CONFIG_MTK_LENS_DW9800WAF_SUPPORT), y)
   obj-y  += common/dw9800waf/
 endif

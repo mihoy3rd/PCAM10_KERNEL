@@ -30,10 +30,6 @@
 
 #include "flashlight-core.h"
 #include "flashlight-dt.h"
-#ifdef VENDOR_EDIT
-/*Henry.Chang@Camera.Driver add for 18161 torch duty 94ma 20190626*/
-#include<soc/oppo/oppo_project.h>
-#endif
 
 /* device tree should be defined in flashlight-dt.h */
 #ifndef AW3642_DTNAME
@@ -120,15 +116,8 @@ static const unsigned char aw3642_flash_level[AW3642_LEVEL_NUM] = {
 	0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
 };
 #else
-static const int aw3642_current_18161[AW3642_LEVEL_NUM] = {
-	94,   94,  94,  281,  375,  469,  563,  656,  750,
-	844,  938, 1008, 1055, 1055, 1055, 1055, 1055, 1055
-};
 static const unsigned char aw3642_flash_level[AW3642_LEVEL_NUM] = {
 	17, 17, 17, 11, 15, 19, 23, 27, 31,
-	35, 39, 42, 44, 44, 44, 44, 44, 44};
-static const unsigned char aw3642_flash_level_18161[AW3642_LEVEL_NUM] = {
-	15, 15, 15, 11, 15, 19, 23, 27, 31,
 	35, 39, 42, 44, 44, 44, 44, 44, 44};
 #endif
 
@@ -266,13 +255,8 @@ static int aw3642_set_level(int level)
 		/* flash mode */
 		reg = 0x03;
 	}
+	val = aw3642_flash_level[level];
 	#ifdef VENDOR_EDIT
-	/*Henry.Chang@Camera.Driver add for 18161 torch duty 94ma 20190626*/
-	if (is_project(OPPO_18161)) {
-		val = aw3642_flash_level_18161[level];
-	} else {
-		val = aw3642_flash_level[level];
-	}
 	/*Yijun.Tan@Camera add for reset flag register 20171223*/
 	ret = aw3642_write_reg(aw3642_i2c_client, reg, val);
 	mdelay(10);
@@ -280,7 +264,6 @@ static int aw3642_set_level(int level)
 	pr_err(" aw3642_set_level_ch1 line=%d, flags value is 0x%x\n", __LINE__, temp1);
 	return ret;
 	#else
-	val = aw3642_flash_level[level];
 	return aw3642_write_reg(aw3642_i2c_client, reg, val);
 	#endif
 }
@@ -384,16 +367,7 @@ static int aw3642_ioctl(unsigned int cmd, unsigned long arg)
 		fl_arg->arg = aw3642_verify_level(fl_arg->arg);
 		pr_err("FLASH_IOC_GET_DUTY_CURRENT(%d): %d\n",
 				channel, (int)fl_arg->arg);
-		#ifdef VENDOR_EDIT
-		/*Henry.Chang@Camera.Driver add for 18161 torch duty 94ma 20190626*/
-		if (is_project(OPPO_18161)) {
-			fl_arg->arg = aw3642_current_18161[fl_arg->arg];
-		} else {
-			fl_arg->arg = aw3642_current[fl_arg->arg];
-		}
-		#else
 		fl_arg->arg = aw3642_current[fl_arg->arg];
-		#endif
 		break;
 
 	case FLASH_IOC_GET_HW_TIMEOUT:

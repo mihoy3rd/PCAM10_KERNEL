@@ -14,8 +14,7 @@
 #ifndef PD_CORE_H_
 #define PD_CORE_H_
 
-#include <linux/platform_device.h>
-#include <linux/pm_wakeup.h>
+#include <linux/wakelock.h>
 #include "tcpci_timer.h"
 #include "tcpci_event.h"
 #include "pd_dbg_info.h"
@@ -94,9 +93,9 @@
 #define PDO_FIXED_PEAK_CURR(i) \
 	((i & 0x03) << 20) /* [21..20] Peak current */
 #define PDO_FIXED_VOLT(mv)  \
-	((((mv)/50) & 0x3ff) << 10) /* Voltage in 50mV units */
+	((((mv)/50) & 0x3fff) << 10) /* Voltage in 50mV units */
 #define PDO_FIXED_CURR(ma)  \
-	((((ma)/10) & 0x3ff) << 0)  /* Max current in 10mA units */
+	((((ma)/10) & 0x3fff) << 0)  /* Max current in 10mA units */
 
 #define PDO_TYPE(raw)	(raw & PDO_TYPE_MASK)
 #define PDO_TYPE_VAL(raw)	(PDO_TYPE(raw) >> 30)
@@ -344,23 +343,11 @@
 #define CMD_DP_STATUS      16
 #define CMD_DP_CONFIG      17
 
-#define CMD_SVID_SPECIFIC 16	/* 16 ~ 31 */
-
 #define PD_VDO_VID(vdo)  ((vdo) >> 16)
 #define PD_VDO_SVDM(vdo) (((vdo) >> 15) & 1)
-#define PD_VDO_VERS(vdo) (((vdo) >> 13) & 0x3)
 #define PD_VDO_OPOS(vdo) (((vdo) >> 8) & 0x7)
 #define PD_VDO_CMD(vdo)  ((vdo) & 0x1f)
 #define PD_VDO_CMDT(vdo) (((vdo) >> 6) & 0x3)
-
-#define PD_VDO_CABLE_HW_VER(x)		(((x) >> 28) & 0xf)
-#define PD_VDO_CABLE_FW_VER(x)		(((x) >> 24) & 0xf)
-
-#define PD_VDO_CABLE_TYPE(x)		(((x) >> 11) & 0x03)
-#define PD_VDO_CABLE_VBUS_VOLT(x)	(((x) >> 9) & 0x03)
-#define CABLE_VBUS_THROUGH		(1 << 4)
-#define PD_VDO_CABLE_VBUS_CURR(x)	(((x) >> 5) & 0x03)
-#define PD_VDO_CABLE_USB_SS(x)		((x) & 0x07)
 
 /*
  * SVDM Identity request -> response
@@ -751,7 +738,6 @@ struct pe_data {		/* reset after detached */
 	bool during_swap;	/* pr or dr swap */
 
 #ifdef CONFIG_USB_PD_REV30
-	bool pd_rev_discovered;
 	bool cable_rev_discovered;
 #endif	/* CONFIG_USB_PD_REV30 */
 
@@ -843,10 +829,6 @@ struct pe_data {		/* reset after detached */
 #ifdef CONFIG_USB_PD_REV30_STATUS_LOCAL
 	uint8_t pd_status_event;
 #endif	/* CONFIG_USB_PD_REV30_STATUS_LOCAL */
-
-#ifdef CONFIG_TCPC_VCONN_SUPPLY_MODE
-	bool keep_vconn;
-#endif	/* CONFIG_TCPC_VCONN_SUPPLY_MODE */
 };
 
 #ifdef CONFIG_USB_PD_REV30_BAT_INFO
@@ -895,12 +877,11 @@ struct pd_port {
 	wait_queue_head_t pps_request_event_queue;
 	atomic_t pps_request_event;
 	struct task_struct *pps_request_task;
-	struct wakeup_source pps_request_wake_lock;
+	struct wake_lock pps_request_wake_lock;
 	bool pps_request_stop;
 #ifdef CONFIG_USB_PD_REV30_SYNC_SPEC_REV
 	uint8_t pd_revision[2];
 #endif	/* CONFIG_USB_PD_REV30_SYNC_SPEC_REV */
-	uint8_t vdm_revision[2];
 #endif	/* CONFIG_USB_PD_REV30 */
 
 #ifdef CONFIG_USB_PD_IGNORE_PS_RDY_AFTER_PR_SWAP
@@ -1047,16 +1028,11 @@ struct pd_port {
 	struct pd_country_authority *country_info;
 #endif	/* CONFIG_USB_PD_REV30_COUNTRY_AUTHORITY */
 
-#ifdef CONFIG_RECV_BAT_ABSENT_NOTIFY
+#ifdef CONFIG_USB_POWER_DELIVERY
 	/* for MTK only, handle battery plug out */
-	struct work_struct fg_bat_work;
-	struct notifier_block fg_bat_nb;
-#endif /* CONFIG_RECV_BAT_ABSENT_NOTIFY */
-#ifdef CONFIG_COMPATIBLE_APPLE_TA
-	bool apple_ccopen_flag;
-#endif /* CONFIG_COMPATIBLE_APPLE_TA */
+	struct notifier_block bat_nb;
+#endif /* CONFIG_USB_POWER_DELIVERY */
 
-	uint8_t cap_miss_match; /* For src_cap miss match */
 };
 
 static inline struct dp_data *pd_get_dp_data(struct pd_port *pd_port)
@@ -1079,17 +1055,6 @@ static inline uint32_t *pd_get_msg_vdm_data_payload(struct pd_port *pd_port)
 		return NULL;
 
 	return payload+1;
-}
-
-static inline uint8_t pd_get_msg_vdm_version(struct pd_port *pd_port)
-{
-	uint8_t vdm_rev = SVDM_REV10;
-	uint32_t *payload = (uint32_t *) pd_port->pd_msg_data_payload;
-
-	if (payload != NULL)
-		vdm_rev = PD_VDO_VERS(payload[0]);
-
-	return vdm_rev;
 }
 
 static inline uint8_t pd_get_msg_data_count(struct pd_port *pd_port)
@@ -1324,27 +1289,19 @@ static inline void pd_enable_pe_state_timer(
 	return pd_enable_timer(pd_port, timer_id);
 }
 
+static inline void pd_enable_vdm_state_timer(
+	struct pd_port *pd_port, uint32_t timer_id)
+{
+	pd_port->pe_data.vdm_state_timer = timer_id;
+	return pd_enable_timer(pd_port, timer_id);
+}
+
 static inline void pd_disable_timer(struct pd_port *pd_port, uint32_t timer_id)
 {
 	return tcpc_disable_timer(pd_port->tcpc_dev, timer_id);
 }
 
-static inline void pd_disable_pe_state_timer(struct pd_port *pd_port)
-{
-	struct pe_data *pe_data = &pd_port->pe_data;
-
-	pd_disable_timer(pd_port, pe_data->pe_state_timer);
-	pe_data->pe_state_timer = 0;
-}
-
 void pd_reset_pe_timer(struct pd_port *pd_port);
-
-/*
- * @ Return 1 means rx is pending and timer is restarted.
- */
-
-bool pd_restart_timer_if_rx_pending(
-	struct pd_port *pd_port, uint32_t timer_id);
 
 /* ---- pd_event ---- */
 
