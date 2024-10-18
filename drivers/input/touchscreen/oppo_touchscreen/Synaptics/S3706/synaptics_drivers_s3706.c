@@ -41,7 +41,7 @@ static struct chip_data_s3706 *g_chip_info = NULL;
 extern int tp_register_times;
 static int synaptics_get_chip_info(void *chip_data);
 static int synaptics_mode_switch(void *chip_data, work_mode mode, bool flag);
-static int checkCMD(struct chip_data_s3706 *chip_info, int retry_time);
+static void checkCMD(struct chip_data_s3706 *chip_info, int retry_time);
 
 /*******Part0:LOG TAG Declear********************/
 
@@ -281,7 +281,6 @@ static int synaptics_get_chip_info(void *chip_data)
         reg_info->F51_CUSTOM_CTRL04_08 = reg_info->F51_CUSTOM_CTRL_BASE + 0x10;         /*switch for corner mode*/
         reg_info->F51_CUSTOM_CTRL13 = reg_info->F51_CUSTOM_CTRL_BASE + 0x17;
         reg_info->F51_CUSTOM_CTRL20 = reg_info->F51_CUSTOM_CTRL_BASE + 0x26;
-        reg_info->F51_CUSTOM_CTRL30 = reg_info->F51_CUSTOM_CTRL_BASE + 0x38;    /*switch for game mode*/
 
         synaptics_read_F54_base_reg(chip_info);
         reg_info->F55_SENSOR_CTRL01 = 0x01;
@@ -327,34 +326,6 @@ static uint8_t synaptics_get_noise_level(struct chip_data_s3706 *chip_info)
         return game_buffer[12];
 }
 
-static uint8_t synaptics_get_lock_point_level(struct chip_data_s3706 *chip_info)
-{
-        int ret = -1;
-        uint8_t tmp;
-
-        ret = touch_i2c_write_byte(chip_info->client, 0xff, 0x04);      //set page 4
-        if (ret < 0) {
-            TPD_INFO("%s:set page 4 fail\n", __func__);
-            return 0x1E;
-        }
-
-        ret = touch_i2c_read_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL30);
-        if (ret < 0) {
-            TPD_INFO("%s:get lock point level fail\n", __func__);
-            return 0x1E;
-        } else {
-            tmp = ret & 0xFF;
-            TPD_INFO("%s:lock point level =0x%x\n", __func__, tmp);
-        }
-
-        ret = touch_i2c_write_byte(chip_info->client, 0xff, 0x00);      //set page 0
-        if (ret < 0) {
-            TPD_INFO("%s:set page 0 fail\n", __func__);
-        }
-
-        return tmp;
-}
-
 static fw_check_state synaptics_fw_check(void *chip_data, struct resolution_info *resolution_info, struct panel_info *panel_data)
 {
         uint32_t bootloader_mode;
@@ -390,10 +361,6 @@ static fw_check_state synaptics_fw_check(void *chip_data, struct resolution_info
                 sprintf(panel_data->manufacture_info.version, "0x%x", panel_data->TP_FW);
         }
         chip_info->default_nosie_level = synaptics_get_noise_level(chip_info);
-        if (chip_info->report_120hz_support) {
-            chip_info->default_lock_point_level = synaptics_get_lock_point_level(chip_info);
-            TPD_INFO("%s: default_nosie_level = 0x%x, default_lock_point_level = 0x%x .\n", __func__, chip_info->default_nosie_level, chip_info->default_lock_point_level);
-        }
 
         return FW_NORMAL;
 }
@@ -637,10 +604,7 @@ static void synaptics_enable_fingerprint_underscreen(void * chip_data, uint32_t 
         struct chip_data_s3706 *chip_info = (struct chip_data_s3706 *)chip_data;
 
         touch_i2c_write_byte(chip_info->client, 0xff, 0x4);
-        ret = touch_i2c_read_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL20);
-        if (ret != enable)
-            ret = touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL20, enable);                    /*open gesture for fingerprint under screen*/
-
+        ret = touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL20, enable);                    /*open gesture for fingerprint under screen*/
         ret = touch_i2c_read_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL20);
         TPD_INFO("%s :F51_CUSTOM_CTRL20 is %d\n", __func__, ret);
 
@@ -674,14 +638,10 @@ static int synaptics_enable_black_gesture(struct chip_data_s3706 *chip_info, boo
         touch_i2c_read_block(chip_info->client, chip_info->reg_info.F12_2D_CTRL20, 3, &(report_gesture_ctrl_buf[0x0]));
         if (enable) {
                 report_gesture_ctrl_buf[2] |= 0x02;
-                if (!chip_info->report_120hz_support) {
-                    ret = touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F01_RMI_CTRL02, 0x3);                 /*set doze interval to 30ms*/
-                }
+                ret = touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F01_RMI_CTRL02, 0x3);                 /*set doze interval to 30ms*/
         } else  {
                 report_gesture_ctrl_buf[2] &= 0xfd;
-                if (!chip_info->report_120hz_support) {
-                    ret = touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F01_RMI_CTRL02, 0x1);                 /*set doze interval to 10ms*/
-                }
+                ret = touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F01_RMI_CTRL02, 0x1);                 /*set doze interval to 10ms*/
         }
 
         touch_i2c_write_block(chip_info->client, chip_info->reg_info.F12_2D_CTRL20, 3, &(report_gesture_ctrl_buf[0x0]));
@@ -705,29 +665,21 @@ static int synaptics_corner_limit_handle(struct chip_data_s3706 *chip_info, bool
         pre_set_1 = touch_i2c_read_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL04_05);
         pre_set_2 = touch_i2c_read_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL04_06);
         pre_set_3 = touch_i2c_read_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL04_08);
+        if (enable && (0x24 == pre_set_1) && (0xF5 == pre_set_2) && (0x05 == pre_set_3)) {
+            TPD_INFO("already vertical mode, return\n");
+            return 0;
+        }
         //enable is 0x02 means notch is on the left, 0x10 notch is on the right, 0x0 means close corner mode
         if((LANDSCAPE_SCREEN_90 == chip_info->touch_direction) && !enable) {
                 //set area parameter
-                if ((0xFF == pre_set_1) && (0x44 == pre_set_2) && (0x03 == pre_set_3)) {
-                    TPD_INFO("%s: do not enable twice dir = %d\n", __func__, chip_info->touch_direction);
-                    return 0;
-                }
                 touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL04_05, 0xFF);        //x part
                 touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL04_06, 0x44);        //y part
                 touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL04_08, 0x03);
         } else if ((LANDSCAPE_SCREEN_270 == chip_info->touch_direction) && !enable) {
-                if ((0xFF == pre_set_1) && (0x44 == pre_set_2) && (0x0C == pre_set_3)) {
-                    TPD_INFO("%s: do not enable twice dir = %d\n", __func__, chip_info->touch_direction);
-                    return 0;
-                }
                 touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL04_05, 0xFF);        //x part
                 touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL04_06, 0x44);        //y part
                 touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL04_08, 0x0C);
         } else if ((VERTICAL_SCREEN == chip_info->touch_direction) && enable) {
-                if ((0x24 == pre_set_1) && (0xF5 == pre_set_2) && (0x05 == pre_set_3)) {
-                    TPD_INFO("%s: do not enable twice dir = %d\n", __func__, chip_info->touch_direction);
-                    return 0;
-                }
                 touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL04_05, 0x24);        //x part
                 touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL04_06, 0xF5);        //y part
                 touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL04_08, 0x05);
@@ -745,7 +697,6 @@ static int synaptics_corner_limit_handle(struct chip_data_s3706 *chip_info, bool
         }
         touch_i2c_write_byte(chip_info->client, 0xff, 0x00);
 
-        chip_info->rotation_changed_time = jiffies;     //update change time
         return ret;
 }
 
@@ -847,7 +798,6 @@ static void synaptics_enable_charge_mode(struct chip_data_s3706 *chip_info, bool
 static void synaptics_enable_game_mode(struct chip_data_s3706 *chip_info, bool enable)
 {
         int ret = 0;
-        uint8_t tmp = 0x0;
         uint8_t game_buffer[13];
         struct touchpanel_data *ts = i2c_get_clientdata(chip_info->client);
 
@@ -865,69 +815,21 @@ static void synaptics_enable_game_mode(struct chip_data_s3706 *chip_info, bool e
                 TPD_INFO("%s:game_buffer[12]=0x%x\n",__func__, game_buffer[12]);
         }
 
-        if (chip_info->report_120hz_support) {
-            ret = touch_i2c_write_byte(chip_info->client, 0xff, 0x04);      //set page 4
-            if (ret < 0) {
-                TPD_INFO("%s:set page 4 fail\n", __func__);
-                return;
-            }
-
-            ret = touch_i2c_read_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL30);  // read the strong lock point level related register
-            if (ret < 0) {
-                TPD_INFO("%s:get lock point related register fail\n", __func__);
-                return;
-            } else {
-                tmp = ret & 0xFF;
-                TPD_INFO("%s:lock point related register = 0x%x\n", __func__, tmp);
-            }
-
-            if(enable) {
-                if (game_buffer[12] == ts->noise_level && tmp == ts->noise_level) {
-                    TPD_INFO("game mode value already set, return\n");
-                    return;
-                }
-                tmp = ts->noise_level;
-                game_buffer[12] = ts->noise_level;
-                TPD_DEBUG("%s enable is %d, arg is 0x%x\n", __func__, enable, game_buffer[12]);
-            } else {
-                if (game_buffer[12] == chip_info->default_nosie_level && tmp == chip_info->default_lock_point_level) {
-                    TPD_INFO("un game mode value already set, return\n");
-                    return;
-                }
-                tmp = chip_info->default_lock_point_level;
-                game_buffer[12] = chip_info->default_nosie_level;
-                TPD_DEBUG("%s disable is %d, arg is 0x%x\n", __func__, enable, game_buffer[12]);
-            }
-
-            ret = touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL30, tmp);  // set the strong lock point level
-            if (ret < 0) {
-                TPD_INFO("%s:set F51_CUSTOM_CTRL30 for game mode fail\n", __func__);
-                return;
-            }
-
-            ret = touch_i2c_write_byte(chip_info->client, 0xff, 0x00);      //set page 0
-            if (ret < 0) {
-                TPD_INFO("%s:set page 0 fail\n",__func__);
-                return;
-            }
-        } else {
-            if(enable) {
+        if(enable) {
                 if (game_buffer[12] == ts->noise_level) {
-                    TPD_INFO("game mode value already set, return\n");
-                    return;
+                        TPD_INFO("game mode value already set, return\n");
+                        return;
                 }
                 game_buffer[12] = ts->noise_level;
                 TPD_DEBUG("%s enable is %d, arg is 0x%x\n", __func__, enable, game_buffer[12]);
-            } else {
+        } else {
                 if (game_buffer[12] == chip_info->default_nosie_level) {
-                    TPD_INFO("un game mode value already set, return\n");
-                    return;
+                        TPD_INFO("un game mode value already set, return\n");
+                        return;
                 }
                 game_buffer[12] = chip_info->default_nosie_level;
                 TPD_DEBUG("%s disable is %d, arg is 0x%x\n", __func__, enable, game_buffer[12]);
-            }
         }
-
         ret = touch_i2c_write_block(chip_info->client, chip_info->reg_info.F12_2D_CTRL11, 13, &game_buffer[0]);
         if (ret < 0) {
                 TPD_INFO("%s:F12_2D_CTRL11 fail\n",__func__);
@@ -1181,23 +1083,20 @@ static int synaptics_power_control(void *chip_data, bool enable)
         return ret;
 }
 
-static int checkCMD(struct chip_data_s3706 *chip_info, int retry_time)
+static void checkCMD(struct chip_data_s3706 *chip_info, int retry_time)
 {
         int ret;
         int flag_err = 0;
 
         do {
-                msleep(10); /*wait 10ms*/
+                msleep(30); /*wait 10ms*/
                 ret = touch_i2c_read_byte(chip_info->client, chip_info->reg_info.F54_ANALOG_COMMAND_BASE);
                 ret = ret & 0x07;
                 flag_err++;
-        }while((ret > 0x00) && (flag_err < retry_time * 3));
+        }while((ret > 0x00) && (flag_err < retry_time));
         if (ret > 0x00) {
                 TPD_INFO("checkCMD error ret is %x flag_err is %d\n", ret, flag_err);
-                return -1;
         }
-
-        return 0;
 }
 
 static int checkCMD_for_finger(struct chip_data_s3706 *chip_info)
@@ -1226,13 +1125,13 @@ static int checkCMD_for_finger(struct chip_data_s3706 *chip_info)
 
 unsigned char GetLogicalPin(unsigned char p_pin, uint8_t RX_NUM, uint8_t * rx_physical)
 {
-    unsigned char i = 0;
-    for(i = 0; i < RX_NUM; i++)
-    {
-        if (rx_physical[i] == p_pin)
-          return i;
-    }
-    return 0xff;
+	unsigned char i = 0;
+	for(i = 0; i < RX_NUM; i++)
+	{
+		if (rx_physical[i] == p_pin)
+		  return i;
+	}
+	return 0xff;
 }
 
 static int synaptics_capacity_test(struct seq_file *s, struct chip_data_s3706 *chip_info, struct syna_testdata *syna_testdata, struct test_header *ph, uint8_t *raw_data, uint8_t *data_buf)
@@ -1516,23 +1415,23 @@ static int synaptics_auto_test_rt26(struct seq_file *s, struct chip_data_s3706 *
         TPD_INFO("\n");
 
         for (x = 0; x < 7; x++) {
-        TPD_INFO("RT26 data byte %d - data 0x%x\n", x, buffer[x]);
-        if (buffer[x] != 0) {
-            if ((x == 0) && (buffer[x] & 0x01)) {   //pin - 0, these four pins should be test in RT100
+		TPD_INFO("RT26 data byte %d - data 0x%x\n", x, buffer[x]);
+		if (buffer[x] != 0) {
+			if ((x == 0) && (buffer[x] & 0x01)) {   //pin - 0, these four pins should be test in RT100
 
-            } else if ((x == 0) && (buffer[x] & 0x02)) {      //pin - 1
+			} else if ((x == 0) && (buffer[x] & 0x02)) {      //pin - 1
 
-            } else if ((x == 4) && (buffer[x] & 0x01)) {      //pin -32
+			} else if ((x == 4) && (buffer[x] & 0x01)) {      //pin -32
 
-            } else if ((x == 4) && (buffer[x] & 0x02)) {      //pin -33
+			} else if ((x == 4) && (buffer[x] & 0x02)) {      //pin -33
 
-            } else {
-                    error_count++;
-                TPD_INFO("RT26 test fail!!!  data byte %d - data 0x%x\n", x, buffer[x]);
+			} else {
+			        error_count++;
+				TPD_INFO("RT26 test fail!!!  data byte %d - data 0x%x\n", x, buffer[x]);
                                 seq_printf(s, " step 4 :RT26 test fail!!!  data byte %d - data 0x%x\n", x, buffer[x]);
-            }
-        }
-    }
+			}
+		}
+	}
 
         return error_count;
 }
@@ -1604,14 +1503,14 @@ static int synaptics_auto_test_rt100(struct seq_file *s, struct chip_data_s3706 
         TPD_INFO("baseline1:\n");
         for (x = 0, z = 0; x < syna_testdata->TX_NUM; x++) {
                 TPD_DEBUG_NTAG("[%d]: ", x);
-        for (y = 0; y < syna_testdata->RX_NUM; y++) {
-            baseline_data = raw_data[z] | (raw_data[z + 1] << 8);
-            p_data_baseline1[x * syna_testdata->RX_NUM + y] = baseline_data;
-            z = z + 2;
+		for (y = 0; y < syna_testdata->RX_NUM; y++) {
+			baseline_data = raw_data[z] | (raw_data[z + 1] << 8);
+			p_data_baseline1[x * syna_testdata->RX_NUM + y] = baseline_data;
+			z = z + 2;
                         TPD_DEBUG_NTAG("%d, ", p_data_baseline1[x * syna_testdata->RX_NUM + y]);
-        }
+		}
                 TPD_DEBUG_NTAG("\n");
-    }
+	}
         /*end*/
 
         //get logical pin
@@ -1626,8 +1525,8 @@ static int synaptics_auto_test_rt100(struct seq_file *s, struct chip_data_s3706 
 
         for(i = 0; i < 4; i++) {
                 for(j = 0; j < 34; j++) {
-            minRX[j] = 5000;
-            maxRX[j] = 0;
+			minRX[j] = 5000;
+			maxRX[j] = 0;
                 }
 
                 logical_pin = GetLogicalPin(ExtendRT26_pin[i], syna_testdata->RX_NUM, rx_physical);
@@ -1638,14 +1537,14 @@ static int synaptics_auto_test_rt100(struct seq_file *s, struct chip_data_s3706 
                 TPD_INFO("\ninfo: RT26 pin %d, logical pin %d \n", ExtendRT26_pin[i], logical_pin);
 
                 // 14. set local CBC to 8pf(2D) 3.5pf(0D)
-        temp_data[logical_pin] = 0x0f;          //EXTENDED_TRX_SHORT_CBC;
+		temp_data[logical_pin] = 0x0f;          //EXTENDED_TRX_SHORT_CBC;
 
                 ret = touch_i2c_write_block(chip_info->client, chip_info->reg_info.F54_ANALOG_CONTROL_BASE + 0x1D, syna_testdata->RX_NUM, &temp_data[0]);
                 if (ret < 0) {
                         error_count++;
-            TPD_INFO("error: %s fail to set all F54 control_96 register after changing the cbc\n", __func__);
-            goto END;
-        }
+			TPD_INFO("error: %s fail to set all F54 control_96 register after changing the cbc\n", __func__);
+			goto END;
+		}
                 temp_data[logical_pin] = 0;
 
                 // 15. force update
@@ -1664,29 +1563,29 @@ static int synaptics_auto_test_rt100(struct seq_file *s, struct chip_data_s3706 
                 TPD_INFO("baseline2:\n");
                 for (x = 0, z = 0; x < syna_testdata->TX_NUM; x++) {
                         TPD_DEBUG_NTAG("[%d]: ", x);
-            for (y = 0; y < syna_testdata->RX_NUM; y++) {
-                baseline_data = raw_data[z] | (raw_data[z + 1] << 8);
-                p_data_baseline2[x * syna_testdata->RX_NUM + y] = baseline_data;
-                z = z + 2;
+			for (y = 0; y < syna_testdata->RX_NUM; y++) {
+				baseline_data = raw_data[z] | (raw_data[z + 1] << 8);
+				p_data_baseline2[x * syna_testdata->RX_NUM + y] = baseline_data;
+				z = z + 2;
                                 TPD_DEBUG_NTAG("%d, ", p_data_baseline2[x * syna_testdata->RX_NUM + y]);
-            }
+			}
                         TPD_DEBUG_NTAG("\n");
-        }
+		}
                 /*end*/
 
                 // 17. get delta image between baseline image 1 and baseline image 2
-        for (x = 0; x < syna_testdata->TX_NUM; x++) {
-            for (y = 0; y < syna_testdata->RX_NUM; y++) {
-                p_data_delta[x * syna_testdata->RX_NUM + y] = 
-                    ABS( p_data_baseline1[x * syna_testdata->RX_NUM + y], p_data_baseline2[x * syna_testdata->RX_NUM + y]);
+		for (x = 0; x < syna_testdata->TX_NUM; x++) {
+			for (y = 0; y < syna_testdata->RX_NUM; y++) {
+				p_data_delta[x * syna_testdata->RX_NUM + y] = 
+					ABS( p_data_baseline1[x * syna_testdata->RX_NUM + y], p_data_baseline2[x * syna_testdata->RX_NUM + y]);
 
-                if (maxRX[y] < p_data_delta[x * syna_testdata->RX_NUM + y])
-                  maxRX[y] = p_data_delta[x * syna_testdata->RX_NUM + y];
+				if (maxRX[y] < p_data_delta[x * syna_testdata->RX_NUM + y])
+				  maxRX[y] = p_data_delta[x * syna_testdata->RX_NUM + y];
 
-                if (minRX[y] > p_data_delta[x * syna_testdata->RX_NUM + y])
-                  minRX[y] = p_data_delta[x * syna_testdata->RX_NUM + y];
-            }
-        }
+				if (minRX[y] > p_data_delta[x * syna_testdata->RX_NUM + y])
+				  minRX[y] = p_data_delta[x * syna_testdata->RX_NUM + y];
+			}
+		}
 
                 /*debug log*/
                 TPD_DEBUG("\n");
@@ -1697,28 +1596,28 @@ static int synaptics_auto_test_rt100(struct seq_file *s, struct chip_data_s3706 
                 /*end*/
 
                 // 18. Check data: TREX w/o CBC raised changes >= 200 or TREXn* (TREX with CBC raised) changes < 2000
-        // Flag TRX0* as 1 as well if any other RX changes are >=200
-        for (x = 0; x < syna_testdata->RX_NUM; x++) {
-            if (x == logical_pin) {
-                if (minRX[x] < 600) {
+		// Flag TRX0* as 1 as well if any other RX changes are >=200
+		for (x = 0; x < syna_testdata->RX_NUM; x++) {
+			if (x == logical_pin) {
+				if (minRX[x] < 600) {
                                         error_count++;
-                    TPD_INFO("step 5:check RT100 for pin 0,1,32,33 test failed: minRX[%-2d] = %4d when test pin %d (RX Logical pin [%d])\n",
-                                x, minRX[x], ExtendRT26_pin[i], logical_pin);
+					TPD_INFO("step 5:check RT100 for pin 0,1,32,33 test failed: minRX[%-2d] = %4d when test pin %d (RX Logical pin [%d])\n",
+								x, minRX[x], ExtendRT26_pin[i], logical_pin);
                                         seq_printf(s, "step 5:check RT100 for pin 0,1,32,33 test failed: minRX[%-2d] = %4d when test pin %d (RX Logical pin [%d])\n",
                                                 x, minRX[x], ExtendRT26_pin[i], logical_pin);
                                         goto END;
-                }
-            } else {
-                if (maxRX[x] >= 550) {
+				}
+			} else {
+				if (maxRX[x] >= 550) {
                                         error_count++;
-                    TPD_INFO("step 5:check RT100 for pin 0,1,32,33 test failed: minRX[%-2d] = %4d when test pin %d (RX Logical pin [%d])\n",
-                                x, minRX[x], ExtendRT26_pin[i], logical_pin);
+					TPD_INFO("step 5:check RT100 for pin 0,1,32,33 test failed: minRX[%-2d] = %4d when test pin %d (RX Logical pin [%d])\n",
+								x, minRX[x], ExtendRT26_pin[i], logical_pin);
                                         seq_printf(s, "step 5:check RT100 for pin 0,1,32,33 test failed: minRX[%-2d] = %4d when test pin %d (RX Logical pin [%d])\n",
                                                 x, minRX[x], ExtendRT26_pin[i], logical_pin);
                                         goto END;
-                }
-            }
-        }
+				}
+			}
+		}
         }
 
 END:
@@ -2551,11 +2450,7 @@ static void synaptics_delta_read(struct seq_file *s, void *chip_data)
                 ret = touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F54_ANALOG_DATA_BASE, 0xC8);/*select report type 0xC8*/
                 ret = touch_i2c_write_word(chip_info->client, chip_info->reg_info.F54_ANALOG_DATA_BASE + 1, 0x00);/*set fifo 00*/
                 ret = touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F54_ANALOG_COMMAND_BASE, 0x01);/*get report*/
-                ret = checkCMD(chip_info, 5);
-                if (ret < 0) {
-                    TPD_INFO("%s: check cmd failed.\n", __func__);
-                    goto OUT;
-                }
+                checkCMD(chip_info, 30);
                 ret = touch_i2c_read_block(chip_info->client, chip_info->reg_info.F54_ANALOG_DATA_BASE+3,
                         chip_info->hw_res->TX_NUM * chip_info->hw_res->RX_NUM * 2, raw_data);         /*read data*/
                 for (x = 0; x < chip_info->hw_res->TX_NUM; x++) {
@@ -2569,7 +2464,6 @@ static void synaptics_delta_read(struct seq_file *s, void *chip_data)
                 seq_printf(s, "\n");
         }
 
-OUT:
         touch_i2c_write_byte(chip_info->client, 0xff, 0x00);        /* page 0*/
         msleep(60);
         kfree(raw_data);
@@ -5339,14 +5233,6 @@ static int synaptics_get_face_state(void * chip_data)
     if (ret >= 0)
         TPD_INFO("ps value : 0x%02x\n", state);
 
-    //reset for rotation, screen color black to white, regard as near
-    if ((ret > 0) && time_before(jiffies, chip_info->rotation_changed_time + HZ) && chip_info->rotation_changed_time) {
-        TPD_INFO("reset fd for ret:0x%02x\n", ret);
-        synaptics_enable_face_detect(chip_info, false);
-        mdelay(2);
-        synaptics_enable_face_detect(chip_info, true);
-        ret = 0;
-    }
     return ret;
 }
 
@@ -5423,56 +5309,6 @@ static void synaptics_enable_gesture_mask(void *chip_data, uint32_t enable)
         return;
 }
 
-static int synaptics_set_report_point_first(void *chip_data, uint32_t enable)
-{
-        struct chip_data_s3706 *chip_info = (struct chip_data_s3706 *)chip_data;
-        int ret = 0;
-
-        touch_i2c_write_byte(chip_info->client, 0xff, 0x04);//set page 4
-        ret = touch_i2c_read_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL13);
-        if (ret < 0) {
-                touch_i2c_write_byte(chip_info->client, 0xff, 0x00);        /* page 0*/
-                TPD_INFO("failed for get F51_CUSTOM_CTRL13\n");
-                return ret;
-        }
-
-        if (enable) {//enable game mode control flag
-                ret = touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL13, (ret | 0x04));
-                if (ret < 0) {
-                        touch_i2c_write_byte(chip_info->client, 0xff, 0x00);		/* page 0*/
-                        TPD_INFO("%s failed for game mode control\n", __func__);
-                        return ret;
-                }
-        } else {//disable game mode control flag
-                ret = touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL13, (ret & 0xFB));
-                if (ret < 0) {
-                        TPD_INFO("%s failed for disable game mode control\n", __func__);
-                        touch_i2c_write_byte(chip_info->client, 0xff, 0x00);		/* page 0*/
-                        return ret;
-                }
-        }
-
-        ret = touch_i2c_write_byte(chip_info->client, 0xff, 0x00);        /* page 0*/
-        TPD_INFO("%s state: %d %s\n", __func__, enable, ret < 0 ? "failed":"success");
-        return ret;
-}
-
-static int synaptics_get_report_point_first(void *chip_data)
-{
-        struct chip_data_s3706 *chip_info = (struct chip_data_s3706 *)chip_data;
-        int ret = 0;
-
-        touch_i2c_write_byte(chip_info->client, 0xff, 0x04);//set page 4
-        ret = touch_i2c_read_byte(chip_info->client, chip_info->reg_info.F51_CUSTOM_CTRL13);
-        if (ret < 0) {
-            TPD_INFO("failed for get F51_CUSTOM_CTRL13\n");
-            touch_i2c_write_byte(chip_info->client, 0xff, 0x00);//set page 0
-            return ret;
-        }
-        touch_i2c_write_byte(chip_info->client, 0xff, 0x00);//set page 0
-        return ((ret & 0x04) >>2);
-}
-
 static struct oppo_touchpanel_operations synaptics_ops = {
         .ftm_process                = synaptics_ftm_process,
         .get_vendor                 = synaptics_get_vendor,
@@ -5502,8 +5338,6 @@ static struct oppo_touchpanel_operations synaptics_ops = {
         .get_touch_direction        = synaptics_get_touch_direction,
         .screenon_fingerprint_info  = synaptics_screenon_fingerprint_info,
         .specific_resume_operate    = synaptics_specific_resume_operate,
-        .set_report_point_first     = synaptics_set_report_point_first,
-        .get_report_point_first     = synaptics_get_report_point_first,
 };
 
 static void synaptics_set_touchfilter_state(void *chip_data, uint8_t state)
@@ -5597,7 +5431,6 @@ static int synaptics_tp_probe(struct i2c_client *client, const struct i2c_device
         }
         chip_info->fw_corner_limit_support = of_property_read_bool(ts->dev->of_node, "fw_corner_limit_support");
         chip_info->rt155_fdreplace_rt59_support = of_property_read_bool(ts->dev->of_node, "rt155_fdreplace_rt59_support");
-        chip_info->report_120hz_support = of_property_read_bool(ts->dev->of_node, "report_120hz_support");
 
         /*step6: collect data for supurious_fp_touch*/
         if (ts->spurious_fp_support) {
@@ -5707,11 +5540,6 @@ static struct i2c_driver tp_i2c_driver = {
 static int __init tp_driver_init(void)
 {
         TPD_INFO("%s is called\n", __func__);
-
-#ifdef CONFIG_MACH_MT6885
-        if (!tp_judge_ic_match(TPD_DEVICE))
-            return -1;
-#endif
 
         if (i2c_add_driver(&tp_i2c_driver)!= 0) {
                 TPD_INFO("unable to add i2c driver.\n");

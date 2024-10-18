@@ -1,4 +1,4 @@
-/******************************************************************************************************
+/************************************************************************************
  ** File: - SDM660.LA.1.0\android\vendor\oppo_app\fingerprints_hal\drivers\goodix_fp\gf_platform.c
  ** VENDOR_EDIT
  ** Copyright (C), 2008-2017, OPPO Mobile Comm Corp., Ltd
@@ -17,10 +17,7 @@
  **  Ran.Chen      2018/11/26      add for sdm855, used pwr_gpio
  **  Ran.Chen      2018/11/30      modify for powe_on/off for SDM855
  **  Ran.Chen      2018/12/15      modify for powe_on/off for SDM855
- **  Bangxiong.Wu  2019/05/09      add for sm7150, power_no/off auto instead of control by fp driver
- **  Qing.Guan     2019/06/28      add for 19081 gpio and ldo pwr
- **  Ran.Chen      2019/08/14      modify for power on. ldo(3v) need setup first
- *****************************************************************************************************/
+ ************************************************************************************/
 #include <linux/delay.h>
 #include <linux/workqueue.h>
 #include <linux/of_gpio.h>
@@ -28,7 +25,6 @@
 #include <linux/regulator/consumer.h>
 #include <linux/timer.h>
 #include <linux/err.h>
-#include <soc/oppo/oppo_project.h>
 
 #include "gf_spi.h"
 
@@ -39,7 +35,7 @@
 #include <linux/platform_device.h>
 #endif
 
-#if (!defined USED_GPIO_PWR) || (defined CONFIG_19081_PWR)
+#ifndef USED_GPIO_PWR
 struct vreg_config {
     char *name;
     unsigned long vmin;
@@ -47,15 +43,9 @@ struct vreg_config {
     int ua_load;
 };
 
-#ifdef CONFIG_19081_PWR
-static const struct vreg_config const vreg_conf[] = {
-    { "ldo7", 3300000UL, 3300000UL, 150000, },
-};
-#else
 static const struct vreg_config const vreg_conf[] = {
     { "ldo5", 2960000UL, 2960000UL, 150000, },
 };
-#endif
 
 static int vreg_setup(struct gf_dev *goodix_fp, const char *name,
     bool enable)
@@ -68,7 +58,7 @@ static int vreg_setup(struct gf_dev *goodix_fp, const char *name,
         pr_err("name is NULL\n");
         return -EINVAL;
     }
-    pr_err("Regulator %s vreg_setup,enable=%d \n", name, enable);
+	pr_err("Regulator %s vreg_setup,enable=%d \n", name, enable);
     for (i = 0; i < ARRAY_SIZE(goodix_fp->vreg); i++) {
         const char *n = vreg_conf[i].name;
         if (!strncmp(n, name, strlen(n)))
@@ -152,8 +142,7 @@ int gf_parse_dts(struct gf_dev* gf_dev)
 	}
 	gpio_direction_input(gf_dev->irq_gpio);
 
-#if defined(USED_GPIO_PWR)
-
+#ifdef USED_GPIO_PWR
     gf_dev->pwr_gpio = of_get_named_gpio(np, "goodix,goodix_pwr", 0);
         pr_err("end of_get_named_gpio  goodix_pwr!\n");
     if (gf_dev->pwr_gpio < 0) {
@@ -172,7 +161,7 @@ int gf_parse_dts(struct gf_dev* gf_dev)
 
 pr_err("end gf_parse_dts !\n");
 
-#if defined(USED_GPIO_PWR)
+#ifdef USED_GPIO_PWR
 err_pwr:
     devm_gpio_free(dev, gf_dev->pwr_gpio);
 #endif
@@ -196,7 +185,7 @@ void gf_cleanup(struct gf_dev *gf_dev)
 		gpio_free(gf_dev->reset_gpio);
 		pr_info("remove reset_gpio success\n");
 	}
-#if defined(USED_GPIO_PWR)
+#ifdef USED_GPIO_PWR
     if (gpio_is_valid(gf_dev->pwr_gpio))
     {
         gpio_free(gf_dev->pwr_gpio);
@@ -208,22 +197,14 @@ void gf_cleanup(struct gf_dev *gf_dev)
 int gf_power_on(struct gf_dev* gf_dev)
 {
     int rc = 0;
-
-/*power on auto during boot, no need fp driver power on*/
-#if defined(AUTO_PWR)
-    pr_info("[%s] power on auto, no need power on again\n", __func__);
-    return rc;
-#endif
     pr_info("---- power on ok ----\n");
-#ifdef CONFIG_19081_PWR
-    rc = vreg_setup(gf_dev, "ldo7", true);
-#endif
-#if defined(USED_GPIO_PWR)
+    #ifdef USED_GPIO_PWR
     gpio_set_value(gf_dev->pwr_gpio, 1);
     pr_info("set pwe_gpio 1\n");
-#else 
-	rc = vreg_setup(gf_dev, "ldo5", true);
-#endif
+
+    #else
+    rc = vreg_setup(gf_dev, "ldo5", true);
+    #endif
     msleep(30);
     return rc;
 }
@@ -232,21 +213,13 @@ int gf_power_off(struct gf_dev* gf_dev)
 {
     int rc = 0;
 
-/*power off auto during shut down, no need fp driver power off*/
-#if defined(AUTO_PWR)
-    pr_info("[%s] power off auto, no need power off again\n", __func__);
-    return rc;
-#endif
     pr_info("---- power off ----\n");
-#if defined(USED_GPIO_PWR)
+    #ifdef USED_GPIO_PWR
     gpio_set_value(gf_dev->pwr_gpio, 0);
     pr_info("set pwe_gpio 0\n");
-#else
-	rc = vreg_setup(gf_dev, "ldo5", false);
-#endif
-#ifdef CONFIG_19081_PWR
-    rc = vreg_setup(gf_dev, "ldo7", false);
-#endif
+    #else
+    rc = vreg_setup(gf_dev, "ldo5", false);
+    #endif
     msleep(30);
     return rc;
 }

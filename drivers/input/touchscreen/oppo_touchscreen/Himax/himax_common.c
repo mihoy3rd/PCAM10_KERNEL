@@ -41,49 +41,47 @@ void himax_parse_header(struct image_header_data *header, const unsigned char *f
 
 void himax_limit_read(struct seq_file *s, struct touchpanel_data *ts)
 {
-    struct hx_limit_data *limit_data = NULL;
-    struct himax_proc_operations *syna_ops;
-    int i;
-    int j;
+    int ret = 0;
+    uint16_t *prow = NULL;
+    uint16_t *prowcbc = NULL;
+    const struct firmware *fw = NULL;
+    struct test_header *ph = NULL;
+    int i = 0;
+    int temp = 0;
 
-    TPD_INFO("%s: Entering\n", __func__);
-    syna_ops = (struct himax_proc_operations *)ts->private_data;
-    limit_data = kzalloc(sizeof(struct hx_limit_data), GFP_KERNEL);
-    if (!limit_data) {
-        TPD_INFO("limit_data allocat fail!\n");
-        goto FAIL_ALLOC_MEM;
+    ret = request_firmware(&fw, ts->panel_data.test_limit_name, ts->dev);
+    if (ret < 0) {
+        TPD_INFO("Request firmware failed - %s (%d)\n", ts->panel_data.test_limit_name, ret);
+        seq_printf(s, "Request failed, Check the path %d", temp);
+        return;
     }
-    if (!syna_ops->fp_hx_limit_get){
-        TPD_INFO("%s:Doesn't support!\n", __func__);
-        goto FAIL_FUNC;
-    } else {
-        syna_ops->fp_hx_limit_get(ts, limit_data);
-    }
-    if (limit_data != NULL) {
-        for (i = 0 ; i < limit_data->item_size; i++) {
-            seq_printf(s, "%s:\n",limit_data->item_name[i]);
-            TPD_INFO("%s: [%d]Size of =%d\n", __func__, i, (int)sizeof(limit_data->item_name[i]));
 
-                for (j = 0 ; j < limit_data->rawdata_size; j++) {
-                    if (j % ( ts->hw_res.RX_NUM) == 0)
-                        seq_printf(s, "\n[%2d] ", (j / ts->hw_res.RX_NUM));
-                    seq_printf(s, "%4d, ", limit_data->crtra_val[i][j]);
-                }
-            seq_printf(s, "\n");
+    ph = (struct test_header *)(fw->data);
+    prow = (uint16_t *)(fw->data + ph->array_limit_offset);
+    prowcbc = (uint16_t *)(fw->data + ph->array_limitcbc_offset);
+    TPD_INFO("himax_test_limit_show:array_limit_offset = %x array_limitcbc_offset = %x \n",
+            ph->array_limit_offset, ph->array_limitcbc_offset);
+    TPD_DEBUG("test begin:\n");
+    seq_printf(s, "Without cbc:");
+
+    for (i = 0 ; i < (ph->array_limit_size / 2); i++) {
+        if (i % (2 * ts->hw_res.RX_NUM) == 0)
+            seq_printf(s, "\n[%2d] ", (i / ts->hw_res.RX_NUM) / 2);
+        seq_printf(s, "%4d, ", prow[i]);
+        TPD_DEBUG("%d, ", prow[i]);
+    }
+    if (ph->withCBC == 1) {
+        seq_printf(s, "\nWith cbc:");
+        for (i = 0 ; i < (ph->array_limitcbc_size / 2); i++) {
+            if (i % (2 * ts->hw_res.RX_NUM) == 0)
+                seq_printf(s, "\n[%2d] ", (i / ts->hw_res.RX_NUM) / 2);
+            seq_printf(s, "%4d, ", prowcbc[i]);
+            TPD_DEBUG("%d, ", prowcbc[i]);
         }
     }
+
     seq_printf(s, "\n");
-    TPD_INFO("%s: END PRINT!\n", __func__);
-FAIL_FUNC:
-    if (limit_data != NULL) {
-        for (i = 0 ; i < limit_data->item_size; i++) {
-            kfree(limit_data->item_name[i]);
-            kfree(limit_data->crtra_val[i]);
-        }
-        kfree(limit_data);
-    }
-FAIL_ALLOC_MEM:
-    TPD_INFO("%s: End\n", __func__);
+    release_firmware(fw);
 }
 
 //proc/touchpanel/baseline_test
@@ -136,18 +134,18 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
             rtc_now_time.tm_hour, rtc_now_time.tm_min, rtc_now_time.tm_sec);
     old_fs = get_fs();
     set_fs(KERNEL_DS);
-    sys_mkdir("/sdcard/TpTestReport", 0666);
-    sys_mkdir("/sdcard/TpTestReport/screenOn", 0666);
-    sys_mkdir("/sdcard/TpTestReport/screenOn/NG", 0666);
-    sys_mkdir("/sdcard/TpTestReport/screenOn/OK", 0666);
-
-    sys_mkdir("/sdcard/TpTestReport/screenOff", 0666);
-    sys_mkdir("/sdcard/TpTestReport/screenOff/NG", 0666);
-    sys_mkdir("/sdcard/TpTestReport/screenOff/OK", 0666);
     fd = sys_open(data_buf, O_WRONLY | O_CREAT | O_TRUNC, 0);
     if (fd < 0) {
         TPD_INFO("Open log file '%s' failed.\n", data_buf);
         set_fs(old_fs);
+        mutex_unlock(&ts->mutex);
+        if (!ts->is_noflash_ic) {
+            enable_irq(ts->client->irq);
+        } else {
+            enable_irq(ts->s_client->irq);
+        }
+
+        return 0;
     }
 
     //step4:init syna_testdata
@@ -177,11 +175,7 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
 
     //step7: unlock the mutex && enable irq trigger
     mutex_unlock(&ts->mutex);
-    if (!ts->is_noflash_ic) {
-        enable_irq(ts->client->irq);
-    } else {
-        enable_irq(ts->s_client->irq);
-    }
+    //enable_irq(ts->client->irq);
 
     return 0;
 }
@@ -197,6 +191,16 @@ static const struct file_operations tp_auto_test_proc_fops = {
     .read  = seq_read,
     .release = single_release,
 };
+
+
+#define HX_TP_PROC_REGISTER
+#define HX_TP_PROC_DEBUG
+#define HX_TP_PROC_FLASH_DUMP
+#define HX_TP_PROC_SELF_TEST
+#define HX_TP_PROC_RESET
+#define HX_TP_PROC_SENSE_ON_OFF
+#define HX_TP_PROC_2T2R
+
 
 static ssize_t himax_proc_register_read(struct file *file, char *buff, size_t len, loff_t *pos)
 {
@@ -442,34 +446,6 @@ static struct file_operations himax_proc_sense_on_off_ops =
 	.write = himax_proc_sense_on_off_write,
 };
 
-static ssize_t himax_proc_vendor_read(struct file *file, char *buff, size_t len, loff_t *pos)
-{
-    struct touchpanel_data *ts = PDE_DATA(file_inode(file));
-    struct himax_proc_operations *syna_ops;
-    ssize_t ret = 0;
-
-    if (!ts)
-        return 0;
-
-    syna_ops = (struct himax_proc_operations *)ts->private_data;
-    if (!syna_ops)
-        return 0;
-
-    if (!syna_ops->himax_proc_vendor_read) {
-            TPD_INFO("Not support fw proc node %s %d\n",__func__,__LINE__);
-        return 0;
-    }
-
-    ret = syna_ops->himax_proc_vendor_read(file, buff, len, pos);
-    return ret;
-}
-
-static struct file_operations himax_proc_vendor_ops =
-{
-    .owner = THIS_MODULE,
-    .read = himax_proc_vendor_read,
-};
-
 int himax_create_proc(struct touchpanel_data *ts, struct himax_proc_operations *syna_ops)
 {
     int ret = 0;
@@ -532,13 +508,5 @@ int himax_create_proc(struct touchpanel_data *ts, struct himax_proc_operations *
         ret = -ENOMEM;
         TPD_INFO("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
     }
-
-    //proc files: /proc/touchpanel/debug_info/himax/vendor
-    prEntry_tmp = proc_create_data("vendor", 0666, prEntry_himax, &himax_proc_vendor_ops, ts);
-    if (prEntry_tmp == NULL) {
-        ret = -ENOMEM;
-        TPD_INFO("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
-    }
-
     return ret;
 }

@@ -1,26 +1,8 @@
- /************************************************************************************
-** File: - fingerprints_hal\drivers\goodix_fp\gf_spi_tee.h
-** VENDOR_EDIT
-** Copyright (C), 2008-2016, OPPO Mobile Comm Corp., Ltd
-**
-** Description:
-**      driver definition for sensor driver
-**
-** Version: 1.0
-** Date created: 15:03:11,12/08/2017
-** Author:ChenRan@BSP.Fingerprint.Basic
-** TAG: BSP.Fingerprint.Basic
-**
-** --------------------------- Revision History: --------------------------------
-** <author>     <data>        <desc>
-** Ran.Chen     2017/08/11    create the file for goodix 3268
-** Ran.Chen     2017/09/08    add gf_cmd_wakelock
-** Hongdao.yu   2018/03/09    modify irq/reset/power time sequence
-** Dongnan.Wu   2019/02/23    modify for 18073 goodix device
-** Bangxiong.Wu 2019/04/05    add for correcting time sequence during boot
-** Dongnan.Wu   2019/05/21    add 19011&19301 platform support
-** Qijia.Zhou   2019/10/08    add 19151&19350 platform support
-************************************************************************************/
+/*
+ * driver definition for sensor driver
+ *
+ * Coypright (c) 2017 Goodix
+ */
 #ifndef __GF_SPI_H
 #define __GF_SPI_H
 
@@ -113,7 +95,6 @@ struct gf_ioc_chip_info {
 #define GF_IOC_CHIP_INFO        _IOW(GF_IOC_MAGIC, 13, struct gf_ioc_chip_info)
 #define GF_IOC_WAKELOCK_TIMEOUT_ENABLE        _IO(GF_IOC_MAGIC, 18 )
 #define GF_IOC_WAKELOCK_TIMEOUT_DISABLE        _IO(GF_IOC_MAGIC, 19 )
-#define GF_IOC_CLEAN_TOUCH_FLAG        _IO(GF_IOC_MAGIC, 20 )
 
 #if defined(SUPPORT_NAV_EVENT)
 #define GF_IOC_NAV_EVENT	_IOW(GF_IOC_MAGIC, 14, gf_nav_event_t)
@@ -123,24 +104,14 @@ struct gf_ioc_chip_info {
 #endif
 
 //#define AP_CONTROL_CLK       1
-//#define  USE_PLATFORM_BUS     1
-#define  USE_SPI_BUS	1
+#define  USE_PLATFORM_BUS     1
+//#define  USE_SPI_BUS	1
 //#define GF_FASYNC   1	/*If support fasync mechanism.*/
 #define GF_NETLINK_ENABLE 1
+#define GF_NET_EVENT_IRQ 1
 #define GF_NET_EVENT_FB_BLACK 2
 #define GF_NET_EVENT_FB_UNBLACK 3
 #define NETLINK_TEST 25
-
-enum NETLINK_CMD {
-    GF_NET_EVENT_TEST = 0,
-    GF_NET_EVENT_IRQ = 1,
-    GF_NET_EVENT_SCR_OFF,
-    GF_NET_EVENT_SCR_ON,
-    GF_NET_EVENT_TP_TOUCHDOWN,
-    GF_NET_EVENT_TP_TOUCHUP,
-    GF_NET_EVENT_UI_READY,
-    GF_NET_EVENT_MAX,
-};
 
 struct gf_dev {
 	dev_t devt;
@@ -158,13 +129,6 @@ struct gf_dev {
 	unsigned users;
 	signed irq_gpio;
 	signed reset_gpio;
-        signed cs_gpio;
-#ifdef CONGIG_MTK_P90M
-    signed pw_en_gpio;
-#endif
-#ifdef CONFIG_MTK_GPIO_VDDIO
-    signed vddio_en_gpio;
-#endif
 #ifdef CONFIG_MT6771_17331
 	signed ldo_gpio;
 #endif
@@ -180,11 +144,6 @@ struct gf_dev {
 	char fb_black;
 	struct device *dev;
 	struct regulator *vreg[1];
-        struct pinctrl *pinctrl;
-        struct pinctrl_state *pstate_spi_6mA;
-        struct pinctrl_state *pstate_default;
-        struct pinctrl_state *pstate_cs_func;
-        bool cs_gpio_set;
 };
 
 int gf_parse_dts(struct gf_dev* gf_dev);

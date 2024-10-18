@@ -22,7 +22,6 @@
 #ifdef CONFIG_MT_SND_SOC_NEW_ARCH
 #include <mt_soc_afe_control.h>
 #endif
-#include <soc/oppo/oppo_project.h>
 
 #ifdef CONFIG_KPD_PWRKEY_USE_EINT
 static u8 kpd_pwrkey_state = !KPD_PWRKEY_POLARITY;
@@ -233,20 +232,6 @@ void kpd_auto_test_for_factorymode(void)
 #endif
 }
 
-#ifdef VENDOR_EDIT
-/*xing.xiong@BSP.Kernel.Driver, 2019/02/15, Add for some project that use the same compile marco,
-* but with different hardware
-*/
-bool disable_platform_lprst(void) {
-	/*for 18161 high version*/
-	if (is_project(OPPO_18561)) {
-		return true;
-	}
-
-	return false;
-}
-#endif
-
 /********************************************************************/
 void long_press_reboot_function_setting(void)
 {
@@ -256,19 +241,6 @@ void long_press_reboot_function_setting(void)
 #if defined(CONFIG_KPD_PMIC_LPRST_SUPPORT) && defined(CONFIG_KPD_PMIC_LPRST_TD)
 /*xing.xiong@BSP.Kernel.Debug, 2018/10/15, Modify for disable long press reset in normal mode*/
 		kpd_info("Enable normal mode LPRST\n");
-
-#ifdef VENDOR_EDIT
-/*xing.xiong@BSP.Kernel.Driver, 2019/02/15, Add for some project that use the same compile marco,
-* but with different hardware
-*/
-	if (disable_platform_lprst()) {
-		kpd_info("disable normal mode LPRST for common project\n");
-		pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x00);
-		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);
-		return;
-	}
-#endif
-
 #ifdef CONFIG_ONEKEY_REBOOT_NORMAL_MODE
 		pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x01);
 		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);
@@ -291,19 +263,6 @@ void long_press_reboot_function_setting(void)
 #if defined(CONFIG_KPD_PMIC_LPRST_SUPPORT) && defined(CONFIG_KPD_PMIC_LPRST_TD)
 /*xing.xiong@BSP.Kernel.Debug, 2018/10/15, Modify for disable long press reset in recovery mode*/
 		kpd_info("Enable other mode LPRST\n");
-
-#ifdef VENDOR_EDIT
-/*xing.xiong@BSP.Kernel.Driver, 2019/02/15, Add for some project that use the same compile marco,
-* but with different hardware
-*/
-	if (disable_platform_lprst()) {
-		kpd_info("disable other mode LPRST common project\n");
-		pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x00);
-		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);
-		return;
-	}
-#endif
-
 #ifdef CONFIG_ONEKEY_REBOOT_OTHER_MODE
 		pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x01);
 		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);

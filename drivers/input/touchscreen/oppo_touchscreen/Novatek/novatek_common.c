@@ -121,13 +121,12 @@ static ssize_t nvt_noflash_read(struct file *filp, char __user *buff, size_t cou
     uint8_t *str = NULL;
     int32_t ret = -1;
     int32_t retries = 0;
-    u8 spi_wr = 0;
-    uint8_t *buf = NULL;
-    int rw_len;
+    int8_t spi_wr = 0;
+    uint8_t *buf;
 
     struct touchpanel_data *ts = PDE_DATA(file_inode(filp));
 
-    if (count > SPI_TANSFER_LEN + 2 || count < 2)
+    if (count > SPI_TANSFER_LEN)
         return -EFAULT;
 
     /* allocate buffer for spi transfer */
@@ -135,17 +134,19 @@ static ssize_t nvt_noflash_read(struct file *filp, char __user *buff, size_t cou
     if(str == NULL) {
         TPD_INFO("kzalloc for buf failed!\n");
         ret = -ENOMEM;
-        goto out;
+        goto kzalloc_failed;
     }
 
     buf = (uint8_t *)kzalloc((count), GFP_KERNEL | GFP_DMA);
     if(buf == NULL) {
         TPD_INFO("kzalloc for buf failed!\n");
         ret = -ENOMEM;
-        goto out;
+        kfree(str);
+        str = NULL;
+        goto kzalloc_failed;
     }
 
-    if (copy_from_user(str, (u8 *)buff, count)) {
+    if (copy_from_user(str, buff, count)) {
         TPD_INFO("copy from user error\n");
         ret = -EFAULT;
         goto out;
@@ -156,15 +157,11 @@ static ssize_t nvt_noflash_read(struct file *filp, char __user *buff, size_t cou
     }
 
     spi_wr = str[0] >> 7;
-    rw_len = (str[0] & 0x7F) * 256 + str[1];
-    if (rw_len + 2 > count) {
-        rw_len = count - 2;
-    }
-    memcpy(buf, &str[2], rw_len);
+    memcpy(buf, str+2, ((str[0] & 0x7F) << 8) | str[1]);
 
     if (spi_wr == 0) {    //SPI write
         while (retries < 20) {
-            ret = CTP_SPI_WRITE(ts->s_client, buf, rw_len);
+            ret = CTP_SPI_WRITE(ts->s_client, buf, ((str[0] & 0x7F) << 8) | str[1]);
             if (!ret)
                 break;
             else
@@ -179,8 +176,8 @@ static ssize_t nvt_noflash_read(struct file *filp, char __user *buff, size_t cou
             goto out;
         }
     } else if (spi_wr == 1) {    //SPI read
-        while (retries < 20) {
-            ret = CTP_SPI_READ(ts->s_client, buf, rw_len);
+         while (retries < 20) {
+            ret = CTP_SPI_READ(ts->s_client, buf, ((str[0] & 0x7F) << 8) | str[1]);
             if (!ret)
                 break;
             else
@@ -190,7 +187,7 @@ static ssize_t nvt_noflash_read(struct file *filp, char __user *buff, size_t cou
         }
 
         // copy buff to user if spi transfer
-        memcpy(&str[2], buf, rw_len);
+        memcpy(str+2, buf, ((str[0] & 0x7F) << 8) | str[1]);
         if (retries < 20) {
             if (copy_to_user(buff, str, count)) {
                 ret = -EFAULT;
@@ -210,15 +207,12 @@ static ssize_t nvt_noflash_read(struct file *filp, char __user *buff, size_t cou
     }
 
 out:
-    if (str != NULL) {
-        kfree(str);
-    }
-
-    if (buf != NULL) {
-        kfree(buf);
-    }
-
-    return ret;
+    kfree(str);
+    str = NULL;
+    kfree(buf);
+    buf = NULL;
+kzalloc_failed:
+        return ret;
 }
 
 static const struct file_operations nvt_noflash_fops = {
@@ -235,19 +229,19 @@ void nvt_flash_proc_init(struct touchpanel_data *ts, const char *name)
         TPD_INFO("create /proc/NVTSPI!\n");
         nvt_proc_entry = proc_create_data(name, 0444, NULL, &nvt_noflash_fops, ts);
         if (nvt_proc_entry == NULL) {
-            TPD_INFO("%s Failed!\n", __func__);
-            return;
+                TPD_INFO("%s Failed!\n", __func__);
+                return;
         } else {
-            TPD_INFO("%s Succeeded!\n", __func__);
+                TPD_INFO("%s Succeeded!\n", __func__);
         }
     } else {
         TPD_INFO("create /proc/NVTflash!\n");
-        nvt_proc_entry = proc_create_data(name, 0444, NULL, &nvt_flash_fops, ts);
+        nvt_proc_entry = proc_create_data(name, 0444, NULL,&nvt_flash_fops, ts);
         if (nvt_proc_entry == NULL) {
-            TPD_INFO("%s Failed!\n", __func__);
-            return;
+                TPD_INFO("%s Failed!\n", __func__);
+                return;
         } else {
-            TPD_INFO("%s Succeeded!\n", __func__);
+                TPD_INFO("%s Succeeded!\n", __func__);
         }
     }
 
@@ -261,16 +255,11 @@ void nvt_limit_read(struct seq_file *s, struct touchpanel_data *ts)
     int32_t *open_rawdata_p = NULL, *open_rawdata_n = NULL;
     int32_t *short_rawdata_p = NULL, *short_rawdata_n = NULL;
     int32_t *diff_rawdata_p = NULL, *diff_rawdata_n = NULL;
-#ifdef CONFIG_TOUCHPANEL_NT_DIGITALNOISE_TEST
-    int32_t *digital_diff_rawdata_p = NULL, *digital_diff_rawdata_n = NULL;
-#endif
     int32_t *cc_data_p = NULL, *cc_data_n = NULL;
     int32_t *doze_rawdata_p = NULL, *doze_rawdata_n = NULL;
     int32_t *doze_diff_rawdata_p = NULL, *doze_diff_rawdata_n = NULL;
     int32_t *lpwg_rawdata_p = NULL, *lpwg_rawdata_n = NULL;
     int32_t *lpwg_diff_rawdata_p = NULL, *lpwg_diff_rawdata_n = NULL;
-    int32_t *fdm_rawdata_p = NULL, *fdm_rawdata_n = NULL;
-    int32_t *fdm_diff_rawdata_p = NULL, *fdm_diff_rawdata_n = NULL;
     const struct firmware *fw = NULL;
     struct nvt_test_header *ph = NULL;
     int i = 0, j = 0;
@@ -292,10 +281,6 @@ void nvt_limit_read(struct seq_file *s, struct touchpanel_data *ts)
     short_rawdata_n = (int32_t *)(fw->data + ph->array_Short_Rawdata_N_offset);
     diff_rawdata_p = (int32_t *)(fw->data + ph->array_FW_Diff_P_offset);
     diff_rawdata_n = (int32_t *)(fw->data + ph->array_FW_Diff_N_offset);
-#ifdef CONFIG_TOUCHPANEL_NT_DIGITALNOISE_TEST
-    digital_diff_rawdata_p = (int32_t *)(fw->data + ph->array_FW_Digital_Diff_P_offset);
-    digital_diff_rawdata_n = (int32_t *)(fw->data + ph->array_FW_Digital_Diff_N_offset);
-#endif
     cc_data_p = (int32_t *)(fw->data + ph->array_FW_CC_P_offset);
     cc_data_n = (int32_t *)(fw->data + ph->array_FW_CC_N_offset);
     doze_rawdata_p = (int32_t *)(fw->data + ph->array_Doze_Rawdata_P_offset);
@@ -306,10 +291,6 @@ void nvt_limit_read(struct seq_file *s, struct touchpanel_data *ts)
     lpwg_rawdata_n = (int32_t *)(fw->data + ph->array_LPWG_Rawdata_N_offset);
     lpwg_diff_rawdata_p = (int32_t *)(fw->data + ph->array_LPWG_Diff_P_offset);
     lpwg_diff_rawdata_n = (int32_t *)(fw->data + ph->array_LPWG_Diff_N_offset);
-    fdm_rawdata_p = (int32_t *)(fw->data + ph->array_FDM_Rawdata_P_offset);
-    fdm_rawdata_n = (int32_t *)(fw->data + ph->array_FDM_Rawdata_N_offset);
-    fdm_diff_rawdata_p = (int32_t *)(fw->data + ph->array_FDM_Diff_P_offset);
-    fdm_diff_rawdata_n = (int32_t *)(fw->data + ph->array_FDM_Diff_N_offset);
 
     seq_printf(s, "\n FW_Rawdata_P:");
     for (i = 0 ; i < ts->hw_res.RX_NUM; i++) {
@@ -417,32 +398,6 @@ void nvt_limit_read(struct seq_file *s, struct touchpanel_data *ts)
         }
     }
 
-#ifdef CONFIG_TOUCHPANEL_NT_DIGITALNOISE_TEST
-    if (ph->config_Lmt_FW_Digital_Diff_P != 0) {
-        seq_printf(s, "\n config_Lmt_FW_Digital_Diff_P: %4d", ph->config_Lmt_FW_Digital_Diff_P);
-    } else {
-        seq_printf(s, "\n Digital_Diff_P:");
-        for (i = 0 ; i < ts->hw_res.RX_NUM; i++) {
-            seq_printf(s, "\n[%2d] ", i);
-            for (j = 0 ; j < ts->hw_res.TX_NUM; j++) {
-                seq_printf(s, "%4d, ", digital_diff_rawdata_p[i * ts->hw_res.TX_NUM + j]);
-            }
-        }
-    }
-
-    if (ph->config_Lmt_FW_Digital_Diff_N != 0) {
-        seq_printf(s, "\n config_Lmt_FW_Digital_Diff_N: %4d", ph->config_Lmt_FW_Digital_Diff_N);
-    } else {
-        seq_printf(s, "\n Digital_Diff_N:");
-        for (i = 0 ; i < ts->hw_res.RX_NUM; i++) {
-            seq_printf(s, "\n[%2d] ", i);
-            for (j = 0 ; j < ts->hw_res.TX_NUM; j++) {
-                seq_printf(s, "%4d, ", digital_diff_rawdata_n[i * ts->hw_res.TX_NUM + j]);
-            }
-        }
-    }
-#endif
-
     seq_printf(s, "\n doze_X_Channel: %4d", ph->doze_X_Channel);
 
     if (ph->config_Lmt_Doze_Rawdata_P != 0) {
@@ -543,57 +498,6 @@ void nvt_limit_read(struct seq_file *s, struct touchpanel_data *ts)
         }
     }
 
-    seq_printf(s, "\n fdm_X_Channel: %4d", ph->fdm_X_Channel);
-
-    if (ph->config_Lmt_FDM_Rawdata_P != 0) {
-        seq_printf(s, "\n config_Lmt_FDM_Rawdata_P: %4d", ph->config_Lmt_FDM_Rawdata_P);
-    } else {
-        seq_printf(s, "\n FDM_Rawdata_P:");
-        for (i = 0 ; i < ts->hw_res.RX_NUM; i++) {
-            seq_printf(s, "\n[%2d] ", i);
-            for (j = 0 ; j < ph->fdm_X_Channel; j++) {
-                seq_printf(s, "%4d, ", fdm_rawdata_p[i * ph->fdm_X_Channel + j]);
-            }
-        }
-    }
-
-    if (ph->config_Lmt_FDM_Rawdata_N != 0) {
-        seq_printf(s, "\n config_Lmt_FDM_Rawdata_N: %4d", ph->config_Lmt_FDM_Rawdata_N);
-    } else {
-        seq_printf(s, "\n FDM_Rawdata_N:");
-        for (i = 0 ; i < ts->hw_res.RX_NUM; i++) {
-            seq_printf(s, "\n[%2d] ", i);
-            for (j = 0 ; j < ph->fdm_X_Channel; j++) {
-                seq_printf(s, "%4d, ", fdm_rawdata_n[i * ph->fdm_X_Channel + j]);
-            }
-        }
-    }
-
-    seq_printf(s, "\n config_FDM_Noise_Test_Frame: %4d", ph->config_FDM_Noise_Test_Frame);
-
-    if (ph->config_Lmt_FDM_Diff_P != 0) {
-        seq_printf(s, "\n config_Lmt_FDM_Diff_P: %4d", ph->config_Lmt_FDM_Diff_P);
-    } else {
-        seq_printf(s, "\n FDM_Diff_P:");
-        for (i = 0 ; i < ts->hw_res.RX_NUM; i++) {
-            seq_printf(s, "\n[%2d] ", i);
-            for (j = 0 ; j < ph->fdm_X_Channel; j++) {
-                seq_printf(s, "%4d, ", fdm_diff_rawdata_p[i * ph->fdm_X_Channel + j]);
-            }
-        }
-    }
-
-    if (ph->config_Lmt_FDM_Diff_N != 0) {
-        seq_printf(s, "\n config_Lmt_FDM_Diff_N: %4d", ph->config_Lmt_FDM_Diff_N);
-    } else {
-        seq_printf(s, "\n FDM_Diff_N:");
-        for (i = 0 ; i < ts->hw_res.RX_NUM; i++) {
-            seq_printf(s, "\n[%2d] ", i);
-            for (j = 0 ; j < ph->fdm_X_Channel; j++) {
-                seq_printf(s, "%4d, ", fdm_diff_rawdata_n[i * ph->fdm_X_Channel + j]);
-            }
-        }
-    }
     seq_printf(s, "\n");
     release_firmware(fw);
 }
@@ -634,9 +538,7 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
     }
 
     //step1:disable_irq && get mutex locked
-    if (ts->int_mode == BANNABLE) {
-        disable_irq_nosync(ts->irq);
-    }
+    disable_irq_nosync(ts->irq);
     mutex_lock(&ts->mutex);
 
     if (ts->esd_handle_support) {
@@ -657,6 +559,10 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
     if (fd < 0) {
         TPD_INFO("Open log file '%s' failed.\n", data_buf);
         set_fs(old_fs);
+        mutex_unlock(&ts->mutex);
+        enable_irq(ts->irq);
+
+        return 0;
     }
 
     //step3:request test limit data from userspace
@@ -664,14 +570,10 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
     if (ret < 0) {
         TPD_INFO("Request firmware failed - %s (%d)\n", ts->panel_data.test_limit_name, ret);
         seq_printf(s, "No limit IMG\n");
-        if (fd >= 0) {
-            sys_close(fd);
-            set_fs(old_fs);
-        }
+        sys_close(fd);
+        set_fs(old_fs);
         mutex_unlock(&ts->mutex);
-        if (ts->int_mode == BANNABLE) {
-            enable_irq(ts->irq);
-        }
+        enable_irq(ts->irq);
         return 0;
     }
 
@@ -700,9 +602,7 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
 
     //step6: unlock the mutex && enable irq trigger
     mutex_unlock(&ts->mutex);
-    if (ts->int_mode == BANNABLE) {
-        enable_irq(ts->irq);
-    }
+    enable_irq(ts->irq);
 
     return 0;
 }

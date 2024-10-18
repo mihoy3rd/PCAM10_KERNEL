@@ -20,7 +20,6 @@
  * Bill Yu    2018/6/5    0.1.3      Support chip enter power down
  * Bill Yu    2018/6/7    0.1.4      Support create proc node
  * Bill Yu    2018/6/27   0.1.5      Expand pwdn I/F
- * Bangxiong.Wu 2019/03/22 1.0.0     change AVDD from 3V to 3.3V
  *
  */
 
@@ -193,8 +192,8 @@ struct fp_dev_touch_info {
 //#define BSP_SIL_POWER_SUPPLY_GPIO
 
 /* AVDD voltage range 2.8v ~ 3.3v */
-#define AVDD_MAX  3300000
-#define AVDD_MIN  3300000
+#define AVDD_MAX  3000000
+#define AVDD_MIN  3000000
 
 /* VDDIO voltage range 1.8v ~ AVDD */
 #define VDDIO_MAX 1800000

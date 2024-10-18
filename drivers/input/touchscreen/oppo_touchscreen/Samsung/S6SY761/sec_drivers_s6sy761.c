@@ -59,7 +59,7 @@
 /******************** End of Log Tag Declear and level define*********************************/
 
 /*************************** start of function delcare****************************************/
-static void sec_mdelay(unsigned int ms);
+void sec_mdelay(unsigned int ms);
 static int sec_reset(void *chip_data);
 static int sec_power_control(void *chip_data, bool enable);
 static int sec_get_verify_result(struct chip_data_s6sy761 *chip_info);
@@ -134,9 +134,6 @@ static int sec_enable_edge_limit(struct chip_data_s6sy761 *chip_info, bool enabl
     ret |= touch_i2c_write_block(chip_info->client, SEC_CMD_GRIP_DIRECTION, sizeof(buf), buf);
     ret |= touch_i2c_write_block(chip_info->client, SEC_CMD_EDGE_SCREEN, sizeof(edge_range), edge_range);
 
-    //disable wet mode while changing to horizontal
-    ret |= touch_i2c_write_byte(chip_info->client, SEC_CMD_WET_SWITCH, !chip_info->touch_direction);
-
     TPD_INFO("%s: dir: %d %s!\n", __func__, chip_info->touch_direction, ret < 0 ? "failed" : "success");
     return ret;
 }
@@ -196,7 +193,7 @@ static int sec_enable_game_mode(struct chip_data_s6sy761 *chip_info, bool enable
     return ret;
 }
 
-static void sec_mdelay(unsigned int ms)
+void sec_mdelay(unsigned int ms)
 {
     if (ms < 20)
         usleep_range(ms * 1000, ms * 1000);
@@ -204,7 +201,7 @@ static void sec_mdelay(unsigned int ms)
         msleep(ms);
 }
 
-static int sec_wait_for_ready(struct chip_data_s6sy761 *chip_info, unsigned int ack)
+int sec_wait_for_ready(struct chip_data_s6sy761 *chip_info, unsigned int ack)
 {
     int rc = -1;
     int retry = 0, retry_cnt = 100;
@@ -416,7 +413,7 @@ static int sec_flash_write(struct chip_data_s6sy761 *chip_info, u32 mem_addr, u8
             ret = sec_flash_page_write(chip_info, (page_idx + page_idx_start), page_buf);
             if (ret < 0) {
                 sec_mdelay(50);
-                ret = sec_flash_page_write(chip_info, (page_idx + page_idx_start), page_buf);
+                ret = sec_flash_page_write(chip_info, (page_idx + page_idx_start), page_buf);                
                 if (ret < 0) {
                     TPD_INFO("%s: fw write failed, page_idx = %u\n", __func__, page_idx);
                     goto err;
@@ -581,7 +578,7 @@ err_write_fail:
     return ret;
 }
 
-static int sec_read_calibration_report(struct chip_data_s6sy761 *chip_info)
+int sec_read_calibration_report(struct chip_data_s6sy761 *chip_info)
 {
     int ret;
     u8 buf[5] = { 0 };
@@ -600,7 +597,7 @@ static int sec_read_calibration_report(struct chip_data_s6sy761 *chip_info)
     return buf[4];
 }
 
-static int sec_execute_force_calibration(struct chip_data_s6sy761 *chip_info)
+int sec_execute_force_calibration(struct chip_data_s6sy761 *chip_info)
 {
     int rc = -1;
 
@@ -1025,7 +1022,7 @@ static u8 sec_trigger_reason(void *chip_data, int gesture_enable, int is_suspend
     return IRQ_IGNORE;
 }
 
-static bool corner_point_filtered(struct chip_data_s6sy761 *chip_info, uint16_t x, uint16_t y)
+bool corner_point_filtered(struct chip_data_s6sy761 *chip_info, uint16_t x, uint16_t y)
 {
     uint16_t vertical_height = 120, hori_width = 100, width = 32, corner_len = 60;
 
@@ -1125,7 +1122,7 @@ static int sec_get_gesture_info(void *chip_data, struct gesture_info * gesture)
     struct Coordinate limitPoint[4];
     struct sec_gesture_status *p_event_gesture = NULL;
     struct chip_data_s6sy761 *chip_info = (struct chip_data_s6sy761 *)chip_data;
-
+    
     p_event_gesture = (struct sec_gesture_status *)chip_info->first_event;
     if (p_event_gesture->coordLen > 18) {
         p_event_gesture->coordLen = 18;
@@ -1426,7 +1423,7 @@ static struct oppo_touchpanel_operations sec_ops = {
 
 
 /**************** Start of implementation of debug_info proc callbacks************************/
-static int sec_fix_tmode(struct chip_data_s6sy761 *chip_info, u8 mode, u8 state)
+int sec_fix_tmode(struct chip_data_s6sy761 *chip_info, u8 mode, u8 state)
 {
     int ret = -1;
     u8 tBuff[2] = { mode, state };
@@ -1439,7 +1436,7 @@ static int sec_fix_tmode(struct chip_data_s6sy761 *chip_info, u8 mode, u8 state)
     return ret;
 }
 
-static int sec_release_tmode(struct chip_data_s6sy761 *chip_info)
+int sec_release_tmode(struct chip_data_s6sy761 *chip_info)
 {
     int ret = -1;
 
@@ -1721,9 +1718,6 @@ static void sec_main_register_read(struct seq_file *s, void *chip_data)
 
     state = touch_i2c_read_byte(chip_info->client, 0x30);
     seq_printf(s, "touch function: 0x%02x(proximity/wetmode/palm/stylus/glove/cover/hover/touch)\n", state);
-
-    state = touch_i2c_read_byte(chip_info->client, SEC_CMD_WET_SWITCH);
-    seq_printf(s, "wetmode switch: 0x%02x\n", state);
 
     state = touch_i2c_read_byte(chip_info->client, 0x3B);
     seq_printf(s, "wetmode state: 0x%02x\n", state);
@@ -2053,12 +2047,7 @@ static void store_to_file(int fd, char* format, ...)
     va_end(args);
 
     if(fd >= 0) {
-#ifdef CONFIG_ARCH_HAS_SYSCALL_WRAPPER
-        ksys_write(fd, buf, strlen(buf));
-#else
         sys_write(fd, buf, strlen(buf));
-#endif /* CONFIG_ARCH_HAS_SYSCALL_WRAPPER */
-
     }
 }
 
@@ -2161,7 +2150,7 @@ ERR_EXIT:
     return rc;
 }
 
-static int sec_execute_p2ptest(struct seq_file *s, struct chip_data_s6sy761 *chip_info, struct sec_testdata *sec_testdata)
+int sec_execute_p2ptest(struct seq_file *s, struct chip_data_s6sy761 *chip_info, struct sec_testdata *sec_testdata)
 {
     int rc;
     u8 tpara[2] = {0x0F, 0x11};
@@ -2494,7 +2483,7 @@ static void sec_auto_test(struct seq_file *s, void *chip_data, struct sec_testda
         store_to_file(sec_testdata->fd, "TYPE_SELF_RX_OFFSET_DATA:\n");
         /* check short channel of self data */
         for (i = 0; i < sec_testdata->RX_NUM; i++) {
-            nodeData = (pRead[sec_testdata->TX_NUM*2 + i*2] << 8) | pRead[sec_testdata->TX_NUM*2 + i*2 +1];
+            nodeData = (pRead[sec_testdata->TX_NUM*2 + i*2] << 8) | pRead[sec_testdata->TX_NUM*2 + i*2 +1];  
             if (sec_testdata->fd >= 0) {
                 store_to_file(sec_testdata->fd, "%d, ", nodeData);
             }
@@ -2776,266 +2765,6 @@ static struct sec_proc_operations sec_proc_ops = {
     .set_grip_handle   = sec_set_grip_handle,
 };
 
-// for findX
-int sec_kernel_grip_print_func(struct seq_file *s, struct chip_data_s6sy761 *chip_info)
-{
-    if (!chip_info) {
-        TPD_INFO("%s read grip info failed.\n", __func__);
-        return 0;
-    }
-    seq_printf(s, "skip area:%d, %d, %d.\n",
-                chip_info->grip_area.edgescreen_switch,
-                chip_info->grip_area.ver_edgescreen_y1,
-                chip_info->grip_area.ver_edgescreen_y2);
-
-    seq_printf(s, "\n");
-
-    return 0;
-}
-
-static int sec_kernel_grip_read_func(struct seq_file *s, void *v)
-{
-    struct touchpanel_data *ts = (struct touchpanel_data *)s->private;
-    struct chip_data_s6sy761 *chip_info = (struct chip_data_s6sy761 *)ts->chip_data;
-
-    if (!chip_info) {
-        TPD_INFO("%s read grip info failed.\n", __func__);
-    }
-
-    return sec_kernel_grip_print_func(s, chip_info);
-}
-
-static int sec_str_to_int(char *in, int start_pos, int end_pos)
-{
-    int i = 0, value = 0;
-
-    if (start_pos > end_pos) {
-        TPD_INFO("wrong pos : (%d, %d).\n", start_pos, end_pos);
-        return -1;
-    }
-
-    for (i = start_pos; i <= end_pos; i++) {
-        value = (value * 10) + (in[i] - '0');
-    }
-
-    TPD_INFO("%s return %d.\n", __func__, value);
-    return value;
-}
-
-//parse string according to name:value1,value2,value3...
-static int sec_str_parse(char *in, char *name, uint16_t max_len, uint16_t *array, uint16_t array_max)
-{
-    int i = 0, in_cnt = 0, name_index = 0;
-    int start_pos = 0, value_cnt = 0;
-
-    if (!array || !in) {
-        TPD_INFO("%s:array or in is null.\n", __func__);
-        return -1;
-    }
-
-    in_cnt = strlen(in);
-
-    //parse name
-    for (i = 0; i < in_cnt; i++) {
-        if (':' == in[i]) {     //split name and parameter by ":" symbol
-            if (i > max_len) {
-                TPD_INFO("%s:string %s name too long.\n", __func__, in);
-                return -1;
-            }
-            name_index = i;
-            memcpy(name, in, name_index);   //copy to name buffer
-            TPD_INFO("%s:set name %s.\n", __func__, name);
-        }
-    }
-
-    //parse parameter and put it into split_value array
-    start_pos = name_index + 1;
-    for (i = name_index + 1; i <= in_cnt; i++) {
-        if (in[i] < '0' || in[i] > '9') {
-            if ((' ' == in[i]) || (0 == in[i]) || ('\n' == in[i]) || (',' == in[i])) {
-                if (value_cnt <= array_max) {
-                    array[value_cnt++] = sec_str_to_int(in, start_pos, i - 1);
-                    start_pos = i + 1;
-                } else {
-                    TPD_INFO("%s: too many parameter(%s).\n", __func__, in);
-                    return -1;
-                }
-            } else {
-                TPD_INFO("%s: incorrect char 0x%02x in %s.\n", __func__, in[i], in);
-                return -1;
-            }
-        }
-    }
-
-    return 0;
-}
-
-static void sec_skip_area_modify(struct chip_data_s6sy761 *chip_info, char *in)
-{
-    int ret = 0;
-    char name[64] = {0};
-    uint16_t split_value[10] = {0};
-
-    if (!in) {
-        TPD_INFO("%s: in is null.\n", __func__);
-        return;
-    }
-
-    ret = sec_str_parse(in, name, 64, split_value, 10);
-    if (ret < 0) {
-        TPD_INFO("%s str parse failed.\n", __func__);
-        return;
-    }
-
-    //add for 17107 special processing mode
-    if (split_value[0] == 0) {
-        split_value[0] = 2;
-    }
-
-    chip_info->grip_area.edgescreen_switch = split_value[0];
-    chip_info->grip_area.ver_edgescreen_y1 = split_value[1];
-    chip_info->grip_area.ver_edgescreen_y2 = split_value[2];
-    TPD_INFO("set skip (%d,%d,%d).\n",
-        chip_info->grip_area.edgescreen_switch,
-        chip_info->grip_area.ver_edgescreen_y1,
-        chip_info->grip_area.ver_edgescreen_y2);
-
-    return;
-}
-
-//format is opearation object name:x,y,z,m,m
-static int sec_kernel_grip_parse(struct chip_data_s6sy761 *chip_info, char *input, int len)
-{
-    bool cmd = false;
-    bool object = false;
-    int i = 0;
-    int str_cnt = 0;
-    int start_pos = 0;
-    int end_pos = 0;
-    char split_str[20][64] = {{0}};
-
-    //split string using space
-    for (i = 1; i < len; i++) {
-        if ((' ' == input[i]) || (len - 1 == i)) {      //find a space or to the end
-            if (' ' == input[i]) {
-                end_pos = i - 1;
-            } else {
-                end_pos = i;
-            }
-
-            if (end_pos - start_pos + 1 > GRIP_TAG_SIZE) {
-                input[i] = '\0';
-                TPD_INFO("found too long string:%s, return.\n", &input[start_pos]);
-                return 0;
-            }
-            if (str_cnt >= MAX_STRING_CNT) {
-                input[i] = '\0';
-                TPD_INFO("found too many string:%d, last:%s.\n", str_cnt, &input[start_pos]);
-                return 0;
-            }
-
-            memcpy(split_str[str_cnt], &input[start_pos], end_pos - start_pos + 1);   //copy to str buffer
-            start_pos = i + 1;
-            str_cnt++;
-        }
-    }
-
-    i = 0;
-    str_cnt--;          //get real count
-    while (i < str_cnt) {
-        if (false == cmd) {
-            if (!strcmp(split_str[i], "mod")) {
-                cmd = true;
-                i++;
-            }
-        }
-
-        if (false == object) {
-            if (!strcmp(split_str[i], "edgescreen")) {
-                object = true;
-                i++;
-                TPD_INFO("set object to edgescreen.\n");
-            }
-        }
-
-    if (object) {
-            if (cmd) {
-                TPD_INFO("modify %d by %s.\n", object, split_str[i]);
-                sec_skip_area_modify(chip_info, split_str[i]);
-            } else {
-                TPD_INFO("not support %d opeartion for skip handle modify.\n", cmd);
-            }
-        }
-
-        cmd = false;       //reset cmd status
-        object = false;     //reset object status
-        i++;
-    }
-
-    return 0;
-}
-
-static ssize_t sec_kernel_grip_write(struct file *file, const char __user *buffer, size_t count, loff_t *ppos)
-{
-    char buf[PAGESIZE] = {0};
-
-    struct touchpanel_data *ts = PDE_DATA(file_inode(file));
-
-    if (!ts)
-        return count;
-
-    if (count > PAGESIZE) {
-        TPD_INFO("%s: count is too large :%d.\n",  __func__, (int)count);
-        return count;
-    }
-    if (copy_from_user(buf, buffer, count)) {
-        TPD_INFO("%s: read proc input error.\n", __func__);
-        return count;
-    }
-
-    mutex_lock(&ts->mutex);
-    sec_kernel_grip_parse((struct chip_data_s6sy761 *)ts->chip_data, buf, count);
-    if (ts->is_suspended == 0) {
-        int ret;
-        ret = ts->ts_ops->mode_switch(ts->chip_data, MODE_EDGE, ts->limit_edge);
-        if (ret < 0) {
-            TPD_INFO("%s, Touchpanel operate mode switch failed\n", __func__);
-        }
-    }
-    mutex_unlock(&ts->mutex);
-
-    return count;
-}
-
-static int sec_kernel_grip_open(struct inode *inode, struct file *file)
-{
-    return single_open(file, sec_kernel_grip_read_func, PDE_DATA(inode));
-}
-
-static const struct file_operations sec_kernel_grip_fops = {
-    .owner = THIS_MODULE,
-    .open  = sec_kernel_grip_open,
-    .read  = seq_read,
-    .write = sec_kernel_grip_write,
-    .release = single_release,
-};
-
-
-static void sec_init_kernel_grip_proc(struct proc_dir_entry *prEntry_tp, struct touchpanel_data *ts)
-{
-    int ret = 0;
-    struct proc_dir_entry *prEntry_tmp = NULL;
-
-
-    prEntry_tmp = proc_create_data("kernel_grip_handle", 0666, prEntry_tp, &sec_kernel_grip_fops, ts);
-    if (prEntry_tmp == NULL) {
-        ret = -ENOMEM;
-        TPD_INFO("%s: Couldn't create kernel grip proc entry, %d\n", __func__, __LINE__);
-    }
-}
-// for findX end
-
-
 /*********** Start of I2C Driver and Implementation of it's callbacks*************************/
 static int sec_tp_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
@@ -3098,12 +2827,6 @@ static int sec_tp_probe(struct i2c_client *client, const struct i2c_device_id *i
     /* 6. create debug interface*/
     sec_raw_device_init(ts);
     sec_create_proc(ts, &sec_proc_ops);
-
-    //special for findx
-    if (!ts->kernel_grip_support&&ts->kernel_grip_support_special) {
-        sec_init_kernel_grip_proc(ts->prEntry_tp, ts);
-
-    }
     TPD_INFO("%s, probe normal end\n", __func__);
     return 0;
 

@@ -1507,7 +1507,6 @@ static fw_update_state synaptics_fw_update(void *chip_data, const struct firmwar
     uint8_t bootloder_id[10];
     uint16_t block, firmware, configuration;
     uint32_t CURRENT_FIRMWARE_ID = 0, FIRMWARE_ID = 0;
-    unsigned char productid[8];
     const uint8_t *Config_Data = NULL;
     const uint8_t *Firmware_Data = NULL;
     struct image_header_data header;
@@ -1536,13 +1535,8 @@ static fw_update_state synaptics_fw_update(void *chip_data, const struct firmwar
     FIRMWARE_ID = (Config_Data[0] << 24)|(Config_Data[1] << 16)|(Config_Data[2] << 8)|Config_Data[3];
     TPD_INFO("CURRENT TP FIRMWARE ID is 0x%x, FIRMWARE IMAGE ID is 0x%x\n", CURRENT_FIRMWARE_ID, FIRMWARE_ID);
 
-    ret = touch_i2c_write_byte(chip_info->client, 0xff, 0x0);
-    ret = touch_i2c_read_block(chip_info->client, chip_info->reg_info.F01_RMI_QUERY_BASE + 11, 8, productid);
-    productid[7] = '\0';
-    TPD_INFO("%s: TP PROCUDTID is %s\n", __func__, productid);
-
     if (!force) {
-        if ((CURRENT_FIRMWARE_ID == FIRMWARE_ID) || !strstr(productid, "s3508")) {
+        if (CURRENT_FIRMWARE_ID == FIRMWARE_ID) {
             return FW_NO_NEED_UPDATE;
         }
     }
@@ -1774,8 +1768,6 @@ RE_TRY:
     ret = touch_i2c_write_byte(chip_info->client, 0xff, 0x1);
     if (ret < 0) {
         TPD_INFO("%s,I2C transfer error\n", __func__);
-        kfree(raw_data);
-        raw_data = NULL;
         return;
     }
     touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F54_ANALOG_COMMAND_BASE, 0X02); //forcecal

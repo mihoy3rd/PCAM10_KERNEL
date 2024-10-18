@@ -1734,8 +1734,6 @@ RE_TRY:
     ret = touch_i2c_write_byte(chip_info->client, 0xff, 0x1);
     if (ret < 0) {
         TPD_INFO("%s,I2C transfer error\n", __func__);
-        kfree(raw_data);
-        raw_data = NULL;
         return;
     }
     touch_i2c_write_byte(chip_info->client, chip_info->reg_info.F54_ANALOG_COMMAND_BASE, 0X02); //forcecal
