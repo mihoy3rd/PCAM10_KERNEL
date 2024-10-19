@@ -27,7 +27,7 @@
 #define dcm_pr_dbg(fmt, args...)			\
 	do {						\
 		if (dcm_debug)				\
-			pr_debug(TAG fmt, ##args);	\
+			pr_info(TAG fmt, ##args);	\
 	} while (0)
 
 /** macro **/

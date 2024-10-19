@@ -81,6 +81,14 @@ enum {
 	IMAGE_HV_MIRROR
 };
 
+#ifdef VENDOR_EDIT
+enum {
+    SECURE_NONE = 0x00,
+    SECURE_STATIC = 0x01,
+    SECURE_DYNAMIC = 0x02,
+};
+#endif
+
 typedef enum {
 	MSDK_SCENARIO_ID_CAMERA_PREVIEW = 0,
 	MSDK_SCENARIO_ID_CAMERA_CAPTURE_JPEG,
@@ -113,7 +121,12 @@ typedef enum {
 ********************************************************************************/
 
 /*  */
+#ifdef VENDOR_EDIT
+/*pankaj.kumar@Camera.Driver modify to support all sensor for 18311/17331 20190406*/
+#define MAX_NUM_OF_SUPPORT_SENSOR 35
+#else
 #define MAX_NUM_OF_SUPPORT_SENSOR 20
+#endif
 /*  */
 #define SENSOR_CLOCK_POLARITY_HIGH    0
 #define SENSOR_CLOCK_POLARITY_LOW 1
@@ -270,8 +283,11 @@ typedef enum {
 	SENSOR_FEATURE_GET_PIXEL_CLOCK_FREQ_BY_SCENARIO,
 	SENSOR_FEATURE_GET_PERIOD_BY_SCENARIO,
 	SENSOR_FEATURE_GET_BINNING_TYPE,
-	SENSOR_FEATURE_GET_CTRL_PIN_CAPABILITY,
 	SENOSR_FEATURE_GET_OFFSET_TO_START_OF_EXPOSURE,
+    #ifdef VENDOR_EDIT
+	/*Henry.Chang@Camera.Driver modify for ModuleInfo 2019/05/30*/
+	SENSOR_FEATURE_GET_MODULE_INFO,
+    #endif
 	SENSOR_FEATURE_MAX
 } ACDK_SENSOR_FEATURE_ENUM;
 
@@ -577,6 +593,9 @@ typedef struct {
 	MUINT16 SensorVerFOV;
 	MUINT16 SensorOrientation;
 	MUINT32 SensorModuleID;
+       #ifdef VENDOR_EDIT
+       MUINT8 sensorSecureType;
+       #endif
 } ACDK_SENSOR_INFO_STRUCT, *PACDK_SENSOR_INFO_STRUCT;
 
 #define ACDK_SENSOR_INFO2_STRUCT ACDK_SENSOR_INFO_STRUCT

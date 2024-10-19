@@ -118,8 +118,8 @@ static bool __pd_get_event(
 
 	tcpc_dev->pd_event_count--;
 
-	*pd_event = tcpc_dev->
-		pd_event_ring_buffer[tcpc_dev->pd_event_head_index];
+	*pd_event =
+		tcpc_dev->pd_event_ring_buffer[tcpc_dev->pd_event_head_index];
 
 	if (tcpc_dev->pd_event_count) {
 		index = tcpc_dev->pd_event_head_index + 1;
@@ -430,8 +430,8 @@ static bool __pd_get_deferred_tcp_event(
 
 	tcpc_dev->tcp_event_count--;
 
-	*tcp_event = tcpc_dev->
-		tcp_event_ring_buffer[tcpc_dev->tcp_event_head_index];
+	*tcp_event =
+		tcpc_dev->tcp_event_ring_buffer[tcpc_dev->tcp_event_head_index];
 
 	if (tcpc_dev->tcp_event_count) {
 		index = tcpc_dev->tcp_event_head_index + 1;

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2016 MediaTek Inc.
+ * Copyright (C) 2017 MediaTek Inc.
  *
- * MediaTek RT5081 Type-C Port Control Driver
+ * Mediatek MT6370 Type-C Port Control Driver
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -61,7 +61,7 @@ struct rt5081_chip {
 	struct kthread_worker irq_worker;
 	struct kthread_work irq_work;
 	struct task_struct *irq_worker_task;
-	struct wake_lock irq_wake_lock;
+	struct wakeup_source irq_wake_lock;
 
 	atomic_t poll_count;
 	struct delayed_work	poll_work;
@@ -375,8 +375,8 @@ static int rt5081_regmap_init(struct rt5081_chip *chip)
 	if ((!props->name) || (!props->aliases))
 		return -ENOMEM;
 
-	strlcpy((char *)props->name, name, len + 1);
-	strlcpy((char *)props->aliases, name, len + 1);
+	strlcpy((char *)props->name, name, strlen(name)+1);
+	strlcpy((char *)props->aliases, name, strlen(name)+1);
 	props->io_log_en = 0;
 
 	chip->m_dev = rt_regmap_device_register(props,
@@ -532,7 +532,7 @@ static irqreturn_t rt5081_intr_handler(int irq, void *data)
 {
 	struct rt5081_chip *chip = data;
 
-	wake_lock_timeout(&chip->irq_wake_lock, RT5081_IRQ_WAKE_TIME);
+	__pm_wakeup_event(&chip->irq_wake_lock, RT5081_IRQ_WAKE_TIME);
 
 #ifdef DEBUG_GPIO
 	gpio_set_value(DEBUG_GPIO, 0);
@@ -817,29 +817,6 @@ int rt5081_fault_status_clear(struct tcpc_device *tcpc, uint8_t status)
 	return 0;
 }
 
-int rt5081_get_alert_mask(struct tcpc_device *tcpc, uint32_t *mask)
-{
-	int ret;
-#ifdef CONFIG_TCPC_VSAFE0V_DETECT_IC
-	uint8_t v2;
-#endif
-
-	ret = rt5081_i2c_read16(tcpc, TCPC_V10_REG_ALERT_MASK);
-	if (ret < 0)
-		return ret;
-	*mask = (uint16_t) ret;
-
-#ifdef CONFIG_TCPC_VSAFE0V_DETECT_IC
-	ret = rt5081_i2c_read8(tcpc, RT5081_REG_RT_MASK);
-	if (ret < 0)
-		return ret;
-
-	v2 = (uint8_t) ret;
-	*mask |= v2 << 16;
-#endif
-	return 0;
-}
-
 int rt5081_get_alert_status(struct tcpc_device *tcpc, uint32_t *alert)
 {
 	int ret;
@@ -1057,6 +1034,10 @@ static int rt5081_set_low_power_mode(
 
 		if (pull & TYPEC_CC_RP)
 			data |= RT5081_REG_BMCIO_LPRPRD;
+
+#ifdef CONFIG_TYPEC_CAP_NORP_SRC
+		data |= RT5081_REG_BMCIO_BG_EN | RT5081_REG_VBUS_DET_EN;
+#endif	/* CONFIG_TYPEC_CAP_NORP_SRC */
 	} else
 		data = RT5081_REG_BMCIO_BG_EN |
 			RT5081_REG_VBUS_DET_EN | RT5081_REG_BMCIO_OSC_EN;
@@ -1242,7 +1223,6 @@ static struct tcpc_ops rt5081_tcpc_ops = {
 	.init = rt5081_tcpc_init,
 	.alert_status_clear = rt5081_alert_status_clear,
 	.fault_status_clear = rt5081_fault_status_clear,
-	.get_alert_mask = rt5081_get_alert_mask,
 	.get_alert_status = rt5081_get_alert_status,
 	.get_power_status = rt5081_get_power_status,
 	.get_fault_status = rt5081_get_fault_status,
@@ -1424,17 +1404,14 @@ static int rt5081_tcpcdev_init(struct rt5081_chip *chip, struct device *dev)
 	}
 #endif	/* CONFIG_TCPC_VCONN_SUPPLY_MODE */
 
-	if (of_property_read_string(np, "mt-tcpc,name",
-				(char const **)&name) < 0) {
-		dev_info(dev, "use default name\n");
-	}
+	of_property_read_string(np, "rt-tcpc,name", (char const **)&name);
 
 	len = strlen(name);
 	desc->name = kzalloc(len+1, GFP_KERNEL);
 	if (!desc->name)
 		return -ENOMEM;
 
-	strlcpy((char *)desc->name, name, len + 1);
+	strlcpy((char *)desc->name, name, strlen(name)+1);
 
 	chip->tcpc_desc = desc;
 
@@ -1546,7 +1523,7 @@ static int rt5081_i2c_probe(struct i2c_client *client,
 	sema_init(&chip->suspend_lock, 1);
 	i2c_set_clientdata(client, chip);
 	INIT_DELAYED_WORK(&chip->poll_work, rt5081_poll_work);
-	wake_lock_init(&chip->irq_wake_lock, WAKE_LOCK_SUSPEND,
+	wakeup_source_init(&chip->irq_wake_lock,
 		"rt5081_irq_wakelock");
 
 	chip->chip_id = chip_id;

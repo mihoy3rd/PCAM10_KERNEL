@@ -68,8 +68,21 @@ int disp_lcm_is_partial_support(struct disp_lcm_handle *plcm);
 int disp_lcm_validate_roi(struct disp_lcm_handle *plcm, int *x, int *y, int *w, int *h);
 int disp_lcm_aod(struct disp_lcm_handle *plcm, int enter);
 #ifdef VENDOR_EDIT
+/*
+* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/02/14,
+* modify for support aod state.
+*/
+int disp_lcm_aod_from_display_on(struct disp_lcm_handle *plcm);
+int disp_lcm_set_aod_mode(struct disp_lcm_handle *plcm, void *handle, unsigned int mode);
+int mtk_disp_lcm_set_hbm(bool en, struct disp_lcm_handle *plcm, void *qhandle);
+int disp_lcm_set_hbm_wait_ramless(bool wait, struct disp_lcm_handle *plcm, void *qhandle);
+int disp_lcm_get_hbm_state(struct disp_lcm_handle *plcm);
+int disp_lcm_get_hbm_wait(struct disp_lcm_handle *plcm);
+int disp_lcm_set_hbm_wait(bool wait, struct disp_lcm_handle *plcm);
+unsigned int disp_lcm_get_hbm_time(bool en, struct disp_lcm_handle *plcm);
 /* Yongpeng.Yi@PSW.MultiMedia.Display.LCD.Machine, 2018/09/10, Add for Porting cabc interface */
 int disp_lcm_oppo_set_lcm_cabc_cmd(struct disp_lcm_handle *plcm, void *handle, unsigned int level);
+int disp_lcm_set_safe_mode(struct disp_lcm_handle *plcm, void *handle, unsigned int mode);
 /*
 * liping-m@PSW.MM.Display.LCD.Stability, 2018/07/21,
 * add power seq api for ulps

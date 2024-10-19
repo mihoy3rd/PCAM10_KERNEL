@@ -97,8 +97,15 @@ static inline bool pd_process_ctrl_msg_get_sink_cap(
 	}
 #endif	/* CONFIG_USB_PD_PR_SWAP */
 
-	pd_send_sop_ctrl_msg(pd_port, PD_CTRL_REJECT);
-	return false;
+#ifdef CONFIG_USB_PD_REV30
+	if (pd_port->pd_revision[0] >= PD_REV30) {
+		pd_port->curr_unsupported_msg = true;
+		return false;
+	}
+#endif	/* CONFIG_USB_PD_REV30 */
+
+	PE_TRANSIT_STATE(pd_port, PE_REJECT);
+	return true;
 }
 
 static inline bool pd_process_ctrl_msg(
@@ -456,7 +463,7 @@ static inline bool pd_process_timer_msg(
 			PE_SRC_CBL_SEND_SOFT_RESET, PE_SRC_SEND_CAPABILITIES);
 #endif	/*  CONFIG_PD_SRC_RESET_CABLE */
 #endif
-
+		/* fall-through */
 	case PD_TIMER_PS_HARD_RESET:
 		return PE_MAKE_STATE_TRANSIT(PD_TIMER_PS_HARD_RESET);
 

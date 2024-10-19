@@ -921,7 +921,8 @@ static kal_uint32 get_imgsensor_id(UINT32 *sensor_id)
 		spin_unlock(&imgsensor_drv_lock);
 		do {
 			*sensor_id = ((read_cmos_sensor_8(0x0000) << 8) | read_cmos_sensor_8(0x0001));
-			LOG_INF("read_0x0000=0x%x, 0x0001=0x%x,0x0000_0001=0x%x\n",read_cmos_sensor_8(0x0000),read_cmos_sensor_8(0x0001),read_cmos_sensor(0x0000));
+			LOG_INF("s5k4h7 read_0x0000=0x%x, 0x0001=0x%x,0x0000_0001=0x%x\n",
+				read_cmos_sensor_8(0x0000),read_cmos_sensor_8(0x0001),read_cmos_sensor(0x0000));
 			if (*sensor_id == imgsensor_info.sensor_id) {
 			#ifdef VENDOR_EDIT
 			/*zhengjiang.zhu@Camera.Drv, 2017/10/18 add for register device info*/
@@ -1326,7 +1327,7 @@ static kal_uint32 get_info(MSDK_SCENARIO_ID_ENUM scenario_id,
 	sensor_info->SensorPacketECCOrder = 1;
 	//#ifdef VENDOR_EDIT
 	/* Bin.Li@BSP.bootloader.bootflow, 2018/06/07, Add for secure camera */
-	//sensor_info->sensorSecureType = SECURE_DYNAMIC;
+	sensor_info->sensorSecureType = SECURE_DYNAMIC;
 	//#endif /*VENDOR_EDIT*/
 
 	switch (scenario_id) {

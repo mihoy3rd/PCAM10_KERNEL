@@ -244,12 +244,12 @@ static void write_cmos_sensor(kal_uint32 addr, kal_uint32 para)
 
 #ifdef VENDOR_EDIT
 /*Henry.Chang@Camera.Driver add for 18531 ModuleSN*/
-static kal_uint8 gGc5035_SN[16];
+static kal_uint8 gGc5035_SN[CAMERA_MODULE_SN_LENGTH];
 static void read_eeprom_SN(void)
 {
 	kal_uint16 idx = 0;
 	kal_uint8 *get_byte= &gGc5035_SN[0];
-	for (idx = 0; idx <16; idx++) {
+	for (idx = 0; idx <CAMERA_MODULE_SN_LENGTH; idx++) {
 		char pusendcmd[2] = {0x00 , (char)((0xE0 + idx) & 0xFF) };
 		iReadRegI2C(pusendcmd , 2, (u8*)&get_byte[idx],1, 0xA0);
 		LOG_INF("gGc5035_SN[%d]: 0x%x  0x%x\n", idx, get_byte[idx], gGc5035_SN[idx]);
@@ -2441,18 +2441,19 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 
 	LOG_INF("feature_id = %d\n", feature_id);
 	switch (feature_id) {
-    #ifdef VENDOR_EDIT
-    /*Henry.Chang@Camera.Driver add for 18531 ModuleSN*/
-    case SENSOR_FEATURE_GET_MODULE_SN:
-        LOG_INF("gc5035 GET_MODULE_SN:%d %d\n", *feature_para_len, *feature_data_32);
-        if (*feature_data_32 < 4)
-            *(feature_data_32 + 1) = (gGc5035_SN[4*(*feature_data_32) + 3] << 24)
-                        | (gGc5035_SN[4*(*feature_data_32) + 2] << 16)
-                        | (gGc5035_SN[4*(*feature_data_32) + 1] << 8)
-                        | (gGc5035_SN[4*(*feature_data_32)] & 0xFF);
-        break;
-    /*Henry.Chang@camera.driver 20181129, add for sensor Module SET*/
-    case SENSOR_FEATURE_SET_SENSOR_OTP:
+	#ifdef VENDOR_EDIT
+	/*Henry.Chang@Camera.Driver add for 18531 ModuleSN*/
+	case SENSOR_FEATURE_GET_MODULE_SN:
+		LOG_INF("gc5035 GET_MODULE_SN:%d %d\n", *feature_para_len, *feature_data_32);
+		if (*feature_data_32 < CAMERA_MODULE_SN_LENGTH/4) {
+			*(feature_data_32 + 1) = (gGc5035_SN[4*(*feature_data_32) + 3] << 24)
+						| (gGc5035_SN[4*(*feature_data_32) + 2] << 16)
+						| (gGc5035_SN[4*(*feature_data_32) + 1] << 8)
+						| (gGc5035_SN[4*(*feature_data_32)] & 0xFF);
+		}
+		break;
+	/*Henry.Chang@camera.driver 20181129, add for sensor Module SET*/
+	case SENSOR_FEATURE_SET_SENSOR_OTP:
 	{
 		kal_int32 ret = IMGSENSOR_RETURN_SUCCESS;
 		LOG_INF("SENSOR_FEATURE_SET_SENSOR_OTP length :%d\n", (UINT32)*feature_para_len);
@@ -2463,6 +2464,41 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 			return ERROR_MSDK_IS_ACTIVED;
 	}
     #endif
+    case SENSOR_FEATURE_GET_PERIOD_BY_SCENARIO:
+        switch (*feature_data) {
+        case MSDK_SCENARIO_ID_CAMERA_CAPTURE_JPEG:
+                *(MUINT32 *)(uintptr_t)(*(feature_data + 1))
+                        = (imgsensor_info.cap.framelength << 16)
+                                 + imgsensor_info.cap.linelength;
+                break;
+        case MSDK_SCENARIO_ID_VIDEO_PREVIEW:
+                *(MUINT32 *)(uintptr_t)(*(feature_data + 1))
+                        = (imgsensor_info.normal_video.framelength << 16)
+                                + imgsensor_info.normal_video.linelength;
+                break;
+        case MSDK_SCENARIO_ID_HIGH_SPEED_VIDEO:
+                *(MUINT32 *)(uintptr_t)(*(feature_data + 1))
+                        = (imgsensor_info.hs_video.framelength << 16)
+                                 + imgsensor_info.hs_video.linelength;
+                break;
+        case MSDK_SCENARIO_ID_SLIM_VIDEO:
+                *(MUINT32 *)(uintptr_t)(*(feature_data + 1))
+                        = (imgsensor_info.slim_video.framelength << 16)
+                                 + imgsensor_info.slim_video.linelength;
+                break;
+        case MSDK_SCENARIO_ID_CUSTOM1:
+                *(MUINT32 *)(uintptr_t)(*(feature_data + 1))
+                        = (imgsensor_info.custom1.framelength << 16)
+                                 + imgsensor_info.custom1.linelength;
+                break;
+        case MSDK_SCENARIO_ID_CAMERA_PREVIEW:
+        default:
+                *(MUINT32 *)(uintptr_t)(*(feature_data + 1))
+                        = (imgsensor_info.pre.framelength << 16)
+                                 + imgsensor_info.pre.linelength;
+                break;
+        }
+        break;
 	case SENSOR_FEATURE_GET_PERIOD:
 		*feature_return_para_16++ = imgsensor.line_length;
 		*feature_return_para_16 = imgsensor.frame_length;

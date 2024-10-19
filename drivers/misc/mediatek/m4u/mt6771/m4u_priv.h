@@ -220,7 +220,7 @@ int m4u_reg_backup(void);
 int m4u_reg_restore(void);
 int m4u_insert_seq_range(M4U_PORT_ID port, unsigned int MVAStart, unsigned int MVAEnd);
 int m4u_invalid_seq_range_by_id(int port, int seq_id);
-void m4u_print_port_status(struct seq_file *seq, int only_print_active);
+void m4u_print_port_status(struct seq_file *seq, int tf_port);
 
 int m4u_dump_main_tlb(int m4u_id, int m4u_slave_id);
 int m4u_dump_pfh_tlb(int m4u_id);
@@ -385,7 +385,7 @@ struct M4U_DMA_STRUCT {
 
 #define MTK_M4U_T_SEC_INIT	    _IOW(MTK_M4U_MAGICNO, 50, int)
 
-#ifdef CONFIG_MACH_MT6763
+#if (defined(CONFIG_MACH_MT6763) || defined(CONFIG_MACH_MT6771))
 int larb_clock_on(int larb, bool config_mtcmos);
 int larb_clock_off(int larb, bool config_mtcmos);
 #endif

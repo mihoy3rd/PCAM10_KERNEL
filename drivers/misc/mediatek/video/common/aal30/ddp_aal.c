@@ -57,6 +57,14 @@
 #include "mt-plat/mtk_chip.h"
 #endif
 
+#ifdef VENDOR_EDIT
+/*
+Ling.Guo@PSW.MultiMedia.Display.LCD.Machine, 2019/06/27,
+add for aod remove aal backlight set.
+*/
+#include <soc/oppo/oppo_project.h>
+#endif /*VENDOR_EDIT*/
+
 #if defined(CONFIG_MACH_ELBRUS) || defined(CONFIG_MACH_MT6757) || defined(CONFIG_MACH_KIBOPLUS) || \
 	defined(CONFIG_MACH_MT6799) || defined(CONFIG_MACH_MT6763) || defined(CONFIG_MACH_MT6758) \
 	|| defined(CONFIG_MACH_MT6775) || defined(CONFIG_MACH_MT6739) || defined(CONFIG_MACH_MT6771)
@@ -1269,6 +1277,11 @@ void disp_aal_notify_backlight_changed(int bl_1024)
 	g_aal_hist.serviceFlags |= service_flags;
 	spin_unlock_irqrestore(&g_aal_hist_lock, flags);
 
+	#ifndef VENDOR_EDIT
+	/*
+	* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/02/14,
+	* modify for support aod state.
+	*/
 	if (atomic_read(&g_aal_is_init_regs_valid) == 1) {
 		spin_lock_irqsave(&g_aal_irq_en_lock, flags);
 		atomic_set(&g_aal_force_enable_irq, 1);
@@ -1277,6 +1290,21 @@ void disp_aal_notify_backlight_changed(int bl_1024)
 		/* Backlight latency should be as smaller as possible */
 		disp_aal_trigger_refresh(AAL_REFRESH_17MS);
 	}
+	#else
+	if (is_project(OPPO_19531) || is_project(OPPO_19391) \
+		|| is_project(19151) || is_project(19350)) {
+		backlight_brightness_set_with_lock(bl_1024);
+	} else {
+		if (atomic_read(&g_aal_is_init_regs_valid) == 1) {
+			spin_lock_irqsave(&g_aal_irq_en_lock, flags);
+			atomic_set(&g_aal_force_enable_irq, 1);
+			disp_aal_set_interrupt(1);
+			spin_unlock_irqrestore(&g_aal_irq_en_lock, flags);
+			/* Backlight latency should be as smaller as possible */
+			disp_aal_trigger_refresh(AAL_REFRESH_17MS);
+		}
+	}
+	#endif
 }
 
 
@@ -1469,7 +1497,18 @@ int disp_aal_set_param(struct DISP_AAL_PARAM __user *param, enum DISP_MODULE_ENU
 	}
 	#endif
 
+	#ifndef VENDOR_EDIT
+	/*
+	* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/02/14,
+	* modify for support aod state.
+	*/
 	backlight_brightness_set(backlight_value);
+	#else
+	if (!(is_project(OPPO_19531) || is_project(OPPO_19391) \
+		||is_project(19151) || is_project(19350))) {
+		backlight_brightness_set(backlight_value);
+	}
+	#endif
 
 	disp_aal_trigger_refresh(g_aal_param.refreshLatency);
 

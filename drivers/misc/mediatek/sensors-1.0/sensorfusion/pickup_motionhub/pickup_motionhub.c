@@ -16,14 +16,20 @@
 #include <SCP_sensorHub.h>
 #include <linux/notifier.h>
 #include "scp_helper.h"
-
+#ifdef VENDOR_EDIT
+//tangjh@PSW.bsp.sensor 2019/7/6 add for report event
+#include <linux/pm_wakeup.h>
+#endif
 #define PICKUP_MOTION_TAG                   "[pickup_motionhub] "
 #define PICKUP_MOTION_FUN(f)                pr_err(PICKUP_MOTION_TAG"%s\n", __func__)
 #define PICKUP_MOTION_PR_ERR(fmt, args...)  pr_err(PICKUP_MOTION_TAG"%s %d : "fmt, __func__, __LINE__, ##args)
 #define PICKUP_MOTION_LOG(fmt, args...)     pr_err(PICKUP_MOTION_TAG fmt, ##args)
 
 static struct fusion_init_info pickup_motionhub_init_info;
-
+#ifdef VENDOR_EDIT
+//tangjh@PSW.bsp.sensor 2019/7/6 add for report event 
+static struct wakeup_source oppo_pickup_wake_lock;
+#endif
 static int pickup_motion_get_data(int *x, int *y, int *z, int *scalar, int *status)
 {
     int err = 0;
@@ -97,6 +103,10 @@ static int pickup_motion_recv_data(struct data_unit_t *event, void *reserved)
 
     if (event->flush_action == DATA_ACTION)
     {
+        #ifdef VENDOR_EDIT
+        //tangjh@PSW.bsp.sensor 2019/7/6 add for report event
+        __pm_wakeup_event(&oppo_pickup_wake_lock, msecs_to_jiffies(100));
+        #endif
         pickup_motion_data_report(event->pickup_motion_data_t.value, event->pickup_motion_data_t.report_count, (int64_t)event->time_stamp);
     }
     else if (event->flush_action == FLUSH_ACTION)
@@ -150,6 +160,10 @@ static int pickup_motionhub_local_init(void)
         PICKUP_MOTION_PR_ERR("SCP_sensorHub_data_registration failed\n");
         goto exit;
     }
+    #ifdef VENDOR_EDIT
+    //tangjh@PSW.bsp.sensor 2019/7/6 add for report event
+    wakeup_source_init(&oppo_pickup_wake_lock, "oppo_pickup_wake_lock");
+    #endif
     return 0;
 exit:
     return -1;

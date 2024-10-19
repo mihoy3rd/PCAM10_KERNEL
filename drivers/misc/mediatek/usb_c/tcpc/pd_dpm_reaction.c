@@ -379,24 +379,6 @@ static inline uint8_t dpm_get_pd_connect_state(struct pd_port *pd_port)
 	return PD_CONNECT_PE_READY_SNK;
 }
 
-static inline void dpm_check_vconn_highv_prot(struct pd_port *pd_port)
-{
-#ifdef CONFIG_USB_PD_VCONN_SAFE5V_ONLY
-	bool vconn_highv_prot;
-	struct pe_data *pe_data = &pd_port->pe_data;
-
-	vconn_highv_prot = pd_port->request_v_new > 5000;
-	if (vconn_highv_prot != pe_data->vconn_highv_prot) {
-		DPM_INFO("VC_HIGHV_PROT: %d\r\n", vconn_highv_prot);
-
-		pe_data->vconn_highv_prot = vconn_highv_prot;
-
-		if (!vconn_highv_prot)
-			pd_set_vconn(pd_port, pd_port->vconn_role);
-	}
-#endif	/* CONFIG_USB_PD_VCONN_SAFE5V_ONLY */
-}
-
 static uint8_t dpm_reaction_update_pe_ready(struct pd_port *pd_port)
 {
 	uint8_t state;
@@ -412,7 +394,13 @@ static uint8_t dpm_reaction_update_pe_ready(struct pd_port *pd_port)
 	state = dpm_get_pd_connect_state(pd_port);
 	pd_update_connect_state(pd_port, state);
 
-	dpm_check_vconn_highv_prot(pd_port);
+	pd_dpm_vconn_highv_protect(pd_port, VCONN_HIGHV_PROT_READY);
+
+	if (pd_port->tcpc_dev->tcp_event_count) {
+		DPM_INFO("PE_BUSY\r\n");
+		return 0;
+	}
+
 	pd_dpm_dynamic_disable_vconn(pd_port);
 
 #ifdef CONFIG_USB_PD_REV30_COLLISION_AVOID
@@ -537,6 +525,12 @@ static const struct dpm_ready_reaction dpm_reactions[] = {
 #endif	/* CONFIG_USB_PD_DPM_AUTO_GET_STATUS */
 #endif	/* CONFIG_USB_PD_REV30 */
 
+#ifdef CONFIG_USB_PD_DFP_FLOW_DELAY
+	DECL_DPM_REACTION_DFP(
+		DPM_REACTION_DFP_FLOW_DELAY,
+		dpm_reaction_dfp_flow_delay),
+#endif	/* CONFIG_USB_PD_DFP_FLOW_DELAY */
+
 #ifdef CONFIG_USB_PD_UFP_FLOW_DELAY
 	DECL_DPM_REACTION_UFP(
 		DPM_REACTION_UFP_FLOW_DELAY,
@@ -572,12 +566,6 @@ static const struct dpm_ready_reaction dpm_reactions[] = {
 		DPM_REACTION_REQUEST_DR_SWAP,
 		dpm_reaction_request_dr_swap),
 #endif	/* CONFIG_USB_PD_DR_SWAP */
-
-#ifdef CONFIG_USB_PD_DFP_FLOW_DELAY
-	DECL_DPM_REACTION_DFP(
-		DPM_REACTION_DFP_FLOW_DELAY,
-		dpm_reaction_dfp_flow_delay),
-#endif	/* CONFIG_USB_PD_DFP_FLOW_DELAY */
 
 #ifdef CONFIG_TCPC_VCONN_SUPPLY_MODE
 	DECL_DPM_REACTION_DFP_PD30_CHECK_ONCE(

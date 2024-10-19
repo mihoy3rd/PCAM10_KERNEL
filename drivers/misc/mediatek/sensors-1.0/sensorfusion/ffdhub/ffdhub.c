@@ -16,13 +16,20 @@
 #include <SCP_sensorHub.h>
 #include <linux/notifier.h>
 #include "scp_helper.h"
-
+#ifdef VENDOR_EDIT
+//tangjh@PSW.bsp.sensor 2019/7/6 add for report event
+#include <linux/pm_wakeup.h>
+#endif
 #define FFD_TAG                   "[ffdhub] "
 #define FFD_FUN(f)                pr_err(FFD_TAG"%s\n", __func__)
 #define FFD_PR_ERR(fmt, args...)  pr_err(FFD_TAG"%s %d : "fmt, __func__, __LINE__, ##args)
 #define FFD_LOG(fmt, args...)     pr_err(FFD_TAG fmt, ##args)
 
 static struct fusion_init_info ffdhub_init_info;
+#ifdef VENDOR_EDIT
+//tangjh@PSW.bsp.sensor 2019/7/6 add for report event 
+static struct wakeup_source oppo_ffd_wake_lock;
+#endif
 
 // for motor down if free fall
 #ifdef CONFIG_OPPO_MOTOR
@@ -109,6 +116,10 @@ static int ffd_recv_data(struct data_unit_t *event, void *reserved)
 
     if (event->flush_action == DATA_ACTION)
     {
+        #ifdef VENDOR_EDIT
+        //tangjh@PSW.bsp.sensor 2019/7/6 add for report event
+        __pm_wakeup_event(&oppo_ffd_wake_lock, msecs_to_jiffies(100));
+        #endif
         ffd_data_report(event->ffd_data_t.value, event->ffd_data_t.report_count, (int64_t)event->time_stamp);
     }
     else if (event->flush_action == FLUSH_ACTION)
@@ -164,9 +175,10 @@ static int ffdhub_local_init(void)
         FFD_PR_ERR("SCP_sensorHub_data_registration failed\n");
         goto exit;
     }
-
-    FFD_PR_ERR("ffdhub_local_init over.\n");
-
+    #ifdef VENDOR_EDIT
+    //tangjh@PSW.bsp.sensor 2019/7/6 add for report event
+    wakeup_source_init(&oppo_ffd_wake_lock, "oppo_ffd_wake_lock");
+    #endif
     return 0;
 exit:
     return -1;

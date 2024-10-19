@@ -58,6 +58,12 @@ enum VA09_OP {
 	VA09_OP_ON,
 };
 
+#ifdef VENDOR_EDIT
+/* Jianchao.Shi@BSP.CHG.Basic, 2019/08/28, sjc Add to reduce USB internal R
+  * and increase chirp K voltage, USB drive current change from 18mA to 22mA */
+extern bool mt_usb_is_device(void);
+#endif
+
 static void VA09_operation(int op, bool force)
 {
 	int ret = 0;
@@ -898,11 +904,24 @@ void usb_phy_savecurrent(unsigned int clk_on)
 
 	/* RG_DPPULLDOWN 1'b1 */
 	/* U3D_U2PHYDTM0 RG_DPPULLDOWN */
+#ifndef VENDOR_EDIT
+/*Jianchao.Shi@PSW.BSP.CHG.Basic, 2019/11/12, sjc Modify for fake adapter Q1000*/
 	U3PhyWriteField32((phys_addr_t) (uintptr_t) U3D_U2PHYDTM0, RG_DPPULLDOWN_OFST, RG_DPPULLDOWN, 1);
+#else
+	U3PhyWriteField32((phys_addr_t) (uintptr_t) U3D_U2PHYDTM0, RG_DPPULLDOWN_OFST, RG_DPPULLDOWN, 0);
+#endif
 
 	/* RG_DMPULLDOWN 1'b1 */
 	/* U3D_U2PHYDTM0 RG_DMPULLDOWN */
+#ifndef VENDOR_EDIT
+/*Jianchao.Shi@PSW.BSP.CHG.Basic, 2019/11/12, sjc Modify for fake adapter Q1000*/
 	U3PhyWriteField32((phys_addr_t) (uintptr_t) U3D_U2PHYDTM0, RG_DMPULLDOWN_OFST, RG_DMPULLDOWN, 1);
+#else
+	U3PhyWriteField32((phys_addr_t) (uintptr_t) U3D_U2PHYDTM0, RG_DMPULLDOWN_OFST, RG_DMPULLDOWN, 0);
+
+	/* set internal pull down*/
+	U3PhyWriteField32((phys_addr_t) (uintptr_t) U3D_USBPHYACR6, RG_USB20_PHY_REV_OFST, (0x2 << 24), 0x2);
+#endif
 
 	/* RG_XCVRSEL[1:0] 2'b01 */
 	/* U3D_U2PHYDTM0 RG_XCVRSEL */
@@ -1029,6 +1048,12 @@ void usb_phy_recover(unsigned int clk_on)
 	/* U3D_U2PHYDTM0 RG_DMPULLDOWN */
 	U3PhyWriteField32((phys_addr_t) (uintptr_t) U3D_U2PHYDTM0, RG_DMPULLDOWN_OFST, RG_DMPULLDOWN, 0);
 
+#ifdef VENDOR_EDIT
+/*Jianchao.Shi@PSW.BSP.CHG.Basic, 2019/11/12, sjc Add for fake adapter Q1000*/
+	/* clean internal pull down*/
+	U3PhyWriteField32((phys_addr_t) (uintptr_t) U3D_USBPHYACR6, RG_USB20_PHY_REV_OFST, (0x2 << 24), 0x0);
+#endif
+
 	/* RG_XCVRSEL[1:0]       2'b00 */
 	/* U3D_U2PHYDTM0 RG_XCVRSEL */
 	U3PhyWriteField32((phys_addr_t) (uintptr_t) U3D_U2PHYDTM0, RG_XCVRSEL_OFST, RG_XCVRSEL, 0);
@@ -1085,6 +1110,25 @@ void usb_phy_recover(unsigned int clk_on)
 	{
 		u32 evalue;
 
+#ifdef VENDOR_EDIT
+/* Jianchao.Shi@BSP.CHG.Basic, 2019/08/28, sjc Modify to reduce USB internal R
+  * and increase chirp K voltage, USB drive current change from 18mA to 22mA */
+		//change RG_USB20_INTR_CAL from 0x14 to 0x1E
+		if (mt_usb_is_device()) {
+			os_printk(K_INFO, "%s- RG_USB20_INTR_CAL=0x1E in device mode\n", __func__);
+			U3PhyWriteField32((phys_addr_t) (uintptr_t) U3D_USBPHYACR1, RG_USB20_INTR_CAL_OFST,
+				RG_USB20_INTR_CAL, 0x1E);
+		} else {
+			/* [4:0] => RG_USB20_INTR_CAL[4:0] */
+			evalue = (get_devinfo_with_index(108) & (0x1f<<0)) >> 0;
+			if (evalue) {
+				os_printk(K_INFO, "apply efuse setting, RG_USB20_INTR_CAL=0x%x\n", evalue);
+				U3PhyWriteField32((phys_addr_t) (uintptr_t) U3D_USBPHYACR1, RG_USB20_INTR_CAL_OFST,
+					RG_USB20_INTR_CAL, evalue);
+			} else
+				os_printk(K_DEBUG, "!evalue\n");
+		}
+#else /*VENDOR_EDIT*/
 		/* [4:0] => RG_USB20_INTR_CAL[4:0] */
 		evalue = (get_devinfo_with_index(108) & (0x1f<<0)) >> 0;
 		if (evalue) {
@@ -1093,6 +1137,7 @@ void usb_phy_recover(unsigned int clk_on)
 					RG_USB20_INTR_CAL, evalue);
 		} else
 			os_printk(K_DEBUG, "!evalue\n");
+#endif /*VENDOR_EDIT*/
 
 		/* [21:16] (BGR_code) => RG_SSUSB_IEXT_INTR_CTRL[5:0] */
 		evalue = (get_devinfo_with_index(107) & (0x3f << 16)) >> 16;

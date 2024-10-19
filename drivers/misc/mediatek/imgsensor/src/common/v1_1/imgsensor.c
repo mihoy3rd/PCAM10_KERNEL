@@ -200,6 +200,24 @@ static void imgsensor_mutex_unlock(struct IMGSENSOR_SENSOR_INST *psensor_inst)
 #endif
 }
 
+#ifdef VENDOR_EDIT
+/*weiriqin@Camera.Drv, 2019/08/20, add for wait sem to pull rst*/
+static DEFINE_MUTEX(gi2c_mutex);
+void global_i2c_mutex_lock(void)
+{
+	mutex_lock(&gi2c_mutex);
+	PK_DBG("lock gloable i2c mutex");
+}
+EXPORT_SYMBOL(global_i2c_mutex_lock);
+
+void global_i2c_mutex_unlock(void)
+{
+	mutex_unlock(&gi2c_mutex);
+	PK_DBG("unlock gloable i2c mutex");
+}
+EXPORT_SYMBOL(global_i2c_mutex_unlock);
+#endif
+
 MINT32 imgsensor_sensor_open(struct IMGSENSOR_SENSOR *psensor)
 {
 	MINT32 ret = ERROR_NONE;
@@ -922,7 +940,8 @@ static inline int adopt_CAMERA_HW_FeatureControl(void *pBuf)
 	/*in case that some structure are passed from user sapce by ptr */
 	switch (pFeatureCtrl->FeatureId) {
 	#ifdef VENDOR_EDIT
-        /*Henry.Chang@Camera.Driver add for 18531 ModuleSN*/
+	/*Henry.Chang@Camera.Driver add for read ModuleInfo*/
+	case SENSOR_FEATURE_GET_MODULE_INFO:
 	case SENSOR_FEATURE_GET_MODULE_SN:
 	{
 		ret = imgsensor_sensor_feature_control(psensor,
@@ -987,6 +1006,13 @@ static inline int adopt_CAMERA_HW_FeatureControl(void *pBuf)
 		struct IMGSENSOR_SENSOR_LIST *psensor_list =
 			(struct IMGSENSOR_SENSOR_LIST *)pFeaturePara;
 		psensor->inst.sensor_idx = pFeatureCtrl->InvokeCamera;
+		#ifdef VENDOR_EDIT
+		/*Caohua.Lin@Camera.Driver  add for 17175  board 20190529*/
+		if (is_project(OPPO_17175) &&
+		    psensor->inst.sensor_idx == IMGSENSOR_SENSOR_IDX_MAIN2) {
+		    break;
+		}
+		#endif
 		if (imgsensor_set_driver(psensor) != -EIO) {
 			psensor_list->id = psensor->inst.psensor_list->id;
 			memcpy(psensor_list->name,
@@ -1026,6 +1052,10 @@ static inline int adopt_CAMERA_HW_FeatureControl(void *pBuf)
 	case SENSOR_FEATURE_GET_SENSOR_PDAF_CAPACITY:
 	case SENSOR_FEATURE_GET_SENSOR_HDR_CAPACITY:
 	case SENSOR_FEATURE_GET_MIPI_PIXEL_RATE:
+	#ifdef VENDOR_EDIT
+	/* Henry.Chang@Camera.Driver add for isp clk adapter 20190313 */
+	case SENSOR_FEATURE_GET_PERIOD_BY_SCENARIO:
+	#endif
 		{
 			MUINT32 *pValue = NULL;
 			unsigned long long *pFeaturePara_64 = (unsigned long long *)pFeaturePara;

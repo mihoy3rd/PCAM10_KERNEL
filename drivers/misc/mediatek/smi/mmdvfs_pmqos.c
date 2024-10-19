@@ -29,6 +29,10 @@
 #include "mmprofile_function.h"
 #endif
 
+#include "helio-dvfsrc-opp.h"
+#include <linux/regulator/consumer.h>
+static struct regulator *vcore_reg_id;
+
 #undef pr_fmt
 #define pr_fmt(fmt) "[mmdvfs]" fmt
 
@@ -138,9 +142,25 @@ static struct mm_freq_config img_freq = {
 struct mm_freq_config *all_freqs[] = {
 	&disp_freq, &mdp_freq, &vdec_freq, &venc_freq, &img_freq, &cam_freq};
 
+int __attribute__ ((weak)) is_dvfsrc_opp_fixed(void) { return 1; }
+
 static void mm_apply_vcore(s32 vopp)
 {
 	pm_qos_update_request(&vcore_request, vopp);
+
+	if (vcore_reg_id) {
+#ifdef CHECK_VOLTAGE
+		u32 v_real, v_target;
+
+		if (vopp >= 0 && vopp < VCORE_OPP_NUM) {
+			v_real = regulator_get_voltage(vcore_reg_id);
+			v_target = get_vcore_opp_volt(get_min_opp_for_vcore(vopp));
+			if (v_real < v_target)
+				pr_info("err vcore %d < %d\n",
+					v_real, v_target);
+		}
+#endif
+	}
 }
 
 static s32 mm_apply_clk(struct mm_freq_config *config, u32 step)
@@ -428,6 +448,10 @@ static int mmdvfs_probe(struct platform_device *pdev)
 		pr_notice("%s: step size:%u\n", mm_freq->prop_name, step_size);
 		pm_qos_add_notifier(mm_freq->pm_qos_class, &mm_freq->nb);
 	}
+
+	vcore_reg_id = regulator_get(&pdev->dev, "vcore");
+	if (!vcore_reg_id)
+		pr_info("regulator_get vcore_reg_id failed\n");
 
 	return 0;
 

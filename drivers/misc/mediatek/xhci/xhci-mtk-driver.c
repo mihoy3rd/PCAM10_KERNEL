@@ -130,7 +130,12 @@ static void mtk_enable_otg_mode(void)
 	boost_on = true;
 #if CONFIG_MTK_GAUGE_VERSION == 30
 	charger_dev_enable_otg(primary_charger, true);
+#ifdef VENDOR_EDIT
+/* Jianchao.Shi@BSP.CHG.Basic, 2019/07/11, sjc Modify for OTG */
+	charger_dev_set_boost_current_limit(primary_charger, 1100000);
+#else
 	charger_dev_set_boost_current_limit(primary_charger, 1500000);
+#endif
 	charger_dev_kick_wdt(primary_charger);
 	enable_boost_polling(true);
 #else

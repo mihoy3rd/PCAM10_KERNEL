@@ -956,6 +956,8 @@ extern "C" {
  */
 	s32 cmdq_task_update_property(struct cmdqRecStruct *handle, void *prop_addr, u32 prop_size);
 
+	s32 cmdq_op_read_mem_to_mem(struct cmdqRecStruct *handle,
+		cmdqBackupSlotHandle h_backup_slot, u32 slot_index, u32 addr);
 
 
 #ifdef __cplusplus

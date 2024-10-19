@@ -14,8 +14,16 @@
 #ifndef MTEE_PRIVATE_H_
 #define MTEE_PRIVATE_H_
 
+struct mtee_driver_params {
+	u64 param0;
+	u64 param1;
+	u64 param2;
+	u64 param3;
+};
+
 struct mtee_peer_ops_priv_data {
 	enum TRUSTED_MEM_TYPE mem_type;
+	char *service_name;
 };
 
 void get_mtee_peer_ops(struct trusted_driver_operations **ops);

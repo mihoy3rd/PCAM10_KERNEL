@@ -407,10 +407,10 @@ int tcpci_alert(struct tcpc_device *tcpc_dev)
 static inline void tcpci_attach_wake_lock(struct tcpc_device *tcpc)
 {
 #ifdef CONFIG_TCPC_ATTACH_WAKE_LOCK_TOUT
-	wake_lock_timeout(&tcpc->attach_wake_lock,
-		CONFIG_TCPC_ATTACH_WAKE_LOCK_TOUT * HZ);
+	__pm_wakeup_event(&tcpc->attach_wake_lock,
+		CONFIG_TCPC_ATTACH_WAKE_LOCK_TOUT);
 #else
-	wake_lock(&tcpc->attach_wake_lock);
+	__pm_stay_awake(&tcpc->attach_wake_lock);
 #endif	/* CONFIG_TCPC_ATTACH_WAKE_LOCK_TOUT */
 }
 
@@ -439,7 +439,7 @@ int tcpci_set_wake_lock(
 			TCPC_DBG("wake_lock=0\r\n");
 			if (tcpc->typec_watchdog)
 				tcpci_set_intrst(tcpc, false);
-			wake_unlock(&tcpc->attach_wake_lock);
+			__pm_relax(&tcpc->attach_wake_lock);
 		}
 		return 1;
 	}
@@ -462,12 +462,12 @@ static inline int tcpci_set_wake_lock_pd(
 		wake_lock_pd--;
 
 	if (wake_lock_pd == 0)
-		wake_lock_timeout(&tcpc->dettach_temp_wake_lock, 5 * HZ);
+		__pm_wakeup_event(&tcpc->dettach_temp_wake_lock, 5000);
 
 	tcpci_set_wake_lock(tcpc, wake_lock_pd, tcpc->wake_lock_user);
 
 	if (wake_lock_pd == 1)
-		wake_unlock(&tcpc->dettach_temp_wake_lock);
+		__pm_relax(&tcpc->dettach_temp_wake_lock);
 
 	tcpc->wake_lock_pd = wake_lock_pd;
 	mutex_unlock(&tcpc->access_lock);

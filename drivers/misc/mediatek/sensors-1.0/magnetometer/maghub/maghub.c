@@ -479,12 +479,12 @@ static int maghub_open_report_data(int open)
 static int maghub_get_data(int *x, int *y, int *z, int *status)
 {
 	char buff[MAGHUB_BUFSIZE];
-
-	maghub_GetMData(buff, MAGHUB_BUFSIZE);
+	int ret = 0;
+	ret = maghub_GetMData(buff, MAGHUB_BUFSIZE);
 
 	if (sscanf(buff, "%x %x %x %x", x, y, z, status) != 4)
 		MAGN_PR_ERR("maghub_m_get_data sscanf fail!!\n");
-	return 0;
+	return ret;
 }
 static int scp_ready_event(uint8_t event, void *ptr)
 {

@@ -193,8 +193,10 @@ typedef struct {
 	uint32_t state;  /* geofence [source, result, operation_mode] */
 } geofence_event_t;
 
+
+
 #ifdef VENDOR_EDIT
-/*zhq@PSW.BSP.Sensor, 2018/10/15, Add for oppo algo*/
+/*tangjh@PSW.BSP.Sensor, 2019/7/1, Add for oppo algo*/
 typedef struct {
 	uint32_t value;
 	uint16_t report_count;
@@ -211,6 +213,29 @@ typedef struct {
 	uint16_t report_count;
 }pickup_motion_event_t;
 
+typedef struct {
+	uint32_t value;
+	uint16_t report_count;
+}action_detect_event_t;
+
+typedef struct {
+	int32_t state;
+}sar_modem_event_t;
+
+typedef struct {
+	int16_t state;
+    uint16_t report_count;
+}lux_aod_event_t;
+
+struct sar_event_t {
+	struct {
+		int32_t data[3];
+		int32_t x_bias;
+		int32_t y_bias;
+		int32_t z_bias;
+	};
+	uint32_t status;
+};
 #endif /*VENDOR_EDIT*/
 
 
@@ -268,14 +293,19 @@ struct data_unit_t {
 		gesture_t gesture_data_t;
 		fall_t fall_data_t;
 #ifdef VENDOR_EDIT
-/*zhq@PSW.BSP.Sensor, 2018/10/15, Add for oppo algo*/
+/*tangjh@PSW.BSP.Sensor, 2019/7/1, Add for oppo algo*/
 		ffd_event_t ffd_data_t;
 		free_fall_event_t free_fall_data_t;
 		pickup_motion_event_t pickup_motion_data_t;
+        action_detect_event_t action_detect_data_t;
+        sar_modem_event_t sar_modem_event;
+        lux_aod_event_t lux_aod_event;
+		struct sar_event_t sar_event;
 #endif /*VENDOR_EDIT*/
 		tilt_event_t tilt_event;
 		in_pocket_event_t inpocket_event;
 		geofence_event_t geofence_data_t;
+
 		int32_t data[8];
 	};
 } __packed;

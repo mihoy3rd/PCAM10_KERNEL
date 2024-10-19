@@ -17,6 +17,9 @@
 /* Define this macro if detecting apple samsung TA is needed */
 /* #define MT6370_APPLE_SAMSUNG_TA_SUPPORT */
 
+/* Define this macro if DCD timeout is supported */
+#define CONFIG_MT6370_DCDTOUT_SUPPORT
+
 /* Parameter */
 /* uA */
 #define MT6370_ICHG_NUM		64
@@ -251,14 +254,21 @@
 
 /* ========== CHG_DEVICETYPE 0x22 ============ */
 #define MT6370_SHIFT_USBCHGEN	7
+#define MT6370_SHFT_DCDTOUTEN	6
 #define MT6370_SHIFT_DCPSTD	2
 #define MT6370_SHIFT_CDP	1
 #define MT6370_SHIFT_SDP	0
 
 #define MT6370_MASK_USBCHGEN	(1 << MT6370_SHIFT_USBCHGEN)
+#define MT6370_MASK_DCDTOUTEN	(1 << MT6370_SHFT_DCDTOUTEN)
 #define MT6370_MASK_DCPSTD	(1 << MT6370_SHIFT_DCPSTD)
 #define MT6370_MASK_CDP		(1 << MT6370_SHIFT_CDP)
 #define MT6370_MASK_SDP		(1 << MT6370_SHIFT_SDP)
+
+#ifdef VENDOR_EDIT
+/* Jianchao.Shi@PSW.BSP.CHG.Basic, 2019/08/06, sjc Add for charging */
+#define MT6370_MASK_DCD_TIMEOUT	(0x30)
+#endif
 
 /* ========== QCCTRL2 0x24 ============ */
 #define MT6370_SHIFT_EN_DCP	1
@@ -267,8 +277,19 @@
 
 /* ========== USBSTATUS1 0x27 ============ */
 #define MT6370_SHIFT_USB_STATUS	4
+#define MT6370_SHIFT_DCDT	2
 
+#define MT6370_MASK_FAST_UNKNOWN_TA_DECT	(0x80)
 #define MT6370_MASK_USB_STATUS	0x70
+#define MT6370_MASK_FAST_UNKNOWN_TA_DECT	(0x80)
+#ifdef VENDOR_EDIT
+/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Add for charging */
+#define MT6370_MASK_DCDT	0x04
+#endif
+
+/* ========== QCSTATUS1 0x28 ============= */
+#define MT6370_SHIFT_VLGC_DISABLE	(7)
+#define MT6370_MASK_VLGC_DISABLE	(1 << MT6370_SHIFT_VLGC_DISABLE)
 
 /* ========== CHG_PUMP 0x2A ============ */
 #define MT6370_SHIFT_VG_LVL_SEL	1
@@ -324,6 +345,11 @@
 
 #define MT6370_MASK_ADC_STAT	(1 << MT6370_SHIFT_ADC_STAT)
 #define MT6370_MASK_CHG_STAT	0xC0
+
+/* ============ VDDA SUPPLY 0x62 ============ */
+#define MT6370_SHIFT_LBPHYS_SEL		(7)
+#define MT6370_SHIFT_LBP_DT		(5)
+#define MT6370_MASK_LBP			(0xE0)
 
 /* ========== CHG_STAT1 0xD0 ============ */
 #define MT6370_SHIFT_PWR_RDY	7

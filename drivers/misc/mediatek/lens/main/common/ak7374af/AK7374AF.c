@@ -46,6 +46,13 @@ static unsigned int g_ACKErrorCnt = 5;
 static unsigned int g_ACKErrorCnt = 100;
 #endif
 
+#ifdef  VENDOR_EDIT
+/*weiriqin@camera.driver, 2019/09/01, add for update AK7374 motor PID parameter*/
+#include <soc/oppo/oppo_project.h>
+static void ak7374af_loadfirmware(void);
+static void ak7374af_checkfirmware(void);
+static int check_status = 0;
+#endif
 
 static unsigned long g_u4AF_INF;
 static unsigned long g_u4AF_MACRO = 1023;
@@ -251,7 +258,18 @@ static inline int initdrv(void)
 	int i4RetValue = 0;
 	int ret = 0;
 	unsigned short data = 0;
-
+	#ifdef VENDOR_EDIT
+	/*weiriqin@camera.driver, 2019/09/01, add for update AK7374 motor PID parameter*/
+	//if(is_project(OPPO_19531)) {
+	LOG_INF("AK7374AF  start  load firmware\n");
+	ak7374af_checkfirmware();
+	LOG_INF("initdrv check_status=%d\n", check_status);
+	if(check_status == 1) {
+		ak7374af_loadfirmware();
+	}
+	LOG_INF("AK7374AF  end  load firmware\n");
+	//}
+	#endif
 	/* 00:active mode , 10:Standby mode , x1:Sleep mode */
 	ret = s4AF_WriteReg(0x02, 0x00); /* from Standby mode to Active mode */
 	msleep(20);
@@ -445,3 +463,98 @@ int AK7374AF_SetI2Cclient(struct i2c_client *pstAF_I2Cclient, spinlock_t *pAF_Sp
 
 	return 1;
 }
+
+#ifdef VENDOR_EDIT
+/*weiriqin@camera.driver, 2019/09/01, add for update AK7374 motor PID parameter*/
+static u8 readfirmware_addr[22] = {0x0a,0x0b,0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1a,0x1c,0x1d,0x1e,0x20,0x21,0x22,0x23,0x24,0x25};
+static u16 readfirmware_value[22] = {0x09,0xc4,0x2a,0x41,0xb9,0x4e,0x23,0x73,0x0c,0x5f,0xdb,0x00,0x12,0x00,0x00,0x00,0x00,0x41,0x01,0x0d,0x00,0x00};
+static void ak7374af_checkfirmware(void)
+{
+	int i;
+	int ret;
+	unsigned short register_data;
+	for(i = 0; i < 22; i++) {
+		ret = s4AF_ReadReg(readfirmware_addr[i],&register_data);
+		if(ret != 0) {
+			LOG_INF("ak7374af_checkfirmware, read readfirmware_addr[%d]=0x%x  fail!!!!!\n", i , readfirmware_addr[i]);
+		}
+		LOG_INF("ak7374af_checkfirmware, readfirmware_addr[%d]= 0x%x and  reigster_data=0x%x\n", i,readfirmware_addr[i],register_data );
+		if(register_data != readfirmware_value[i]) {
+			check_status=1;
+			LOG_INF("ak7374af_checkfirmware check_status=1\n");
+			break;
+		}
+	}
+}
+
+static void ak7374af_writereg(void)
+{
+	msleep(10);
+	s4AF_WriteReg(0xae,0x3b);
+	s4AF_WriteReg(0x10,0x2a);
+	s4AF_WriteReg(0x11,0x41);
+	s4AF_WriteReg(0x12,0xb9);
+	s4AF_WriteReg(0x13,0x4e);
+	s4AF_WriteReg(0x14,0x23);
+	s4AF_WriteReg(0x15,0x73);
+	s4AF_WriteReg(0x16,0x0c);
+	s4AF_WriteReg(0x17,0x5f);
+	s4AF_WriteReg(0x18,0xdb);
+	s4AF_WriteReg(0x19,0x00);
+	s4AF_WriteReg(0x1a,0x12);
+	s4AF_WriteReg(0x1c,0x00);
+	s4AF_WriteReg(0x1d,0x00);
+	s4AF_WriteReg(0x1e,0x00);
+	s4AF_WriteReg(0x20,0x00);
+	s4AF_WriteReg(0x21,0x41);
+	s4AF_WriteReg(0x22,0x01);
+	s4AF_WriteReg(0x23,0x0d);
+	s4AF_WriteReg(0x24,0x00);
+	s4AF_WriteReg(0x25,0x00);
+
+	s4AF_WriteReg(0x03,0x01);
+	msleep(90);
+	s4AF_WriteReg(0x03,0x02);
+	msleep(90);
+	s4AF_WriteReg(0x03,0x04);
+	msleep(54);
+	s4AF_WriteReg(0x03,0x08);
+	msleep(36);
+}
+
+static void ak7374af_loadfirmware(void)
+{
+	int i,ret;
+	int retry = 3;
+	unsigned short save_flag;
+	for(i = 0; i < retry; i++) {
+
+		ak7374af_writereg();
+
+		ret =s4AF_ReadReg(0x4b,&save_flag);
+		if(ret != 0) {
+			LOG_INF("Read addr 0x04b fail!!\n");
+		}
+		LOG_INF("Addr : 0x04b ,  save_flag: 0x%x\n", save_flag);
+
+		save_flag &= (1<<2);
+		if(save_flag) {
+			LOG_INF("ak7374af_writereg fail !!!\n");
+		} else {
+			LOG_INF("ak7374af_writereg success !!!\n");
+			break;
+		}
+	}
+
+	s4AF_WriteReg(0xae,0x00);
+
+	if(i >= 3) {
+		check_status = 1;
+		LOG_INF("ak7374af_loadfirmware fail !!!\n");
+	} else {
+		check_status = 0;
+		LOG_INF("ak7374af_loadfirmware success !!!\n");
+	}
+
+}
+#endif

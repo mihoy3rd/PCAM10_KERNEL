@@ -32,6 +32,7 @@
 #include "kd_imgsensor_define.h"
 #include "kd_imgsensor_errcode.h"
 //#include "../imgsensor_i2c.h"
+#include "imgsensor_common.h"
 #include "s5k3p9spmipiraw_Sensor.h"
 
 #ifdef CONFIG_MTK_CAM_SECURITY_SUPPORT
@@ -119,7 +120,7 @@ static struct imgsensor_info_struct imgsensor_info = {
 		.normal_video = {
 			.pclk = 560000000,
 			.linelength = 5088,
-			.framelength = 3688,
+			.framelength = 3668,
 			.startx = 0,
 			.starty = 0,
 			.grabwindow_width = 2320,
@@ -140,6 +141,8 @@ static struct imgsensor_info_struct imgsensor_info = {
 			.max_framerate = 300,  /*1200 */
 		},
 		.slim_video = {
+		/*LiuKai@Camera.Driver add for 19151&19350 normal_video mipi frequency 20191118*/
+		#if 0
 			.pclk = 560000000,
 			.linelength = 5088,
 			.framelength = 3668,
@@ -149,10 +152,21 @@ static struct imgsensor_info_struct imgsensor_info = {
 			.grabwindow_height = 1744,
 			.mipi_data_lp2hs_settle_dc = 85,
 			.max_framerate = 300,
+		#endif
+			.pclk = 560000000,
+			.linelength = 7152,
+			.framelength = 2608,
+			.startx = 0,
+			.starty = 0,
+			.grabwindow_width = 2320,
+			.grabwindow_height = 1744,
+			.mipi_data_lp2hs_settle_dc = 85,
+			.mipi_pixel_rate = 268800000,
+			.max_framerate = 300,
 		},
 		.margin = 3,
 		.min_shutter = 3,
-		.max_frame_length = 0xffff,
+		.max_frame_length = 0xfffc,//0xffff-3,
 		.ae_shut_delay_frame = 0,
 		.ae_sensor_gain_delay_frame = 0,
 		.ae_ispGain_delay_frame = 2,
@@ -236,12 +250,12 @@ static kal_uint16 read_module_id(void)
 
 }
 /*Henry.Chang@Camera.Driver add for 18531 ModuleSN*/
-static kal_uint8 gS5k3p9sp_SN[16];
+static kal_uint8 gS5k3p9sp_SN[CAMERA_MODULE_SN_LENGTH];
 static void read_eeprom_SN(void)
 {
 	kal_uint16 idx = 0;
 	kal_uint8 *get_byte= &gS5k3p9sp_SN[0];
-	for (idx = 0; idx <16; idx++) {
+	for (idx = 0; idx <CAMERA_MODULE_SN_LENGTH; idx++) {
 		char pusendcmd[2] = {0x00 , (char)((0xE0 + idx) & 0xFF) };
 		iReadRegI2C(pusendcmd , 2, (u8*)&get_byte[idx],1, 0xA8);
 		LOG_INF("gS5k3p9sp_SN[%d]: 0x%x  0x%x\n", idx, get_byte[idx], gS5k3p9sp_SN[idx]);
@@ -2040,11 +2054,12 @@ static void burst_read_to_check(void)
 static kal_uint16 addr_data_pair_init[] = {
 
 	0x6028, 0x4000,
-	0x0000, 0x0900,
+        0x0000, 0x101D,
 	0x0000, 0x3109,
 	0x6010, 0x0001,
 	0x6214, 0x7970,
 	0x6218, 0x7150,
+        0x0A02, 0x007E,
 	0x6028, 0x2000,
 	0x602A, 0x3F4C,
 	0x6F12, 0x0000,
@@ -3549,6 +3564,9 @@ static kal_uint16 addr_data_pair_init[] = {
 	0x6F12, 0x0000,
 	0x6F12, 0x0000,
 	0x6F12, 0x0000,
+        0x602A, 0x0FF4,
+        0x6F12, 0x0100,
+        0x6F12, 0x1800,
 	0x6028, 0x4000,
 	0x0FEA, 0x1440,
 	0x0B06, 0x0101,
@@ -3556,7 +3574,6 @@ static kal_uint16 addr_data_pair_init[] = {
 	0xF456, 0x000A,
 	0xF46A, 0xBFA0,
 	0x0D80, 0x1388,
-	0x0A02, 0x007E,
 	0xB134, 0x0000,
 	0xB136, 0x0000,
 	0xB138, 0x0000,
@@ -3650,7 +3667,7 @@ static kal_uint16 addr_data_pair_capture[] = {
 	0x602A, 0x1694,
 	0x6F12, 0x1B0F,
 	0x602A, 0x16AA,
-	0x6F12, 0x009F,
+        0x6F12, 0x009D,
 	0x6F12, 0x0007,
 	0x602A, 0x1098,
 	0x6F12, 0x000A,
@@ -3848,6 +3865,79 @@ static kal_uint16 addr_data_pair_normal_video_for_18561[] = {
 	0x0D02, 0x0001,
 };
 
+
+static kal_uint16 addr_data_pair_normal_video_for_19151[] = {
+	0x6028, 0x4000,
+	0x6214, 0x7970,
+	0x6218, 0x7150,
+	0x6028, 0x2000,
+	0x602A, 0x0ED6,
+	0x6F12, 0x0000,
+	0x602A, 0x1CF0,
+	0x6F12, 0x0200,
+	0x602A, 0x0E58,
+	0x6F12, 0x0023,
+	0x602A, 0x1694,
+	0x6F12, 0x170F,
+	0x602A, 0x16AA,
+	0x6F12, 0x009D,
+	0x6F12, 0x000F,
+	0x602A, 0x1098,
+	0x6F12, 0x0012,
+	0x602A, 0x2690,
+	0x6F12, 0x0100,
+	0x6F12, 0x0000,
+	0x602A, 0x16A8,
+	0x6F12, 0x38C0,
+	0x602A, 0x108C,
+	0x6F12, 0x0002,
+	0x602A, 0x10CC,
+	0x6F12, 0x0001,
+	0x602A, 0x10D0,
+	0x6F12, 0x000F,
+	0x602A, 0x0F50,
+	0x6F12, 0x0200,
+	0x602A, 0x1758,
+	0x6F12, 0x0000,
+	0x6028, 0x4000,
+	0x0344, 0x0000,
+	0x0346, 0x0008,
+	0x0348, 0x122F,
+	0x034A, 0x0DA7,
+	0x034C, 0x0910,
+	0x034E, 0x06D0,
+	0x0350, 0x0004,
+	0x0900, 0x0122,
+	0x0380, 0x0002,
+	0x0382, 0x0002,
+	0x0384, 0x0002,
+	0x0386, 0x0002,
+	0x0404, 0x1000,
+	0x0402, 0x1010,
+	0x0400, 0x1010,
+	0x0114, 0x0300,
+	0x0110, 0x1002,
+	0x0136, 0x1800,
+	0x0300, 0x0007,
+	0x0302, 0x0001,
+	0x0304, 0x0006,
+	0x0306, 0x00F5,
+	0x0308, 0x0008,
+	0x030A, 0x0001,
+	0x030C, 0x0000,
+	0x030E, 0x0004,
+	0x0310, 0x0070,
+	0x0312, 0x0001,
+	0x0340, 0x0A30,
+	0x0342, 0x1BF0,
+	0x0202, 0x0100,
+	0x0200, 0x0100,
+	0x021E, 0x0000,
+	0x0D00, 0x0000,
+	0x0D02, 0x0001,
+
+};
+
 static kal_uint16 addr_data_pair_normal_video[] = {
 	0x6028, 0x4000,
 	0x6214, 0x7970,
@@ -3918,6 +4008,7 @@ static kal_uint16 addr_data_pair_normal_video[] = {
 	0x0D00, 0x0000,
 	0x0D02, 0x0001,
 };
+
 
 static void sensor_init(void)
 {
@@ -4047,6 +4138,9 @@ static void sensor_init(void)
 	write_cmos_sensor_16_16(0x6F12, 0x0000);
 	write_cmos_sensor_16_16(0x6F12, 0x0000);
 	write_cmos_sensor_16_16(0x6F12, 0x0000);
+	write_cmos_sensor_16_16(0x602A, 0x0FF4);
+	write_cmos_sensor_16_16(0x6F12, 0x0100);
+	write_cmos_sensor_16_16(0x6F12, 0x1800);
 	write_cmos_sensor_16_16(0x6028, 0x4000);
 	write_cmos_sensor_16_16(0x0FEA, 0x1440);
 	write_cmos_sensor_16_16(0x0B06, 0x0101);
@@ -4110,6 +4204,11 @@ static void hs_video_setting(void)
 static void slim_video_setting(void)
 {
 	LOG_INF("E\n");
+	/*LiuKai@Camera.Driver  add for  19151&19350 normal_video mipi frequency  20191118*/
+	if(is_project(OPPO_19151)||is_project(OPPO_19350)){
+		table_write_cmos_sensor(addr_data_pair_normal_video_for_19151,
+			sizeof(addr_data_pair_normal_video_for_19151) / sizeof(kal_uint16));
+	}
 }
 
 /*************************************************************************
@@ -4526,8 +4625,14 @@ static kal_uint32 get_info(MSDK_SCENARIO_ID_ENUM scenario_id,
 	sensor_info->SlimVideoDelayFrame = imgsensor_info.slim_video_delay_frame;
 
 	sensor_info->SensorMasterClockSwitch = 0; /* not use */
-	sensor_info->SensorDrivingCurrent = imgsensor_info.isp_driving_current;
-
+	#ifdef VENDOR_EDIT
+	/*Riqin.Wei@camera.driver, 2019/08/06/, modify for improve 19531 mclk waveform*/
+	if(is_project(OPPO_19531)||is_project(OPPO_19151)||is_project(OPPO_19350)){
+	    sensor_info->SensorDrivingCurrent = ISP_DRIVING_4MA;
+	} else {
+	    sensor_info->SensorDrivingCurrent = imgsensor_info.isp_driving_current;
+	}
+	#endif
 	sensor_info->AEShutDelayFrame = imgsensor_info.ae_shut_delay_frame; 	 /* The frame of setting shutter default 0 for TG int */
 	sensor_info->AESensorGainDelayFrame = imgsensor_info.ae_sensor_gain_delay_frame;	/* The frame of setting sensor gain */
 	sensor_info->AEISPGainDelayFrame = imgsensor_info.ae_ispGain_delay_frame;
@@ -4866,13 +4971,48 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
         /*Henry.Chang@Camera.Driver add for 18531 ModuleSN*/
 	case SENSOR_FEATURE_GET_MODULE_SN:
 		LOG_INF("s5k3p9 GET_MODULE_SN:%d %d\n", *feature_para_len, *feature_data_32);
-		if (*feature_data_32 < 4)
+		if (*feature_data_32 < CAMERA_MODULE_SN_LENGTH/4) {
 			*(feature_data_32 + 1) = (gS5k3p9sp_SN[4*(*feature_data_32) + 3] << 24)
 						| (gS5k3p9sp_SN[4*(*feature_data_32) + 2] << 16)
 						| (gS5k3p9sp_SN[4*(*feature_data_32) + 1] << 8)
 						| (gS5k3p9sp_SN[4*(*feature_data_32)] & 0xFF);
+		}
+		break;
+	/*Caohua.Lin@Camera.Driver , 20190222, add for ITS--sensor_fusion*/
+	case SENOSR_FEATURE_GET_OFFSET_TO_START_OF_EXPOSURE:
+		*(MUINT32 *)(uintptr_t)(*(feature_data + 1)) = 0;
 		break;
 	#endif
+    case SENSOR_FEATURE_GET_PERIOD_BY_SCENARIO:
+        switch (*feature_data) {
+        case MSDK_SCENARIO_ID_CAMERA_CAPTURE_JPEG:
+                *(MUINT32 *)(uintptr_t)(*(feature_data + 1))
+                        = (imgsensor_info.cap.framelength << 16)
+                                 + imgsensor_info.cap.linelength;
+                break;
+        case MSDK_SCENARIO_ID_VIDEO_PREVIEW:
+                *(MUINT32 *)(uintptr_t)(*(feature_data + 1))
+                        = (imgsensor_info.normal_video.framelength << 16)
+                                + imgsensor_info.normal_video.linelength;
+                break;
+        case MSDK_SCENARIO_ID_HIGH_SPEED_VIDEO:
+                *(MUINT32 *)(uintptr_t)(*(feature_data + 1))
+                        = (imgsensor_info.hs_video.framelength << 16)
+                                 + imgsensor_info.hs_video.linelength;
+                break;
+        case MSDK_SCENARIO_ID_SLIM_VIDEO:
+                *(MUINT32 *)(uintptr_t)(*(feature_data + 1))
+                        = (imgsensor_info.slim_video.framelength << 16)
+                                 + imgsensor_info.slim_video.linelength;
+                break;
+        case MSDK_SCENARIO_ID_CAMERA_PREVIEW:
+        default:
+                *(MUINT32 *)(uintptr_t)(*(feature_data + 1))
+                        = (imgsensor_info.pre.framelength << 16)
+                                 + imgsensor_info.pre.linelength;
+                break;
+        }
+        break;
 	case SENSOR_FEATURE_GET_PERIOD:
 		*feature_return_para_16++ = imgsensor.line_length;
 		*feature_return_para_16 = imgsensor.frame_length;

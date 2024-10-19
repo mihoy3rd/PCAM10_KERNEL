@@ -136,23 +136,19 @@ static int cm_mgr_check_dram_type(void)
 	int ddr_type = get_ddr_type();
 	int ddr_hz = dram_steps_freq(0);
 
-	if ((ddr_type == TYPE_LPDDR4X || ddr_type == TYPE_LPDDR4)
-			&& ddr_hz == 3600) {
+	if (ddr_type == TYPE_LPDDR4X && ddr_hz == 3600) {
 		cm_mgr_idx = CM_MGR_LP4X_2CH_3600;
 		vcore_power_ratio_up[0] = 100;
 		vcore_power_ratio_down[0] = 100;
-	} else if (ddr_type == TYPE_LPDDR4X || ddr_type == TYPE_LPDDR4)
+	} else if (ddr_type == TYPE_LPDDR4X && ddr_hz == 3200)
 		cm_mgr_idx = CM_MGR_LP4X_2CH_3200;
-	else if (ddr_type == TYPE_LPDDR3)
+	else if (ddr_type == TYPE_LPDDR3 && ddr_hz == 1866)
 		cm_mgr_idx = CM_MGR_LP3_1CH_1866;
-	pr_debug("#@# %s(%d) ddr_type 0x%x, ddr_hz %d, cm_mgr_idx 0x%x\n",
-			__func__, __LINE__, ddr_type, ddr_hz, cm_mgr_idx);
+	pr_info("#@# %s(%d) cm_mgr_idx 0x%x\n", __func__, __LINE__, cm_mgr_idx);
 #else
 	cm_mgr_idx = 0;
-	pr_debug("#@# %s(%d) NO CONFIG_MTK_DRAMC !!! set cm_mgr_idx to 0x%x\n",
-			__func__, __LINE__, cm_mgr_idx);
-#endif /* CONFIG_MTK_DRAMC */
-
+	pr_info("#@# %s(%d) !!!! NO CONFIG_MTK_DRAMC !!! set cm_mgr_idx to 0x%x\n", __func__, __LINE__, cm_mgr_idx);
+#endif
 	return cm_mgr_idx;
 };
 
@@ -433,11 +429,11 @@ static int cm_mgr_fb_notifier_callback(struct notifier_block *self, unsigned lon
 
 	switch (blank) {
 	case FB_BLANK_UNBLANK:
-		pr_debug("#@# %s(%d) SCREEN ON\n", __func__, __LINE__);
+		pr_info("#@# %s(%d) SCREEN ON\n", __func__, __LINE__);
 		cm_mgr_blank_status = 0;
 		break;
 	case FB_BLANK_POWERDOWN:
-		pr_debug("#@# %s(%d) SCREEN OFF\n", __func__, __LINE__);
+		pr_info("#@# %s(%d) SCREEN OFF\n", __func__, __LINE__);
 		cm_mgr_blank_status = 1;
 		dvfsrc_set_power_model_ddr_request(0);
 		break;
@@ -492,7 +488,7 @@ static int cm_mgr_is_lp_flavor(void)
 	if (strncmp(CONFIG_BUILD_ARM64_DTB_OVERLAY_IMAGE_NAMES + len - 4, "_lp", 3) == 0)
 		r = 1;
 
-	pr_debug("flavor check: %s, is_lp: %d\n", CONFIG_BUILD_ARM64_DTB_OVERLAY_IMAGE_NAMES, r);
+	pr_info("flavor check: %s, is_lp: %d\n", CONFIG_BUILD_ARM64_DTB_OVERLAY_IMAGE_NAMES, r);
 #endif
 
 	return r;
@@ -621,28 +617,28 @@ int cm_mgr_register_init(void)
 
 	node = of_find_compatible_node(NULL, NULL, "mediatek,mcucfg_mp0_counter");
 	if (!node)
-		pr_debug("find mp0_counter node failed\n");
+		pr_info("find mp0_counter node failed\n");
 	mcucfg_mp0_counter_base = of_iomap(node, 0);
 	if (!mcucfg_mp0_counter_base) {
-		pr_debug("base mcucfg_mp0_counter_base failed\n");
+		pr_info("base mcucfg_mp0_counter_base failed\n");
 		return -1;
 	}
 
 	node = of_find_compatible_node(NULL, NULL, "mediatek,mcucfg_mp2_counter");
 	if (!node)
-		pr_debug("find mp2_counter node failed\n");
+		pr_info("find mp2_counter node failed\n");
 	mcucfg_mp2_counter_base = of_iomap(node, 0);
 	if (!mcucfg_mp2_counter_base) {
-		pr_debug("base mcucfg_mp2_counter_base failed\n");
+		pr_info("base mcucfg_mp2_counter_base failed\n");
 		return -1;
 	}
 
 	node = of_find_compatible_node(NULL, NULL, "mediatek,sleep");
 	if (!node)
-		pr_debug("find mp2_counter node failed\n");
+		pr_info("find mp2_counter node failed\n");
 	spm_sleep_base = of_iomap(node, 0);
 	if (!spm_sleep_base) {
-		pr_debug("base spm_sleep_base failed\n");
+		pr_info("base spm_sleep_base failed\n");
 		return -1;
 	}
 
@@ -655,20 +651,20 @@ int cm_mgr_platform_init(void)
 
 	r = cm_mgr_register_init();
 	if (r) {
-		pr_debug("FAILED TO CREATE REGISTER(%d)\n", r);
+		pr_info("FAILED TO CREATE REGISTER(%d)\n", r);
 		return r;
 	}
 
 #ifdef CM_MGR_USE_PM_NOTIFY
 	cm_mgr_sched_pm_init();
-	pr_debug(" CM_MGR_USE_PM_NOTIFY\n");
+	pr_info(" CM_MGR_USE_PM_NOTIFY\n");
 #else
-	pr_debug(" !CM_MGR_USE_PM_NOTIFY\n");
+	pr_info(" !CM_MGR_USE_PM_NOTIFY\n");
 #endif /* CM_MGR_USE_PM_NOTIFY */
 
 	r = fb_register_client(&cm_mgr_fb_notifier);
 	if (r) {
-		pr_debug("FAILED TO REGISTER FB CLIENT (%d)\n", r);
+		pr_info("FAILED TO REGISTER FB CLIENT (%d)\n", r);
 		return r;
 	}
 

@@ -22,6 +22,10 @@
 #endif
 
 #include <linux/atomic.h>
+#ifdef VENDOR_EDIT
+/*Henry.Chang@Camera.Drv add for mclk release error 20190508 */
+#include <linux/mutex.h>
+#endif
 #include <linux/platform_device.h>
 
 #include "kd_imgsensor_define.h"
@@ -88,7 +92,13 @@ struct SENINF_CLK {
 	struct platform_device *pplatform_device;
 	struct clk *mclk_sel[SENINF_CLK_IDX_MAX_NUM];
 	atomic_t enable_cnt[SENINF_CLK_IDX_MAX_NUM];
+	#ifdef VENDOR_EDIT
+	/*Henry.Chang@Camera.Drv add for mclk release error 20190508 */
+	struct mutex seninf_clk_mutex;
+	int open_cnt;
+	#else
 	atomic_t wakelock_cnt;
+	#endif
 
 #ifdef CONFIG_PM_WAKELOCKS
 	struct wakeup_source seninf_wake_lock;

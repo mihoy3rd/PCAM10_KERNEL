@@ -106,10 +106,7 @@ static atomic_t ext_idlemgr_task_wakeup = ATOMIC_INIT(1);
 #ifdef MTK_FB_MMDVFS_SUPPORT
 /* dvfs */
 static atomic_t dvfs_ovl_req_status = ATOMIC_INIT(HRT_LEVEL_LEVEL0);
-#ifdef VENDOR_EDIT
-/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/02/01, bugid:1838628 add for wakeup splash lines */
 static int dvfs_before_idle = HRT_LEVEL_NUM - 1;
-#endif /*VENDOR_EDIT*/
 #endif
 static int register_share_sram;
 
@@ -1110,10 +1107,8 @@ void _cmd_mode_leave_idle(void)
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_pm_qos, MMPROFILE_FLAG_END,
 			 !primary_display_is_decouple_mode(), bandwidth);
 #endif
-#ifdef VENDOR_EDIT
-/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/02/01, bugid:1838628 add for wakeup splash lines */
+
 	primary_display_request_dvfs_perf(SMI_BWC_SCEN_UI_IDLE, dvfs_before_idle);
-#endif /*VENDOR_EDIT*/
 }
 
 void primary_display_idlemgr_enter_idle_nolock(void)
@@ -1248,10 +1243,7 @@ static int _primary_path_idlemgr_monitor_thread(void *data)
 			primary_display_set_idle_stat(1);
 		}
 #ifdef MTK_FB_MMDVFS_SUPPORT
-#ifdef VENDOR_EDIT
-/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/02/01, bugid:1838628 add for wakeup splash lines */
 		dvfs_before_idle = atomic_read(&dvfs_ovl_req_status);
-#endif /*VENDOR_EDIT*/
 		/* when screen idle: LP4 enter ULPM; LP3 enter LPM */
 		primary_display_request_dvfs_perf(SMI_BWC_SCEN_UI_IDLE, HRT_LEVEL_LEVEL0);
 #endif
@@ -1259,14 +1251,6 @@ static int _primary_path_idlemgr_monitor_thread(void *data)
 		primary_display_manual_unlock();
 
 		wait_event_interruptible(idlemgr_pgc->idlemgr_wait_queue, !primary_display_is_idle());
-
-//#ifndef VENDOR_EDIT
-/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/02/01, bugid:1838628 remove for wakeup splash lines */
-//#ifdef MTK_FB_MMDVFS_SUPPORT
-		/* when leave screen idle: reset to default */
-		//primary_display_request_dvfs_perf(SMI_BWC_SCEN_UI_IDLE, HRT_LEVEL_DEFAULT);
-//#endif
-//#endif /*VENDOR_EDIT*/
 
 		if (kthread_should_stop())
 			break;

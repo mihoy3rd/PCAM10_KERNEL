@@ -861,7 +861,7 @@ static void SCP_sensorHub_init_sensor_state(void)
 	mSensorState[SENSOR_TYPE_SAR].timestamp_filter = false;
 
 #ifdef VENDOR_EDIT
-/*zhq@PSW.BSP.Sensor, 2018/10/15, Add for oppo algo*/
+/*tangjh@PSW.BSP.Sensor, 2019/6/29, Add for oppo algo*/
 	mSensorState[SENSOR_TYPE_FFD].sensorType = SENSOR_TYPE_FFD;
 	mSensorState[SENSOR_TYPE_FFD].rate = SENSOR_RATE_ONCHANGE;
 	mSensorState[SENSOR_TYPE_FFD].timestamp_filter = false;
@@ -873,6 +873,18 @@ static void SCP_sensorHub_init_sensor_state(void)
 	mSensorState[SENSOR_TYPE_PICKUP_MOTION].sensorType = SENSOR_TYPE_PICKUP_MOTION;
 	mSensorState[SENSOR_TYPE_PICKUP_MOTION].rate = SENSOR_RATE_ONCHANGE;
 	mSensorState[SENSOR_TYPE_PICKUP_MOTION].timestamp_filter = false;
+
+	mSensorState[SENSOR_TYPE_ACTION_DETECT].sensorType = SENSOR_TYPE_ACTION_DETECT;
+	mSensorState[SENSOR_TYPE_ACTION_DETECT].rate = SENSOR_RATE_ONCHANGE;
+	mSensorState[SENSOR_TYPE_ACTION_DETECT].timestamp_filter = false;    
+
+    mSensorState[SENSOR_TYPE_SAR_MODEM].sensorType = SENSOR_TYPE_SAR_MODEM;
+    mSensorState[SENSOR_TYPE_SAR_MODEM].rate = SENSOR_RATE_ONCHANGE;
+    mSensorState[SENSOR_TYPE_SAR_MODEM].timestamp_filter = false;
+
+    mSensorState[SENSOR_TYPE_LUX_AOD].sensorType = SENSOR_TYPE_LUX_AOD;
+    mSensorState[SENSOR_TYPE_LUX_AOD].rate = SENSOR_RATE_ONCHANGE;
+    mSensorState[SENSOR_TYPE_LUX_AOD].timestamp_filter = false;
 
 #endif /*VENDOR_EDIT*/
 }
@@ -1037,7 +1049,7 @@ static int SCP_sensorHub_report_data(struct data_unit_t *data_t)
 	} else if (need_send == true && alt) {
 		if (alt_enable && data_t->flush_action == DATA_ACTION)
 			err = obj->dispatch_data_cb[alt_id](data_t, NULL);
-		else if (data_t->flush_action == FLUSH_ACTION) {
+		else if (alt_enable && data_t->flush_action == FLUSH_ACTION) {
 			p_flush_count = &mSensorState[alt].flushCnt;
 			if (atomic_dec_if_positive(p_flush_count) >= 0)
 				err = obj->dispatch_data_cb[alt_id](data_t,
@@ -1045,7 +1057,7 @@ static int SCP_sensorHub_report_data(struct data_unit_t *data_t)
 		}
 		if (raw_enable && data_t->flush_action == DATA_ACTION)
 			err = obj->dispatch_data_cb[sensor_id](data_t, NULL);
-		else if (data_t->flush_action == FLUSH_ACTION) {
+		else if (raw_enable && data_t->flush_action == FLUSH_ACTION) {
 			p_flush_count = &mSensorState[sensor_type].flushCnt;
 			if (atomic_dec_if_positive(p_flush_count) >= 0)
 				err = obj->dispatch_data_cb[sensor_id](data_t,
@@ -1576,29 +1588,51 @@ int sensor_get_data_from_hub(uint8_t sensorType, struct data_unit_t *data)
 		break;
 #endif /* VENDOR_EDIT */
 
+	case ID_SAR:
+		data->time_stamp = data_t->time_stamp;
+		data->sar_event.data[0] = data_t->sar_event.data[0];
+		data->sar_event.data[1] = data_t->sar_event.data[1];
+		data->sar_event.data[2] = data_t->sar_event.data[2];
+		break;
+
 #ifdef VENDOR_EDIT
-/*zhq@PSW.BSP.Sensor, 2018/10/15, Add for oppo algo*/
+/*tangjh@PSW.BSP.Sensor, 2019/6/29, Add for oppo algo*/
 	case ID_FFD:
 		data->time_stamp = data_t->time_stamp;
 		data->ffd_data_t.value = data_t->ffd_data_t.value;
 		data->ffd_data_t.report_count = data_t->ffd_data_t.report_count;
-		break;
+        break;
 
 	case ID_FREE_FALL:
 		data->time_stamp = data_t->time_stamp;
 		data->free_fall_data_t.free_fall_time = data_t->free_fall_data_t.free_fall_time;
 		data->free_fall_data_t.angle = data_t->free_fall_data_t.angle;
 		data->free_fall_data_t.report_count = data_t->free_fall_data_t.report_count;
-		break;
+        break;
 
 	case ID_PICKUP_MOTION:
 		data->time_stamp = data_t->time_stamp;
 		data->pickup_motion_data_t.value = data_t->pickup_motion_data_t.value;
 		data->pickup_motion_data_t.report_count = data_t->pickup_motion_data_t.report_count;
-		break;
+        break;
 
+	case ID_ACTION_DETECT:
+		data->time_stamp = data_t->time_stamp;
+		data->action_detect_data_t.value = data_t->action_detect_data_t.value;
+		data->action_detect_data_t.report_count = data_t->action_detect_data_t.report_count;
+        break;
+
+    case ID_SAR_MODEM:
+        data->time_stamp = data_t->time_stamp;
+        data->sar_modem_event.state = data_t->sar_modem_event.state;
+        break;
+
+    case ID_LUX_AOD:
+        data->time_stamp = data_t->time_stamp;
+        data->lux_aod_event.state = data_t->lux_aod_event.state;
+        data->lux_aod_event.report_count = data_t->lux_aod_event.report_count;
+        break;
 #endif /* VENDOR_EDIT */
-
 	default:
 		err = -1;
 		break;
@@ -2038,6 +2072,23 @@ int sensor_set_cmd_to_hub(uint8_t sensorType, CUST_ACTION action, void *data)
 			return -1;
 		}
 		break;
+	#ifdef VENDOR_EDIT
+	//tangjh@PSE.BSP.Sensor, 2019-6-29, add for sar sensor
+	case ID_SAR:
+		req.set_cust_req.sensorType = ID_SAR;
+		req.set_cust_req.action = SENSOR_HUB_SET_CUST;
+		switch (action) {
+		case CUST_ACTION_GET_SENSOR_INFO:
+			req.set_cust_req.getInfo.action =
+				CUST_ACTION_GET_SENSOR_INFO;
+			len = offsetof(SCP_SENSOR_HUB_SET_CUST_REQ, custData)
+			    + sizeof(req.set_cust_req.getInfo);
+			break;
+		default:
+			return -1;
+		}
+		break;
+	#endif
 	default:
 		req.set_cust_req.sensorType = sensorType;
 		req.set_cust_req.action = SENSOR_HUB_SET_CUST;

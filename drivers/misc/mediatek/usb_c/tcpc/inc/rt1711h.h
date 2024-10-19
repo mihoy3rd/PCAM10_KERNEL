@@ -20,6 +20,8 @@
 /*show debug message or not */
 #define ENABLE_RT1711_DBG	0
 
+#define RT1711H_REG_CONFIG_GPIO0			(0x71)
+
 /* RT1711H Private RegMap */
 
 #define RT1711H_REG_PHY_CTRL1				(0x80)

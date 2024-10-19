@@ -75,13 +75,14 @@
 #include "mtk_ovl.h"
 
 #ifdef VENDOR_EDIT
+/* Yongpeng.Yi@PSW.MM.Display.LCD.Stability, 2018/09/24,add mm critical log */
+#include <soc/oppo/mmkey_log.h>
 /*
 * liping-m@PSW.MM.Display.LCD.Stability, 2018/07/21,
 * add power seq api for ulps
 */
 #include <soc/oppo/oppo_project.h>
-/* Ling.Guo@PSW.MM.Display.LCD.Machine, 2018/12/03,add for mm kevent fb. */
-#include <linux/oppo_mm_kevent_fb.h>
+
 #endif /*VENDOR_EDIT*/
 
 #ifdef VENDOR_EDIT
@@ -115,6 +116,14 @@ static wait_queue_head_t esd_ext_te_1_wq;	/* For EXT TE EINT Check */
 static atomic_t esd_ext_te_1_event = ATOMIC_INIT(0);	/* For EXT TE EINT Check */
 static unsigned int extd_esd_check_mode;
 static unsigned int extd_esd_check_enable;
+#endif
+
+#ifdef VENDOR_EDIT
+/*
+* ZhongWenjie@PSW.BSP.TP.FUNCTION, 2019/02/26,
+* add to trigger tp irq reset for esd recovery
+*/
+void __attribute__((weak)) lcd_trigger_tp_irq_reset(void) {return;}
 #endif
 
 #ifdef VENDOR_EDIT
@@ -366,6 +375,12 @@ int do_esd_check_eint(void)
 	else
 		ret = 1; /* esd check fail */
 
+	#ifdef VENDOR_EDIT
+	/* Yongpeng.Yi@PSW.MM.Display.LCD.Stability, 2018/09/24,add mm critical log */
+	if (ret) {
+		mm_keylog_write("Dispaly Panel do_esd_check_eint fail\n", "ESD\n", TYPE_ESD_EXCEPTION);
+	}
+	#endif /* VENDOR_EDIT */
 	atomic_set(&esd_ext_te_event, 0);
 
 	return ret;
@@ -416,6 +431,10 @@ int do_esd_check_read(void)
 		}
 		/* do dsi reset */
 		dpmgr_path_build_cmdq(phandle, qhandle, CMDQ_DSI_RESET, 0);
+		#ifdef VENDOR_EDIT
+		/* Yongpeng.Yi@PSW.MM.Display.LCD.Stability, 2017/12/13,add mm critical log */
+		mm_keylog_write("Dispaly Panel do_esd_check_read fail\n", "ESD\n", TYPE_ESD_EXCEPTION);
+		#endif /* VENDOR_EDIT */
 		goto destroy_cmdq;
 	}
 
@@ -558,10 +577,6 @@ static int primary_display_check_recovery_worker_kthread(void *data)
 	int i = 0;
 	int esd_try_cnt = 5; /* 20; */
 	int recovery_done = 0;
-	#ifdef VENDOR_EDIT
-	/* Ling.Guo@PSW.MM.Display.LCD.Machine, 2018/12/03,add for mm kevent fb. */
-	unsigned char payload[100] = "";
-	#endif
 
 	DISPFUNC();
 	sched_setscheduler(current, SCHED_RR, &param);
@@ -606,16 +621,14 @@ static int primary_display_check_recovery_worker_kthread(void *data)
 					break;
 				#ifdef VENDOR_EDIT
 				/* Yongpeng.Yi@PSW.MM.Display.LCD.Stability, 2018/07/04, add for hx83112a lcd esd read reg*/
-				if (is_project(18311) || is_project(18531) || is_project(18561) || is_project(18161)) {
-					DDPPR_ERR("[ESD]esd check fail, primary_get_lcm()->drv->name is:%s\n", primary_get_lcm()->drv->name);
-					if(!strcmp(primary_get_lcm()->drv->name,"oppo18311_dsjm_himax83112a_1080p_dsi_vdo") || !strcmp(primary_get_lcm()->drv->name,"oppo18311_truly_td4320_1080p_dsi_vdo"))
-					atomic_set(&enable_lcm_recovery, 1);
-				}
-
-                /*Shizeke@PSW.MM.Display.LCD.Stability, 2018/08/24, add for hx83112a lcd esd read reg in realme 18611*/
-				if(is_project(18611)){
-					DDPPR_ERR("[ESD]esd check fail, primary_get_lcm()->drv->name is:%s\n", primary_get_lcm()->drv->name);
-					if(!strcmp(primary_get_lcm()->drv->name,"oppo18611_dsjm_himax83112a_1080p_dsi_vdo") || !strcmp(primary_get_lcm()->drv->name,"oppo18311_truly_td4320_1080p_dsi_vdo"))
+				if (is_project(18311) || is_project(18011)
+					|| is_project(18531) || is_project(18561)
+					|| is_project(18161)) {
+					DDPPR_ERR("[ESD] name:%s\n", primary_get_lcm()->drv->name);
+					if(!strcmp(primary_get_lcm()->drv->name,"oppo18311_dsjm_himax83112a_1080p_dsi_vdo")
+						|| !strcmp(primary_get_lcm()->drv->name,"oppo18311_truly_td4320_1080p_dsi_vdo")
+						|| !strcmp(primary_get_lcm()->drv->name,"oppo18561_dsjm_jdi_himax83112a_1080p_dsi_vdo")
+						|| !strcmp(primary_get_lcm()->drv->name,"oppo18561_tianma_himax83112a_1080p_dsi_vdo"))
 					atomic_set(&enable_lcm_recovery, 1);
 				}
 				#endif /*VENDOR_EDIT*/
@@ -623,10 +636,6 @@ static int primary_display_check_recovery_worker_kthread(void *data)
 				DDPPR_ERR("[ESD]esd check fail, will do esd recovery. try=%d\n", i);
 				primary_display_esd_recovery();
 				#ifdef VENDOR_EDIT
-				/* Ling.Guo@PSW.MM.Display.LCD.Machine, 2018/12/03,add for mm kevent fb. */
-				scnprintf(payload, sizeof(payload), "EventID@@%d$$panel_name@@%s",
-					OPPO_MM_DIRVER_FB_EVENT_ID_ESD,primary_get_lcm()->drv->name);
-				upload_mm_kevent_fb_data(OPPO_MM_DIRVER_FB_EVENT_MODULE_DISPLAY,payload);
 				/*
 				* Yongpeng.Yi@PSW.MM.Display.LCD.Stability, 2018/01/12,
 				* add for esd recovery
@@ -663,6 +672,14 @@ static int primary_display_check_recovery_worker_kthread(void *data)
 	}
 	return 0;
 }
+
+#ifdef VENDOR_EDIT
+/* zhongwenjie@PSW.BSP.TP.Function, 2018/07/05, Add for tp fw download after esd recovery */
+extern void lcd_queue_load_tp_fw(void);
+extern bool flag_lcd_off;
+extern int _set_backlight_by_cmdq(unsigned int level);
+
+#endif /*VENDOR_EDIT*/
 
 /* ESD RECOVERY */
 int primary_display_esd_recovery(void)
@@ -802,17 +819,49 @@ int primary_display_esd_recovery(void)
 	}
 
 done:
+	#ifdef VENDOR_EDIT
+	/*
+	* ZhongWenjie@PSW.BSP.TP.FUNCTION, 2019/02/26,
+	* add to trigger tp irq reset for esd recovery
+	*/
+	lcd_trigger_tp_irq_reset();
+	#endif
 	primary_display_manual_unlock();
 	#ifdef VENDOR_EDIT
 	/*
 	* Yongpeng.Yi@PSW.MM.Display.LCD.Stability, 2018/07/21,
 	* add for 17197 esd recovery
 	*/
-	if (is_project(17197) || is_project(17199)) {
+	if (is_project(18311) || is_project(18011) || is_project(18611)) {
+		/* zhongwenjie@PSW.BSP.TP.Function, 2018/07/05, Add for tp fw download after esd recovery */
+		lcd_queue_load_tp_fw();
+	}
+
+		/* zhongwenjie@PSW.BSP.TP.Function, 2018/07/05, Add for tp fw download after esd recovery */
+	if ((!strcmp(primary_get_lcm()->drv->name,"oppo18561_dsjm_jdi_himax83112a_1080p_dsi_vdo"))
+	|| (!strcmp(primary_get_lcm()->drv->name,"oppo18561_tianma_himax83112a_1080p_dsi_vdo"))) {
+		lcd_queue_load_tp_fw();
+	}
+
+	if (is_project(17197) || is_project(17199) \
+		|| is_project(19391) || is_project(19531)) {
 		disp_lcm_set_backlight(primary_get_lcm(),NULL,esd_recovery_backlight_level);
-	} else if (is_project(18531) || is_project(18561) || is_project(18161) ) {
+	} else if (is_project(18531) || is_project(18561)
+		|| is_project(18161) || is_project(18311)
+		|| is_project(18011) || is_project(17331)
+		|| is_project(17175)) {
 		disp_lcm_set_backlight(primary_get_lcm(),primary_get_dpmgr_handle(),esd_recovery_backlight_level);
 	}
+
+	if (is_project(19151) || is_project(19350)) {
+		if (primary_get_state() != DISP_SLEPT) {
+			_set_backlight_by_cmdq(esd_recovery_backlight_level);
+		} else {
+			DISPCHECK("[ESD] lcd is off!\n");
+		}
+	}
+
+	flag_lcd_off = false;
 	#endif /* VENDOR_EDIT */
 	DISPCHECK("[ESD]ESD recovery end\n");
 	mmprofile_log_ex(mmp_r, MMPROFILE_FLAG_END, 0, 0);

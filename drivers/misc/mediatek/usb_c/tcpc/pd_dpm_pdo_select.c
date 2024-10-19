@@ -1,18 +1,17 @@
 /*
- * drives/usb/pd/pd_dpm_cor.c
+ * Copyright (C) 2016 MediaTek Inc.
+ *
  * Power Delivery Core Driver
  *
-* Copyright (C) 2015 MediaTek Inc.
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License version 2 as
-* published by the Free Software Foundation.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-* GNU General Public License for more details.
-*/
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
 
 #include "inc/pd_dpm_pdo_select.h"
 
@@ -26,7 +25,7 @@ struct dpm_select_info_t {
 };
 
 static inline void dpm_extract_apdo_info(
-	uint32_t pdo, struct dpm_pdo_info_t *info)
+		uint32_t pdo, struct dpm_pdo_info_t *info)
 {
 #ifdef CONFIG_USB_PD_REV30_PPS_SINK
 	switch (APDO_TYPE(pdo)) {
@@ -110,8 +109,8 @@ static inline int dpm_calc_src_cap_power_uw(
 }
 
 /*
-  * Select PDO from VSafe5V
-  */
+ * Select PDO from VSafe5V
+ */
 
 static bool dpm_select_pdo_from_vsafe5v(
 	struct dpm_select_info_t *select_info,
@@ -136,8 +135,8 @@ static bool dpm_select_pdo_from_vsafe5v(
 }
 
 /*
-  * Select PDO from Direct Charge
-  */
+ * Select PDO from Direct Charge
+ */
 
 #ifdef CONFIG_USB_PD_ALT_MODE_RTDC
 static bool dpm_select_pdo_from_direct_charge(
@@ -171,8 +170,8 @@ static bool dpm_select_pdo_from_direct_charge(
 #endif	/* CONFIG_USB_PD_ALT_MODE_RTDC */
 
 /*
-  * Select PDO from Custom
-  */
+ * Select PDO from Custom
+ */
 
 static bool dpm_select_pdo_from_custom(
 	struct dpm_select_info_t *select_info,
@@ -183,8 +182,8 @@ static bool dpm_select_pdo_from_custom(
 }
 
 /*
-  * Select PDO from Max Power
-  */
+ * Select PDO from Max Power
+ */
 
 static inline bool dpm_is_valid_pdo_pair(struct dpm_pdo_info_t *sink,
 	struct dpm_pdo_info_t *source, uint32_t policy)
@@ -300,8 +299,8 @@ static bool dpm_select_pdo_from_pps(
 #endif	/* CONFIG_USB_PD_REV30_PPS_SINK */
 
 /*
-  * Select PDO from defined rule ...
-  */
+ * Select PDO from defined rule ...
+ */
 
 typedef bool (*dpm_select_pdo_fun)(
 	struct dpm_select_info_t *select_info,
@@ -373,7 +372,12 @@ bool dpm_find_match_req_info(struct dpm_rdo_info_t *req_info,
 			req_info->max_uw = sink.uw;
 			req_info->oper_uw = select.max_uw;
 		} else {
+#ifndef VENDOR_EDIT
+/* Jianchao.Shi@PSW.BSP.CHG.Basic, 2019/04/23, sjc Modify for PD */
 			req_info->max_ma = sink.ma;
+#else
+			req_info->max_ma = source.ma;
+#endif
 			req_info->oper_ma = MIN(sink.ma, source.ma);
 		}
 

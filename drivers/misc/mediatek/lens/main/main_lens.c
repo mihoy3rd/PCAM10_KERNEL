@@ -95,6 +95,10 @@ static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
 	{1, AFDRV_LC898229AF, LC898229AF_SetI2Cclient, LC898229AF_Ioctl, LC898229AF_Release, NULL},
 	{1, AFDRV_AK7371AF, AK7371AF_SetI2Cclient, AK7371AF_Ioctl, AK7371AF_Release, NULL},
 	{1, AFDRV_AK7374AF, AK7374AF_SetI2Cclient, AK7374AF_Ioctl, AK7374AF_Release, NULL},
+	#ifdef VENDOR_EDIT
+	/* Longyuan.Yang@Camera add for FP5516 driver 20190227 */
+	{1, AFDRV_FP5516AF, FP5516AF_SetI2Cclient, FP5516AF_Ioctl, FP5516AF_Release, NULL},
+	#endif
 	{1, AFDRV_BU6424AF, BU6424AF_SetI2Cclient, BU6424AF_Ioctl, BU6424AF_Release, NULL},
 	{1, AFDRV_BU6429AF, BU6429AF_SetI2Cclient, BU6429AF_Ioctl, BU6429AF_Release, NULL},
 	{1, AFDRV_BU64748AF, bu64748af_SetI2Cclient_Main, bu64748af_Ioctl_Main, bu64748af_Release_Main, NULL},
@@ -134,6 +138,7 @@ static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
 static struct stAF_DrvList *g_pstAF_CurDrv;
 
 static spinlock_t g_AF_SpinLock;
+static spinlock_t g_afupdown_SpinLock;
 
 static int g_s4AF_Opened;
 
@@ -148,6 +153,7 @@ static struct device *lens_device;
 #if !defined(CONFIG_MTK_LEGACY)
 static struct regulator *regVCAMAF;
 static int g_regVCAMAFEn;
+extern int AF_UpDown;
 
 void AFRegulatorCtrl(int Stage)
 {
@@ -185,25 +191,33 @@ void AFRegulatorCtrl(int Stage)
 
 			LOG_INF("regulator_is_enabled %d\n", Status);
 
+			LOG_INF("MAIN_AF UP AF_updown=%d\n",AF_UpDown);
 			if (!Status) {
-				Status = regulator_set_voltage(regVCAMAF, 2800000, 2800000);
+				if(AF_UpDown < 1){
+					Status = regulator_set_voltage(regVCAMAF, 2800000, 2800000);
 
-				LOG_INF("regulator_set_voltage %d\n", Status);
+					LOG_INF("regulator_set_voltage %d\n", Status);
 
-				if (Status != 0)
-					LOG_INF("regulator_set_voltage fail\n");
+					if (Status != 0)
+						LOG_INF("regulator_set_voltage fail\n");
 
-				Status = regulator_enable(regVCAMAF);
-				LOG_INF("regulator_enable %d\n", Status);
+					Status = regulator_enable(regVCAMAF);
+					LOG_INF("regulator_enable %d\n", Status);
 
-				if (Status != 0)
-					LOG_INF("regulator_enable fail\n");
+					if (Status != 0)
+						LOG_INF("regulator_enable fail\n");
+				}
 
 				g_regVCAMAFEn = 1;
 				usleep_range(5000, 5500);
 			} else {
 				LOG_INF("AF Power on\n");
+				if(g_regVCAMAFEn == 0)
+					g_regVCAMAFEn = 1;
 			}
+			spin_lock(&g_afupdown_SpinLock);
+			AF_UpDown = AF_UpDown + 1;
+			spin_unlock(&g_afupdown_SpinLock);
 		}
 	} else {
 		if (regVCAMAF != NULL && g_regVCAMAFEn == 1) {
@@ -213,11 +227,17 @@ void AFRegulatorCtrl(int Stage)
 
 			if (Status) {
 				LOG_INF("Camera Power enable\n");
-
-				Status = regulator_disable(regVCAMAF);
-				LOG_INF("regulator_disable %d\n", Status);
-				if (Status != 0)
-					LOG_INF("Fail to regulator_disable\n");
+				spin_lock(&g_afupdown_SpinLock);
+				AF_UpDown = AF_UpDown - 1;
+				spin_unlock(&g_afupdown_SpinLock);
+				LOG_INF("MAIN_AF DOWN AF_updown=%d\n",AF_UpDown);
+				if(AF_UpDown < 1){
+					Status = regulator_disable(regVCAMAF);
+					LOG_INF("regulator_disable %d\n", Status);
+					if (Status != 0)
+						LOG_INF("Fail to regulator_disable\n");
+					AF_UpDown = 0;
+				}
 			}
 			/* regulator_put(regVCAMAF); */
 			LOG_INF("AFIOC_S_SETPOWERCTRL regulator_put %p\n", regVCAMAF);
@@ -246,6 +266,13 @@ void AF_PowerDown(void)
 		#ifdef CONFIG_MTK_LENS_AK7374AF_SUPPORT
 		AK7374AF_SetI2Cclient(g_pstAF_I2Cclient, &g_AF_SpinLock, &g_s4AF_Opened);
 		AK7374AF_PowerDown();
+		#endif
+
+		#ifdef VENDOR_EDIT
+		/*Longyuan.Yang@Camera add for FP5516 driver 20190227*/
+		#ifdef CONFIG_MTK_LENS_FP5516AF_SUPPORT
+		FP5516AF_SetI2Cclient(g_pstAF_I2Cclient, &g_AF_SpinLock, &g_s4AF_Opened);
+		#endif
 		#endif
 
 		#ifdef CONFIG_MTK_LENS_DW9800WAF_SUPPORT
@@ -646,6 +673,7 @@ static int AF_i2c_probe(struct i2c_client *client, const struct i2c_device_id *i
 	}
 
 	spin_lock_init(&g_AF_SpinLock);
+	spin_lock_init(&g_afupdown_SpinLock);
 
 #if !defined(CONFIG_MTK_LEGACY)
 	AFRegulatorCtrl(0);

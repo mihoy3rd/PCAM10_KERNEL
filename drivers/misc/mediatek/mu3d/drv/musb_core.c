@@ -1953,7 +1953,19 @@ musb_srp_store(struct device *dev, struct device_attribute *attr, const char *bu
 /* Qiao.Hu@@Prd6.BaseDrv.USB.Basic, 2017/07/28, Add for otg */
 extern bool is_switch_done(void);
 extern void mtk_xhci_eint_iddig_gpio_mode(void);
+#ifdef VENDOR_EDIT
+/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Add for compile error */
+#ifdef CONFIG_USB_MTK_IDDIG
 extern int iddig_gpio_mode(int mode);
+#else
+static int iddig_gpio_mode(int mode)
+{
+	return -1;
+}
+#endif
+#else /*VENDOR_EDIT*/
+extern int iddig_gpio_mode(int mode);
+#endif
 
 static bool start_id_polling= false;
 static bool id_polling_state = false;
@@ -2008,6 +2020,8 @@ static int set_start_id_polling(void)
 	return ret;
 }
 
+ #if defined(VENDOR_EDIT) && !defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
+/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/15, sjc Modify for OTG switch, typec not define it */
 void oppo_set_otg_switch_status(bool value)
 {
 	start_id_polling = value;
@@ -2015,6 +2029,7 @@ void oppo_set_otg_switch_status(bool value)
 	set_start_id_polling();
 }
 EXPORT_SYMBOL(oppo_set_otg_switch_status);
+#endif /* VENDOR_EDIT && CONFIG_OPPO_CHARGER_MT6370_TYPEC */
 
 static ssize_t start_id_polling_show(struct device* dev, struct device_attribute *attr, char *buf)
 {
@@ -2160,10 +2175,17 @@ static void musb_suspend_work(struct work_struct *data)
 	os_printk(K_INFO, "%s active_ep=%d, clk_on=%d\n", __func__, musb->active_ep,
 		  musb->is_clk_on);
 
+#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_CHARGER_MT6370_TYPEC)
+/* Jianchao.Shi@PSW.BSP.CHG.Basic, 2019/08/06, sjc Modify for USB enumeration */
+	if (musb->is_clk_on == 1) {
+		musb_power_down(musb);
+	}
+#else
 	if (musb->is_clk_on == 1
 	    && !usb_cable_connected()) {
 		musb_power_down(musb);
 	}
+#endif /*VENDOR_EDIT && CONFIG_OPPO_CHARGER_MT6370_TYPEC*/
 }
 
 /* Only used to provide driver mode change events */
@@ -3009,7 +3031,16 @@ static struct platform_driver musb_driver_probe = {
 
 static int usb_test_wakelock_inited;
 static struct wake_lock usb_test_wakelock;
+#ifdef VENDOR_EDIT
+/* Jianchao.Shi@BSP.CHG.Basic, 2019/06/10, sjc Add for adb */
+#ifdef CONFIG_MU3D_FORCE_ON
+int mu3d_force_on = 1;
+#else
 int mu3d_force_on;
+#endif
+#else /*VENDOR_EDIT*/
+int mu3d_force_on;
+#endif
 static int set_mu3d_force_on(const char *val, const struct kernel_param *kp)
 {
 	int option;

@@ -181,7 +181,9 @@ static void fsm_routine_exception(struct ccci_fsm_ctl *ctl, struct ccci_fsm_comm
 		}
 		fsm_md_exception_stage(&ctl->ee_ctl, 2);
 		/*wait until modem memory dump done*/
-		fsm_check_ee_done(&ctl->ee_ctl, EE_DONE_TIMEOUT);
+                /*Ashish.Mathur@PSW.NW.REG.2001253, 2019/05/23*/
+		/*ALPS04423838 - MTK Suggested this patch*/
+		/*fsm_check_ee_done(&ctl->ee_ctl, EE_DONE_TIMEOUT);*/
 		break;
 	default:
 		break;

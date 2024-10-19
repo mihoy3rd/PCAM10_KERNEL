@@ -116,9 +116,6 @@ obj-$(CONFIG_MTK_CCU)	+= ccu/src/
 ifneq ($(wildcard $(srctree)/drivers/misc/mediatek/met_drv/),)
 obj-y += met_drv/
 endif
-ifneq ($(wildcard $(srctree)/drivers/misc/mediatek/met/),)
-obj-y += met/
-endif
 obj-$(CONFIG_MTK_CCCI_DEVICES)	+=  ccci_util/
 obj-$(CONFIG_MTK_NET_CCMNI) +=  ccmni/
 #obj-$(CONFIG_MTK_ECCCI_DRIVER) += c2k_ccci/
@@ -144,9 +141,7 @@ obj-$(CONFIG_MTK_DEBUG_LATCH)	+= debug_latch/
 obj-$(CONFIG_MTK_DEBUG_TRACER)	+= debug_tracer/
 obj-$(CONFIG_MTK_DFD_INTERNAL_DUMP) += dfd/
 obj-$(CONFIG_MTK_WATCHPOINT) += watchpoint/
-ifneq ($(CONFIG_MTK_SYSTRACKER_DISABLE),y)
 obj-$(CONFIG_MTK_SYSTRACKER)   += systracker/
-endif
 obj-$(CONFIG_MTK_RAM_CONSOLE)	+= ram_console/
 obj-$(CONFIG_MTK_DRAM_LOG_STORE)	+= log_store/
 obj-$(CONFIG_MTK_USE_RESERVED_EXT_MEM) += exm/
@@ -166,7 +161,6 @@ obj-$(CONFIG_THERMAL)   += thermal/
 obj-$(CONFIG_MEDIATEK_SOLUTION)	+= aee/
 obj-$(CONFIG_MTK_ATF_LOGGER)	+= atf_log/
 obj-$(CONFIG_MTK_MLOG) += mlog/
-
 obj-$(CONFIG_MTK_EMI_BWL)	+= emi_bwl/
 #obj-$(CONFIG_MD32_SUPPORT)     += md32/
 obj-$(CONFIG_MTK_EMI_MBW) += emi_mbw/

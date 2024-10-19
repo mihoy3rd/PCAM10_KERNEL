@@ -37,7 +37,8 @@ ifeq ($(CONFIG_MTK_LENS_DW9800WAF_SUPPORT), y)
 endif
 MAIN2_CFILES  += common/bu6429af/bu64748af.c
 MAIN2_CFILES  += common/bu6429af/bu64748_function.c
-
+#Henry.Chang add for 19151 20190927
+MAIN2_CFILES  += common/dw9718taf/DW9718TAF.c
 obj-m := main2af.o
 main2af-objs := $(MAIN2_CFILES:.c=.o)
 
@@ -51,5 +52,7 @@ ifeq ($(CONFIG_MTK_LENS_DW9800WAF_SUPPORT), y)
 endif
 obj-y += common/bu64748af/
 obj-y += common/lc898217af/
+#Henry.Chang add for 19151 20190927
+obj-y += common/dw9718taf/
 
 endif

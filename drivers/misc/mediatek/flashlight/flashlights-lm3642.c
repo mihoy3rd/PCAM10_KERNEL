@@ -102,7 +102,7 @@ struct lm3642_chip_data {
  * lm3642 operations
  *****************************************************************************/
 static const int lm3642_current[LM3642_LEVEL_NUM] = {
-	 48,  93,  141,  188,  281,  375,  469,  563, 656, 750,
+	 48,  94,  141,  188,  281,  375,  469,  563, 656, 750,
 	844, 938, 1031, 1125, 1219, 1313, 1406, 1500
 };
 
@@ -114,7 +114,7 @@ static const unsigned char lm3642_flash_level[LM3642_LEVEL_NUM] = {
 };
 #else
 static const unsigned char lm3642_flash_level[LM3642_LEVEL_NUM] = {
-	0x10, 0x20, 0x20, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+	0x00, 0x10, 0x20, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 	0x08, 0x09, 0x0B, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
 };
 #endif

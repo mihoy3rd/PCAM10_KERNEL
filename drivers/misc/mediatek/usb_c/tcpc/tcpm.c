@@ -610,12 +610,12 @@ int tcpm_get_remote_power_cap(struct tcpc_device *tcpc_dev,
 	struct tcpm_power_cap_val cap;
 	int i;
 
-	remote_cap->selected_cap_idx = tcpc_dev->
-			pd_port.pe_data.remote_selected_cap;
+	remote_cap->selected_cap_idx =
+		tcpc_dev->pd_port.pe_data.remote_selected_cap;
 	remote_cap->nr = tcpc_dev->pd_port.pe_data.remote_src_cap.nr;
 	for (i = 0; i < remote_cap->nr; i++) {
-		tcpm_extract_power_cap_val(tcpc_dev->
-			pd_port.pe_data.remote_src_cap.pdos[i], &cap);
+		tcpm_extract_power_cap_val(
+			tcpc_dev->pd_port.pe_data.remote_src_cap.pdos[i], &cap);
 		remote_cap->max_mv[i] = cap.max_mv;
 		remote_cap->min_mv[i] = cap.min_mv;
 		remote_cap->ma[i] = cap.ma;

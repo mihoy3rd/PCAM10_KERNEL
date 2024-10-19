@@ -61,6 +61,8 @@ enum mt65xx_led_pmic {
 	MT65XX_LED_PMIC_NLED_ISINK_MIN = MT65XX_LED_PMIC_LCD_ISINK,
 	MT65XX_LED_PMIC_NLED_ISINK0,
 	MT65XX_LED_PMIC_NLED_ISINK1,
+	MT65XX_LED_PMIC_NLED_ISINK2,
+	MT65XX_LED_PMIC_NLED_ISINK3,
 	MT65XX_LED_PMIC_NLED_ISINK_MAX,
 };
 
@@ -112,7 +114,7 @@ enum MT65XX_PMIC_ISINK_FSEL {
  *  for PWM
  *****************************************************************************/
 
-#define MIN_FRE_OLD_PWM 32	/* the min frequence when use old mode pwm by kHz */
+#define MIN_FRE_OLD_PWM 32/* the min frequence when use old mode pwm by kHz */
 #define BACKLIGHT_LEVEL_PWM_64_FIFO_MODE_SUPPORT 64
 #define BACKLIGHT_LEVEL_PWM_256_SUPPORT 256
 #define BACKLIGHT_LEVEL_PWM_MODE_CONFIG BACKLIGHT_LEVEL_PWM_256_SUPPORT

@@ -29,6 +29,14 @@ void pd_dpm_inform_cable_id(struct pd_port *pd_port, bool src_startup);
 void pd_dpm_dynamic_enable_vconn(struct pd_port *pd_port);
 void pd_dpm_dynamic_disable_vconn(struct pd_port *pd_port);
 
+enum {
+	VCONN_HIGHV_PROT_STANDBY = 0,
+	VCONN_HIGHV_PROT_READY = 1,
+};
+
+void pd_dpm_vconn_highv_protect(
+	struct pd_port *pd_port, uint8_t scenario);
+
 /* ---- SNK ---- */
 
 #ifdef CONFIG_USB_PD_REV30_PPS_SINK

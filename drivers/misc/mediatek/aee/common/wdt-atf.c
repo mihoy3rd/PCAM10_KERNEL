@@ -110,6 +110,23 @@ struct regs_buffer {
 static struct regs_buffer regs_buffer_bin[AEE_MTK_CPU_NUMS];
 
 
+#ifdef VENDOR_EDIT
+//Liang.Zhang@PSW.TECH.BOOTUP, 2019/01/22, Add for monitor kernel error
+#ifdef HANG_OPPO_ALL
+extern int hwt_happened;
+extern void deal_fatal_err(void);
+#endif
+#endif  // VENDOR_EDIT
+
+#ifdef VENDOR_EDIT
+//Zhang Jiashu@PSW.AD.Performance,2019/10/03,Add for flushing device cache before goto dump mode!
+extern bool is_triggering_hwt;
+extern void flush_cache_on_panic(void);
+#endif  /*VENDOR_EDIT*/
+
+
+
+
 int in_fiq_handler(void)
 {
 	return atomic_read(&wdt_enter_fiq);
@@ -558,6 +575,28 @@ void aee_wdt_atf_info(unsigned int cpu, struct pt_regs *regs)
 #ifdef CONFIG_SCHED_DEBUG
 	sysrq_sched_debug_show_at_AEE();
 #endif
+
+
+#ifdef VENDOR_EDIT
+//Zhang Jiashu@PSW.AD.Performance,2019/10/03,Add for flushing device cache before goto dump mode!
+    if(!is_triggering_hwt)
+    {
+        is_triggering_hwt = true;
+        pr_notice("is_triggering_hwt : true\n");
+        flush_cache_on_panic();
+    }
+#endif  // VENDOR_EDIT
+
+#ifdef VENDOR_EDIT
+//Liang.Zhang@PSW.TECH.BOOTUP, 2019/01/22, Add for monitor kernel error
+#ifdef HANG_OPPO_ALL
+    if(!hwt_happened)
+    {
+        hwt_happened = 1;
+        deal_fatal_err();
+    }
+#endif
+#endif  // VENDOR_EDIT
 
 	/* avoid lock prove to dump_stack in __debug_locks_off() */
 	xchg(&debug_locks, 0);

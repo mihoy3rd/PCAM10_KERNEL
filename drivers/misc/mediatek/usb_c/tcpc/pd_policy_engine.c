@@ -830,6 +830,7 @@ void (*pe_get_exit_action(uint8_t pe_state))
 #endif	/* CONFIG_USB_PD_PE_SOURCE */
 
 /******************* Sink *******************/
+		/* fall-through */
 #ifdef CONFIG_USB_PD_PE_SINK
 	case PE_SNK_SELECT_CAPABILITY:
 		retval = pe_snk_select_capability_exit;
@@ -858,6 +859,7 @@ void (*pe_get_exit_action(uint8_t pe_state))
 #endif	/* CONFIG_USB_PD_PE_SINK */
 
 /******************* PR_SWAP *******************/
+		/* fall-through */
 #ifdef CONFIG_USB_PD_PR_SWAP
 	case PE_DR_SRC_GET_SOURCE_CAP:
 		retval = pe_dr_src_get_source_cap_exit;
@@ -878,12 +880,13 @@ void (*pe_get_exit_action(uint8_t pe_state))
 #endif	/* CONFIG_USB_PD_PR_SWAP */
 
 /******************* PD30 Common *******************/
+		/* fall-through */
 #ifdef CONFIG_USB_PD_REV30
-	case PE_GET_BATTERY_CAP:
 #ifdef CONFIG_USB_PD_REV30_BAT_CAP_REMOTE
+	case PE_GET_BATTERY_CAP:
 		retval = pe_get_battery_cap_exit;
-#endif	/* CONFIG_USB_PD_REV30_BAT_CAP_REMOTE */
 		break;
+#endif	/* CONFIG_USB_PD_REV30_BAT_CAP_REMOTE */
 
 #ifdef CONFIG_USB_PD_REV30_BAT_STATUS_REMOTE
 	case PE_GET_BATTERY_STATUS:
@@ -991,10 +994,8 @@ static inline void pd_pe_state_change(
 
 	if (pd_curr_is_vdm_evt(pd_port))
 		pe_reset_vdm_state_variable(pd_port, pe_data);
-	else if (pe_data->pe_state_timer) {
-		pd_disable_timer(pd_port, pe_data->pe_state_timer);
-		pe_data->pe_state_timer = 0;
-	}
+	else if (pe_data->pe_state_timer)
+		pd_disable_pe_state_timer(pd_port);
 
 	pe_data->pe_state_flags = 0;
 	pe_data->pe_state_flags2 = 0;
@@ -1085,7 +1086,7 @@ static inline bool pd_try_get_vdm_event(
 		break;
 #endif	/* CONFIG_PD_SRC_RESET_CABLE */
 #endif	/* CONFIG_USB_PD_PE_SOURCE */
-
+		/* fall-through */
 #ifdef CONFIG_USB_PD_CUSTOM_DBGACC
 	case PE_DBG_READY:
 		ret = pd_get_vdm_event(tcpc_dev, pd_event);

@@ -88,10 +88,18 @@
  * add for lcd serial num
  */
 #include <soc/oppo/oppo_project.h>
-/* Ling.Guo@PSW.MM.Display.LCD.Machine, 2018/12/03,add for mm kevent fb. */
-#include <linux/oppo_mm_kevent_fb.h>
+#include <linux/fb.h>
 #include <linux/time.h>
 #include <linux/timekeeping.h>
+
+/*
+* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/01/21,
+* add for fingerprint notify frigger
+*/
+extern bool flag_lcd_off;
+static bool oppo_fp_notify_down_delay = false;
+static bool oppo_fp_notify_up_delay = false;
+static void fingerprint_send_notify(struct fb_info *fbi, uint8_t fingerprint_op_mode);
 #endif /*VENDOR_EDIT*/
 
 #define DDP_OUTPUT_LAYID 4
@@ -682,13 +690,13 @@ static int _get_max_layer(unsigned int session_id)
 static int disp_validate_input_params(struct disp_input_config *cfg, int layer_num)
 {
 	if (cfg->layer_id >= layer_num) {
-		DISPERR("layer_id=%d > layer_num=%d\n", cfg->layer_id, layer_num);
+		disp_aee_print("layer_id=%d > layer_num=%d\n", cfg->layer_id, layer_num);
 		return -1;
 	}
 	if (cfg->layer_enable) {
 		if ((cfg->src_fmt <= 0) || ((cfg->src_fmt >> 8) == 15) ||
 		    ((cfg->src_fmt >> 8) > (DISP_FORMAT_DIM >> 8))) {
-			DISPERR("layer_id=%d,src_fmt=0x%x is invalid color format\n",
+			disp_aee_print("layer_id=%d,src_fmt=0x%x is invalid color format\n",
 				       cfg->layer_id, cfg->src_fmt);
 			return -1;
 		}
@@ -700,7 +708,7 @@ static int disp_validate_output_params(struct disp_output_config *cfg)
 {
 	if ((cfg->fmt <= 0) || ((cfg->fmt >> 8) == 15) ||
 	    ((cfg->fmt >> 8) > (DISP_FORMAT_DIM >> 8))) {
-		DISPERR("output fmt=0x%x is invalid color format\n", cfg->fmt);
+		disp_aee_print("output fmt=0x%x is invalid color format\n", cfg->fmt);
 		return -1;
 	}
 
@@ -716,7 +724,7 @@ int disp_validate_ioctl_params(struct disp_frame_cfg_t *cfg)
 		return -1;
 
 	if (cfg->input_layer_num > max_layer_num) {
-		DISPERR("sess:0x%x layer_num %d>%d\n", cfg->session_id,
+		disp_aee_print("sess:0x%x layer_num %d>%d\n", cfg->session_id,
 			       cfg->input_layer_num, max_layer_num);
 		return -1;
 	}
@@ -965,14 +973,40 @@ static int do_frame_config(struct frame_queue_t *frame_node)
 {
 	struct disp_frame_cfg_t *frame_cfg = &frame_node->frame_cfg;
 
-	if (DISP_SESSION_TYPE(frame_cfg->session_id) == DISP_SESSION_PRIMARY)
+	if (DISP_SESSION_TYPE(frame_cfg->session_id) == DISP_SESSION_PRIMARY) {
 		primary_display_frame_cfg(frame_cfg);
+	}
+
+	#ifdef VENDOR_EDIT
+	/*
+	* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/01/21,
+	* add for fingerprint notify frigger
+	*/
+	if (oppo_fp_notify_down_delay && ((frame_cfg->hbm_en & 0x2) > 0)) {
+		oppo_fp_notify_down_delay = false;
+		fingerprint_send_notify(NULL, 1);
+	}
+
+	#endif
+
+
 #if ((defined CONFIG_MTK_HDMI_SUPPORT) || (CONFIG_MTK_DUAL_DISPLAY_SUPPORT == 2))
 	else if (DISP_SESSION_TYPE(frame_cfg->session_id) == DISP_SESSION_EXTERNAL)
 		external_display_frame_cfg(frame_cfg);
 #endif
 	else if (DISP_SESSION_TYPE(frame_cfg->session_id) == DISP_SESSION_MEMORY)
 		ovl2mem_frame_cfg(frame_cfg);
+
+	#ifdef VENDOR_EDIT
+	/*
+	* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/01/21,
+	* add for fingerprint notify frigger
+	*/
+	if (oppo_fp_notify_up_delay && ((frame_cfg->hbm_en & 0x2) == 0)) {
+		oppo_fp_notify_up_delay = false;
+		fingerprint_send_notify(NULL, 0);
+	}
+	#endif
 
 	return 0;
 }
@@ -1911,7 +1945,9 @@ static ssize_t LCM_CABC_store(struct device *dev,
     * Yongpeng.Yi@PSW.MM.Display.LCD.Machine, 2018/01/29,
     * modify for oled not need set cabc
     */
-    if (!is_project(OPPO_17197)) {
+    if (!(is_project(OPPO_17197) \
+    	|| is_project(OPPO_19531) || is_project(OPPO_19391) \
+    	|| is_project(19151) || is_project(19350))) {
         ret = primary_display_set_cabc_mode((unsigned int)CABC_mode);
     }
 
@@ -1922,6 +1958,7 @@ static DEVICE_ATTR(LCM_CABC, 0644, LCM_CABC_show, LCM_CABC_store);
 
 /* Yongpeng.Yi@PSW.MultiMedia.Display.LCD.Feature, 2018/09/10, Add for sau and silence close backlight */
 unsigned long silence_mode = 0;
+unsigned int fp_silence_mode = 0;
 
 static ssize_t silence_show(struct device *dev,
 						struct device_attribute *attr, char *buf)
@@ -1946,9 +1983,6 @@ static DEVICE_ATTR(silence, 0644, silence_show, silence_store);
 
 /* Yongpeng.Yi@PSW.MM.Display.LCD.Stability, 2018/09/06, add for samsung lcd hbm node*/
 unsigned long HBM_mode = 0;
-struct timespec hbm_time_on;
-struct timespec hbm_time_off;
-long hbm_on_start = 0;
 extern int primary_display_set_hbm_mode(unsigned int level);
 
 static ssize_t LCM_HBM_show(struct device *dev,
@@ -1962,23 +1996,13 @@ static ssize_t LCM_HBM_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t num)
 {
 	int ret;
-	unsigned char payload[100] = "";
+
 
 	ret = kstrtoul(buf, 10, &HBM_mode);
 
 	printk("%s HBM_mode=%ld\n", __func__, HBM_mode);
 
 	ret = primary_display_set_hbm_mode((unsigned int)HBM_mode);
-
-	if (HBM_mode > 0) {
-		get_monotonic_boottime(&hbm_time_on);
-		hbm_on_start = hbm_time_on.tv_sec;
-	} else {
-		get_monotonic_boottime(&hbm_time_off);
-		scnprintf(payload, sizeof(payload), "EventID@@%d$$hbm@@hbm state on time = %ld sec",
-			OPPO_MM_DIRVER_FB_EVENT_ID_HBM,(hbm_time_off.tv_sec - hbm_on_start));
-		upload_mm_kevent_fb_data(OPPO_MM_DIRVER_FB_EVENT_MODULE_DISPLAY,payload);
-	}
 
 	return num;
 }
@@ -1989,6 +2013,7 @@ static DEVICE_ATTR(LCM_HBM, 0644, LCM_HBM_show, LCM_HBM_store);
 * add for lcd serial num
 */
 #define PANEL_SERIAL_NUM_REG 0xA1
+#define PANEL_SERIAL_NUM_REG_CONTINUE 0xA8
 #define PANEL_REG_READ_LEN   16
 static uint64_t serial_number = 0x0;
 extern int primary_display_read_serial(char addr, uint64_t *buf, int lenth);
@@ -1996,7 +2021,9 @@ extern int panel_serial_number_read(char cmd, uint64_t *buf, int num);
 int lcm_first_get_serial(void)
 {
 	int ret = 0;
-	if (is_project(OPPO_17197)) {
+	if (is_project(OPPO_17197) \
+		|| is_project(OPPO_19531) || is_project(OPPO_19391) \
+		|| is_project(19151) || is_project(19350)) {
 		pr_err("lcm_first_get_serial\n");
 		ret = panel_serial_number_read(PANEL_SERIAL_NUM_REG, &serial_number,
 				PANEL_REG_READ_LEN);
@@ -2013,6 +2040,24 @@ static ssize_t mdss_get_panel_serial_number(struct device *dev,
 		ret = primary_display_read_serial(PANEL_SERIAL_NUM_REG, &serial_number,
 				PANEL_REG_READ_LEN);
 		if (ret <= 0)
+			ret = scnprintf(buf, PAGE_SIZE, "Get serial number failed: %d\n",ret);
+		else
+			ret = scnprintf(buf, PAGE_SIZE, "Get panel serial number: %llx\n",serial_number);
+	} else if (is_project(OPPO_19531) || is_project(OPPO_19391)) {
+		if (serial_number == 0) {
+			ret = primary_display_read_serial(PANEL_SERIAL_NUM_REG_CONTINUE, &serial_number,
+				PANEL_REG_READ_LEN);
+		}
+		if (ret <= 0 && serial_number == 0)
+			ret = scnprintf(buf, PAGE_SIZE, "Get serial number failed: %d\n",ret);
+		else
+			ret = scnprintf(buf, PAGE_SIZE, "Get panel serial number: %llx\n",serial_number);
+ 	} else if (is_project(19151) || is_project(19350)) {
+		if (serial_number == 0) {
+			ret = primary_display_read_serial(PANEL_SERIAL_NUM_REG_CONTINUE, &serial_number,
+				PANEL_REG_READ_LEN);
+		}
+		if (ret <= 0 && serial_number == 0)
 			ret = scnprintf(buf, PAGE_SIZE, "Get serial number failed: %d\n",ret);
 		else
 			ret = scnprintf(buf, PAGE_SIZE, "Get panel serial number: %llx\n",serial_number);
@@ -2047,7 +2092,9 @@ static ssize_t lcm_id_info_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	int ret = 0;
-	if (is_project(OPPO_17197) && (lcm_id_addr != 0)) {
+	if ((is_project(OPPO_17197) \
+		|| is_project(OPPO_19531) || is_project(OPPO_19391) \
+		|| is_project(19151) || is_project(19350)) && (lcm_id_addr != 0)) {
 		ret = primary_display_read_lcm_id(lcm_id_addr, &lcm_id_info, LCM_ID_READ_LEN);
 		ret = scnprintf(buf, PAGE_SIZE, "LCM ID[%x]: 0x%x 0x%x\n", lcm_id_addr, lcm_id_info, 0);
 	} else {
@@ -2090,7 +2137,6 @@ static ssize_t FFL_SET_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t num)
 {
 	int ret;
-	unsigned char payload[32] = "";
 
 	ret = kstrtouint(buf, 10, &ffl_set_mode);
 
@@ -2100,14 +2146,53 @@ static ssize_t FFL_SET_store(struct device *dev,
 		ffl_set_enable(1);
 	}
 
-	if (ffl_set_mode == 1) {
-		ret = scnprintf(payload, sizeof(payload), "EventID@@%d$$fflset@@%d",OPPO_MM_DIRVER_FB_EVENT_ID_FFLSET,ffl_set_mode);
-		upload_mm_kevent_fb_data(OPPO_MM_DIRVER_FB_EVENT_MODULE_DISPLAY,payload);
-	}
 	return num;
 }
 
 static DEVICE_ATTR(FFL_SET, 0644, FFL_SET_show, FFL_SET_store);
+
+/*
+* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/01/21,
+* add for fingerprint notify frigger
+*/
+static void fingerprint_send_notify(struct fb_info *fbi, uint8_t fingerprint_op_mode)
+{
+	struct fb_event event;
+
+	event.info  = fbi;
+	event.data = &fingerprint_op_mode;
+	fb_notifier_call_chain(MTK_ONSCREENFINGERPRINT_EVENT, &event);
+	pr_info("%s send uiready : %d\n", __func__, fingerprint_op_mode);
+}
+static ssize_t fingerprint_notify_trigger(struct device *dev,
+                               struct device_attribute *attr,
+                               const char *buf, size_t num)
+{
+	uint8_t fingerprint_op_mode = 0x0;
+
+	/* will ignoring event during panel off situation. */
+	if (flag_lcd_off)
+	{
+		pr_err("%s panel in off state, ignoring event.\n", __func__);
+		return num;
+	}
+
+	if (kstrtou8(buf, 0, &fingerprint_op_mode))
+	{
+		pr_err("%s kstrtouu8 buf error!\n", __func__);
+		return num;
+	}
+
+	if (fingerprint_op_mode == 1) {
+		oppo_fp_notify_down_delay = true;
+	} else {
+		oppo_fp_notify_up_delay = true;
+	}
+	pr_info("%s receive uiready %d\n", __func__,fingerprint_op_mode);
+	return num;
+}
+
+static DEVICE_ATTR(fingerprint_notify, S_IRUGO|S_IWUSR, NULL, fingerprint_notify_trigger);
 #endif /*VENDOR_EDIT*/
 
 static int mtk_disp_mgr_probe(struct platform_device *pdev)
@@ -2144,41 +2229,52 @@ static int mtk_disp_mgr_probe(struct platform_device *pdev)
 	    (struct class_device *)device_create(mtk_disp_mgr_class, NULL, mtk_disp_mgr_devno, NULL,
 						 DISP_SESSION_DEVICE);
 #ifdef VENDOR_EDIT
+	/*
+	* Yongpeng.Yi@PSW.MM.Display.LCD.Stability, 2018/01/16,
+	* add for lcd serial num
+	*/
+	dev =(struct device *) class_dev;
+	ret = device_create_file(dev, &dev_attr_LCM_CABC);
+	if (ret < 0)
+	{
+		printk("%s cabc device create file failed!\n", __func__);
+	}
+
+	if (is_project(OPPO_17197) \
+		|| is_project(OPPO_19531) || is_project(OPPO_19391) \
+		|| is_project(19151) || is_project(19350)) {
+		ret = device_create_file(dev, &dev_attr_panel_serial_number);
+		if (ret < 0) {
+			pr_err("%s dev_attr_panel_serial_number create file failed!\n",__func__);
+		}
+
 		/*
 		* Yongpeng.Yi@PSW.MM.Display.LCD.Stability, 2018/01/16,
-		* add for lcd serial num
+		* add for samsung lcd hbm node
 		*/
-		dev =(struct device *) class_dev;
-		ret = device_create_file(dev, &dev_attr_LCM_CABC);
-		if (ret < 0)
-		{
-			printk("%s cabc device create file failed!\n", __func__);
+		ret = device_create_file(dev, &dev_attr_LCM_HBM);
+		if (ret < 0) {
+			printk("%s device hbm create file failed!\n", __func__);
 		}
 
-		if (is_project(OPPO_17197)) {
-			ret = device_create_file(dev, &dev_attr_panel_serial_number);
-			if (ret < 0) {
-				pr_err("%s dev_attr_panel_serial_number create file failed!\n",__func__);
-			}
-
-			/*
-			* Yongpeng.Yi@PSW.MM.Display.LCD.Stability, 2018/01/16,
-			* add for samsung lcd hbm node
-			*/
-			ret = device_create_file(dev, &dev_attr_LCM_HBM);
-			if (ret < 0) {
-				printk("%s device hbm create file failed!\n", __func__);
-			}
-
-			/*
-			* Yongpeng.Yi@PSW.MM.Display.LCD.Machine, 2018/01/26,
-			* add lcm id info
-			*/
-			ret = device_create_file(dev, &dev_attr_lcm_id_info);
-			if (ret < 0) {
-				pr_err("%s dev_attr_lcm_id_info create file failed!\n",__func__);
-			}
+		/*
+		* Yongpeng.Yi@PSW.MM.Display.LCD.Machine, 2018/01/26,
+		* add lcm id info
+		*/
+		ret = device_create_file(dev, &dev_attr_lcm_id_info);
+		if (ret < 0) {
+			pr_err("%s dev_attr_lcm_id_info create file failed!\n",__func__);
 		}
+
+		/*
+		* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/01/21,
+		* add for fingerprint notify frigger
+		*/
+		ret = device_create_file(dev, &dev_attr_fingerprint_notify);
+		if (ret < 0) {
+			pr_err("%s dev_attr_fingerprint_notify create file failed!\n",__func__);
+		}
+	}
 
 /* Yongpeng.Yi@PSW.MultiMedia.Display.LCD.Feature, 2018/09/10, Add for sau and silence close backlight */
 	if ((oppo_boot_mode == OPPO_SILENCE_BOOT)
@@ -2186,6 +2282,7 @@ static int mtk_disp_mgr_probe(struct platform_device *pdev)
 	{
 		printk("%s OPPO_SILENCE_BOOT set silence_mode to 1\n", __func__);
 		silence_mode = 1;
+		fp_silence_mode = 1;
 	}
 
 	ret = device_create_file(dev, &dev_attr_silence);

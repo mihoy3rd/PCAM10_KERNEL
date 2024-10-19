@@ -355,15 +355,17 @@ int DW9718SAF_Release(struct inode *a_pstInode, struct file *a_pstFile)
 				#else
 				s4AF_WriteReg(g_u4CurrPosition - af_step);
 				#endif
+				spin_lock(g_pAF_SpinLock);
 				g_u4CurrPosition = g_u4CurrPosition - af_step;
+				spin_unlock(g_pAF_SpinLock);
 				mdelay(10);
 				if (g_u4CurrPosition <= 0 || g_u4CurrPosition > 1023)
 					break;
 			}
 		}
-
+		spin_lock(g_pAF_SpinLock);
 		g_u4CurrPosition = 0;
-
+		spin_unlock(g_pAF_SpinLock);
 		LOG_INF("Wait\n");
 	}
 	if (*g_pAF_Opened) {

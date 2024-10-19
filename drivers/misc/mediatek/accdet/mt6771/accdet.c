@@ -197,6 +197,9 @@ static struct task_struct *s_thread;
 /* Yongpei.Zhang@PSW.MM.AudioDriver.HeadsetDet.1222012, 2018/09/18,
  * add for hp delay detection */
 struct delayed_work hp_detect_work;
+/* Yongzhi.Zhang@PSW.MM.AudioDriver.Machine.1303468, 2018/03/05,
+ * add for dump log */
+extern int door_open;
 #endif /* VENDOR_EDIT */
 
 #ifdef VENDOR_EDIT
@@ -1122,6 +1125,14 @@ static int accdet_eint_func(int eint_id)
 		/* Yongpei.Yao@PSW.MM.AudioDriver.HeadsetDet.1263175, 2018/09/18,
 		 * add for hp delay detection */
 		if (g_cur_eint_state == EINT_PIN_PLUG_IN) {
+#ifdef VENDOR_EDIT
+			/* Yongpei.Zhang@PSW.MM.AudioDriver.Machine.1303468, 2018/09/18,
+			 * add for dump log out of workqueue */
+			if (door_open == 1) {
+				pr_err("%s: enter dump\n", __func__);
+				BUG_ON(1);
+			}
+#endif /* VENDOR_EDIT */
 			ACCDET_INFO("[accdet_eint_func]delayed work 500ms scheduled when plugging in\n");
 			schedule_delayed_work(&hp_detect_work, msecs_to_jiffies(500));
 		} else {
@@ -1898,7 +1909,12 @@ void accdet_init_once(int init_flag)
 			 * modify for CT Test */
 			pmic_pwrap_write(AUDENC_ANA_CON11, reg_val|RG_ACCDET_MODE_ANA10_MODE1);
 #else /* VENDOR_EDIT */
+#ifdef OPPO_CTTEST_FLAG
+			/* set bit5=1 for fix detect failed of the low resister of mic */
+			pmic_pwrap_write(AUDENC_ANA_CON11, reg_val|0x0827);/* 0x0827 */
+#else /* OPPO_CTTEST_FLAG */
 			pmic_pwrap_write(AUDENC_ANA_CON11, reg_val|RG_ACCDET_MODE_ANA10_MODE1);
+#endif /* OPPO_CTTEST_FLAG */
 #endif /* VENDOR_EDIT */
 		} else if (headset_dts_data.accdet_mic_mode == HEADSET_MODE_2) {/* Low cost mode without internal bias*/
 			/* for test discharge quickly */

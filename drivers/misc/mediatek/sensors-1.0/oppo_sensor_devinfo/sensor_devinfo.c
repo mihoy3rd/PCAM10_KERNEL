@@ -32,11 +32,13 @@
 #include <linux/gpio.h>
 #include "scp_reg.h"
 #include "scp_ipi.h"
+#include <soc/oppo/oppo_project.h>
 
 #ifdef VENDOR_EDIT
 /* Fuchun.Liao@BSP.CHG.Basic 2018/08/08 modify for sensor workaround */
 #include <mt-plat/mtk_boot_common.h>
 #include <mt-plat/mtk_rtc.h>
+#include <mt-plat/mtk_boot_reason.h>
 extern bool oppo_gauge_get_batt_authenticate(void);
 #endif /* VENDOR_EDIT */
 
@@ -91,12 +93,15 @@ struct devinfo sensorinfo[] = {
 	{ID_MAGNETIC,"akm09911","AKM",MAG_AKM09911},
 	{ID_MAGNETIC,"mmc3530","MICROCHIP",MAG_MMC3530},
 	{ID_MAGNETIC,"mmc5603","MICROCHIP",MAG_MMC5603},
+	{ID_MAGNETIC,"mxg4300","MAGNACHIP",MAG_MXG4300},
 	{ID_LIGHT,"TMD2725","AMS",ALSPS_TMD2725},
 	{ID_LIGHT,"apds9922","AVAGOTECH",ALSPS_APSD9922},
 	{ID_LIGHT,"STK3335","SensorTek",ALSPS_STK3335},
 	{ID_LIGHT,"TSL2540+STK3331","SensorTek",ALSPS_UNION_TSL2540_STK3331},
 	{ID_LIGHT,"APDS9925+STK3332","SensorTek",ALSPS_MULT_APDS9925_STK3332},
 	{ID_LIGHT,"STK3331-A","SensorTek",ALSPS_STK3331},
+	{ID_LIGHT,"STK2232","SensorTek",ALSPS_STK2232},
+	{ID_LIGHT,"TCS3701","SensorTek",ALSPS_OPPOPLAT_TCS3701},
 	{ID_GYROSCOPE,"lsm6ds3","ST",GYRO_LSM6DS3},
 	{ID_GYROSCOPE,"bmi160","BOSCH",GYRO_BMI160},
 	{ID_GYROSCOPE,"lsm6dsm","ST",GYRO_LSM6DSM},
@@ -350,23 +355,30 @@ static void sensor_dev_work(struct work_struct *work)
 	static int retry = 0;
 	struct data_unit_t data;
 	int temp_cali[6] = {0};
-    int prox_cali_to_scp[3] = {0};
+        int prox_cali_to_scp[3] = {0};
 	int i;
-
+        int tmp = 0;
+    signed int boot_reason = get_boot_reason();
 	err = sensor_get_data_from_hub(ID_OPPO_SENSOR, &data);
 
 	DEVINF_ERR("0x%x, err %d\n",data.data[0],err);
-
+        if(is_project(19151) || is_project(19350)){
+            tmp = 2;
+        }else{
+            tmp = 0; 
+        }
+        
 	if (!err)
 	{
 		parse_sensor_devinfo(data.data[0]);
 #ifdef VENDOR_EDIT
 /* Fuchun.Liao@BSP.CHG.Basic 2018/08/08 modify for sensor i2c error workaround */
-		if (!light_init && !mag_init)
+		
+    if (!light_init && !mag_init && (tmp != 2))
 		{
-			if(get_boot_mode() == NORMAL_BOOT
-			&& oppo_gauge_get_batt_authenticate() == true
-			&& oppo_get_rtc_sensor_cause_panic_value() == 0)
+            pr_err("boot_reason = %d \n",boot_reason);
+			if(boot_reason != 4
+			&& oppo_gauge_get_batt_authenticate() == true)
 			{
 				for (i = 0; i < ARRAY_SIZE(sensor_i2c_gpios); i++)
 				{
@@ -379,7 +391,7 @@ static void sensor_dev_work(struct work_struct *work)
 					}
 				}
 				mdelay(10);
-				oppo_rtc_mark_sensor_cause_panic();
+				//oppo_rtc_mark_sensor_cause_panic();
 				panic("ALSPS&Mag init fail\n");
 			} else {
 				if (soft_reset_flag == 0)
@@ -394,7 +406,7 @@ static void sensor_dev_work(struct work_struct *work)
 				pr_err("rtc_sensor_cause_panic have occured\n");
 			}
 		}
-		oppo_clear_rtc_sensor_cause_panic();
+		//oppo_clear_rtc_sensor_cause_panic();
 #endif /* VENDOR_EDIT */
 		get_sensor_parameter(ID_LIGHT, temp_cali);
 		err = sensor_set_cmd_to_hub(ID_LIGHT, CUST_ACTION_SET_CALI, (void*)&temp_cali[0]);
@@ -421,7 +433,7 @@ RETRY_GET_SENSOR:
 static int __init sensordev_init(void)
 {
 	struct sensor_cali *Data = kzalloc(sizeof(struct sensor_cali), GFP_KERNEL);
-
+	DEVINF_ERR("sensordev_init data=%p\n",Data);
 	if (!Data) {
 		DEVINF_ERR("kzalloc err\n ");
 		return -ENOMEM;
@@ -429,7 +441,7 @@ static int __init sensordev_init(void)
 
 	SensorData = Data;
 
-	DEVINF_ERR("call\n");
+	DEVINF_ERR("init_sensor_calibraiton_paramater\n");
 
 	init_sensor_calibraiton_paramater();
 

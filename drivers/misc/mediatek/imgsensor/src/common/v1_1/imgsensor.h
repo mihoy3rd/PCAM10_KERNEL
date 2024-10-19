@@ -79,9 +79,13 @@ extern struct IMGSENSOR_HW_CFG imgsensor_custom_config[];
 #ifdef VENDOR_EDIT
 /*Yijun.Tan@Camera.Driver  add for 17197  board 20180101*/
 extern struct IMGSENSOR_HW_CFG imgsensor_custom_config_for_17197[];
+/*Caohua.Lin@Camera.Driver  add for 17175  board 20190529*/
+extern struct IMGSENSOR_HW_CFG imgsensor_custom_config_for_17175[];
+extern struct IMGSENSOR_HW_CFG imgsensor_custom_config_for_17171[];
 extern struct IMGSENSOR_HW_CFG imgsensor_custom_config_for_18531[];
-/*Xiaoyang.Huang@RM.Camera add for 18611 board,20190304*/
-extern struct IMGSENSOR_HW_CFG imgsensor_custom_config_for_18611[];
+extern struct IMGSENSOR_HW_CFG imgsensor_custom_config_for_18311[];
+extern struct IMGSENSOR_HW_CFG imgsensor_custom_config_for_17331[];
+extern struct IMGSENSOR_HW_CFG imgsensor_custom_config_for_19391[];
 #endif
 #endif
 

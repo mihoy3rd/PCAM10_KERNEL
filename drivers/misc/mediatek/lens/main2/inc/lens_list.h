@@ -15,6 +15,16 @@
 
 #define _LENS_LIST_H
 
+#ifdef VENDOR_EDIT
+/*Henry.Chang@Camera.Drv add for main2AF 20190927*/
+#define DW9718TAF_SetI2Cclient DW9718TAF_SetI2Cclient_Main2
+#define DW9718TAF_Ioctl DW9718TAF_Ioctl_Main2
+#define DW9718TAF_Release DW9718TAF_Release_Main2
+extern int DW9718TAF_SetI2Cclient(struct i2c_client *pstAF_I2Cclient, spinlock_t *pAF_SpinLock, int *pAF_Opened);
+extern long DW9718TAF_Ioctl(struct file *a_pstFile, unsigned int a_u4Command, unsigned long a_u4Param);
+extern int DW9718TAF_Release(struct inode *a_pstInode, struct file *a_pstFile);
+#endif
+
 #define AK7371AF_SetI2Cclient AK7371AF_SetI2Cclient_Main2
 #define AK7371AF_Ioctl AK7371AF_Ioctl_Main2
 #define AK7371AF_Release AK7371AF_Release_Main2

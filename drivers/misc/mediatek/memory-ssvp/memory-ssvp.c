@@ -33,7 +33,6 @@
 #include <linux/uaccess.h>
 #include <linux/memblock.h>
 #include <asm/tlbflush.h>
-#include <asm/pgtable.h>
 #include "sh_svp.h"
 
 #define COUNT_DOWN_MS 10000
@@ -60,11 +59,6 @@ static atomic_t svp_ref_count;
 static struct task_struct *_svp_online_task; /* NULL */
 static DEFINE_MUTEX(svp_online_task_lock);
 static struct cma *cma;
-
-struct page_change_data {
-	pgprot_t set_mask;
-	pgprot_t clear_mask;
-};
 
 #define memory_unmapping(virt, size) set_memory_mapping(virt, size, 0)
 #define memory_mapping(virt, size) set_memory_mapping(virt, size, 1)
@@ -432,52 +426,6 @@ bool memory_ssvp_inited(void)
 }
 
 #ifdef CONFIG_ARM64
-#ifdef CONFIG_DEBUG_PAGEALLOC
-static int change_page_range(pte_t *ptep, pgtable_t token, unsigned long addr,
-			void *data)
-{
-	struct page_change_data *cdata = data;
-	pte_t pte = *ptep;
-
-	pte = clear_pte_bit(pte, cdata->clear_mask);
-	pte = set_pte_bit(pte, cdata->set_mask);
-
-	set_pte(ptep, pte);
-	return 0;
-}
-/*
- * Unmapping memory region kernel mapping
- * SSVP protect memory region with EMI MPU. While protecting, memory prefetch
- * will access memory region and trigger warning.
- * To avoid false alarm of protection, We unmap kernel mapping while protecting.
- *
- * @start: start address
- * @size: memory region size
- * @map: 1 for mapping, 0 for unmapping.
- *
- * @return: success return 0, failed return -1;
- */
-static int set_memory_mapping(unsigned long start, phys_addr_t size, int map)
-{
-	struct page_change_data data;
-	int ret;
-
-	if (map) {
-		data.set_mask = __pgprot(PTE_VALID);
-		data.clear_mask = __pgprot(0);
-	} else {
-		data.set_mask = __pgprot(0);
-		data.clear_mask = __pgprot(PTE_VALID);
-	}
-
-	ret = apply_to_page_range(&init_mm, start, size, change_page_range,
-					&data);
-	flush_tlb_kernel_range(start, start + size);
-
-	return ret;
-
-}
-#else
 static int set_memory_mapping(unsigned long start, phys_addr_t size, int map)
 {
 	unsigned long address = start;
@@ -543,7 +491,6 @@ fail:
 	show_pte(NULL, address);
 	return -1;
 }
-#endif
 #else
 static inline int set_memory_mapping(unsigned long start, phys_addr_t size,
 					int map)

@@ -277,6 +277,10 @@ static inline bool pd_process_ctrl_msg(
 
 		if (pd_port->pe_data.pe_state_flags &
 			PE_STATE_FLAG_BACK_READY_IF_SR_TIMER_TOUT) {
+
+			if (pd_port->state_machine == PE_STATE_MACHINE_PR_SWAP)
+				pd_notify_pe_cancel_pr_swap(pd_port);
+
 			pe_transit_ready_state(pd_port);
 			return true;
 		} else if (pd_port->pe_data.vdm_state_timer) {
@@ -482,6 +486,28 @@ static inline bool pd_process_recv_hard_reset(
 	return true;
 }
 
+static inline bool pd_check_back_ready_if_tx_failed(struct pd_port *pd_port)
+{
+#ifdef CONFIG_USB_PD_BACK_READY_IF_DISCARD
+	bool discard;
+	struct tcpc_device *tcpc_dev = pd_port->tcpc_dev;
+
+	mutex_lock(&tcpc_dev->access_lock);
+	discard = tcpc_dev->pd_transmit_state == PD_TX_STATE_DISCARD;
+	mutex_unlock(&tcpc_dev->access_lock);
+
+	if ((discard) && pd_port->pe_data.pe_state_flags &
+			PE_STATE_FLAG_BACK_READY_IF_SR_TIMER_TOUT)
+		return true;
+#endif	/* CONFIG_USB_PD_BACK_READY_IF_DISCARD */
+
+	if (pd_port->pe_data.pe_state_flags &
+		PE_STATE_FLAG_BACK_READY_IF_TX_FAILED)
+		return true;
+
+	return false;
+}
+
 static inline bool pd_process_hw_msg_tx_failed(
 	struct pd_port *pd_port, struct pd_event *pd_event)
 {
@@ -493,8 +519,7 @@ static inline bool pd_process_hw_msg_tx_failed(
 	}
 #endif	/* CONFIG_USB_PD_RENEGOTIATION_COUNTER */
 
-	if (pd_port->pe_data.pe_state_flags &
-		PE_STATE_FLAG_BACK_READY_IF_TX_FAILED) {
+	if (pd_check_back_ready_if_tx_failed(pd_port)) {
 		pd_notify_tcp_event_2nd_result(
 			pd_port, TCP_DPM_RET_NO_RESPONSE);
 		pe_transit_ready_state(pd_port);
@@ -527,24 +552,6 @@ static inline bool pd_process_hw_msg(
  * [BLOCK] Porcess Timer MSG
  */
 
-#ifdef CONFIG_USB_PD_CHECK_RX_PENDING_IF_SRTOUT
-static inline bool pd_check_rx_pending(struct pd_port *pd_port)
-{
-	uint32_t alert;
-
-	if (tcpci_get_alert_status(pd_port->tcpc_dev, &alert))
-		return false;
-
-	if (alert & TCPC_REG_ALERT_RX_STATUS) {
-		PE_INFO("rx_pending\r\n");
-		pd_enable_timer(pd_port, PD_TIMER_SENDER_RESPONSE);
-		return true;
-	}
-
-	return false;
-}
-#endif	/* CONFIG_USB_PD_CHECK_RX_PENDING_IF_SRTOUT */
-
 static inline bool pd_process_timer_msg(
 	struct pd_port *pd_port, struct pd_event *pd_event)
 {
@@ -555,9 +562,16 @@ static inline bool pd_process_timer_msg(
 	case PD_TIMER_SENDER_RESPONSE:
 
 #ifdef CONFIG_USB_PD_CHECK_RX_PENDING_IF_SRTOUT
-		if (pd_check_rx_pending(pd_port))
+#ifndef CONFIG_USB_PD_ONLY_PRINT_SYSTEM_BUSY
+		if (pd_restart_timer_if_rx_pending(
+			pd_port, PD_TIMER_SENDER_RESPONSE))
 			return false;
+#else
+		pd_restart_timer_if_rx_pending(
+			pd_port, PD_TIMER_SENDER_RESPONSE);
+#endif	/* CONFIG_USB_PD_PRINT_SYSTEM_BUSY */
 #endif	/* CONFIG_USB_PD_CHECK_RX_PENDING_IF_SRTOUT */
+
 
 		pd_cancel_dpm_reaction(pd_port);
 		pd_notify_pe_cancel_pr_swap(pd_port);

@@ -66,6 +66,10 @@ enum DISP_HELPER_OPT {
 	DISP_OPT_OVL_EXT_LAYER,		/* is ovl has ext layer support? */
 	DISP_OPT_REG_PARSER_RAW_DUMP,
 	DISP_OPT_AOD,
+#ifdef VENDOR_EDIT
+/* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2019/10/22, add for 19151 fake aod */
+	DISP_OPT_AOD_RAMLESS,
+#endif /*VENDOR_EDIT*/
 	/*ARR phase 1 option*/
 	DISP_OPT_ARR_PHASE_1,
 	DISP_OPT_RSZ,
@@ -77,6 +81,7 @@ enum DISP_HELPER_OPT {
 	DISP_OPT_ANTILATENCY,
 	DISP_OPT_DC_BY_HRT,
 	DISP_OPT_OVL_DCM,
+	DISP_OPT_LCM_HBM,
 	DISP_OPT_NUM
 };
 

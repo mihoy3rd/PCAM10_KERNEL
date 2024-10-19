@@ -110,15 +110,16 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 	u64 jc_head = katom->jc;
 	u64 affinity;
 	bool force_invalidate_flush = false;
-	int slot_nr = 0,i = 0, id = 0;
+	int slot_nr = 0, i = 0, id = 0;
 
 	KBASE_DEBUG_ASSERT(kbdev);
 	KBASE_DEBUG_ASSERT(katom);
 
 	kctx = katom->kctx;
 
-	/* checked whether cross slot have diferent kctx,
-	 * if yes, force invalid and flush */
+	/* checked whether cross slot have different kctx,
+	 * if yes, force invalid and flush
+	*/
 	for (slot_nr = 0; slot_nr < kbdev->gpu_props.num_job_slots; slot_nr++) {
 		for (i = 0; i < SLOT_RB_SIZE; i++) {
 			if (kctx !=  kbdev->force_l2_flush.last_two_context_per_slot[slot_nr][i]) {
@@ -128,7 +129,7 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 		}
 	}
 	/* update last context */
-	id = (kbdev->force_l2_flush.counter[js]++)& SLOT_RB_MASK;
+	id = (kbdev->force_l2_flush.counter[js]++) & SLOT_RB_MASK;
 	kbdev->force_l2_flush.last_two_context_per_slot[js][id] = kctx;
 
 	/* Command register must be available */

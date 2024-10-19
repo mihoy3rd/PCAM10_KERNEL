@@ -361,6 +361,7 @@ void aee_sram_printk(const char *fmt, ...)
 }
 EXPORT_SYMBOL(aee_sram_printk);
 
+
 /* no export symbol to aee_exception_reboot, only used in exception flow */
 void aee_exception_reboot(void)
 {

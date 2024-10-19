@@ -126,16 +126,13 @@ static inline int pd_parse_pdata_bats(
 	}
 
 	for (i = 0; i < pd_port->bat_nr; i++) {
-		pr_info("%s fix_bat_info[%d].mfrs_info.vid = 0x%x, \
-					    .mfrs_info.pid = 0x%x, \
-					    .mfrs_string = %s, \
-					    .bat_design_cap = %d\n",
+		pr_info("%s fix_bat_info[%d].mfrs_info.vid = 0x%x, .mfrs_info.pid = 0x%x, .mfrs_string = %s, .bat_design_cap = %d\n",
 			__func__, i,
 			pd_port->fix_bat_info[i].mfrs_info.vid,
 			pd_port->fix_bat_info[i].mfrs_info.pid,
 			pd_port->fix_bat_info[i].mfrs_info.mfrs_string,
 			PD_BCDB_BAT_CAP_VAL(
-				pd_port->fix_bat_info[i].bat_cap.bat_design_cap));
+			pd_port->fix_bat_info[i].bat_cap.bat_design_cap));
 	}
 
 	return 0;
@@ -254,21 +251,22 @@ static inline int pd_parse_pdata_countries(
 #ifdef CONFIG_USB_PD_REV30_SRC_CAP_EXT_LOCAL
 static void pd_parse_log_src_cap_ext(struct pd_source_cap_ext *cap)
 {
-	pr_info("%s vid = 0x%x, pid = 0x%x, xid = 0x%x, \
-		fw_ver = 0x%x, hw_ver = 0x%0x\n",
+	pr_info("%s vid = 0x%x, pid = 0x%x, xid = 0x%x, fw_ver = 0x%x, hw_ver = 0x%0x\n",
 		__func__,
 		cap->vid, cap->pid, cap->xid,
 		cap->fw_ver, cap->hw_ver);
-	pr_info("%s voltage_regulation = %d, hold_time_ms = %d, compliance = 0x%x, \
-		touch_current = 0x%x, peak_current = %d %d %d\n",
+
+	pr_info("%s voltage_regulation = %d, hold_time_ms = %d, compliance = 0x%x, touch_current = 0x%x, peak_current = %d %d %d\n",
 		__func__,
 		cap->voltage_regulation,
 		cap->hold_time_ms,
 		cap->compliance,
 		cap->touch_current,
-		cap->peak_current[0], cap->peak_current[1], cap->peak_current[2]);
-	pr_info("%s touch_temp = %d, source_inputs = 0x%x, \
-		batteries = 0x%x, source_pdp = 0x%x\n",
+		cap->peak_current[0],
+		cap->peak_current[1],
+		cap->peak_current[2]);
+
+	pr_info("%s touch_temp = %d, source_inputs = 0x%x, batteries = 0x%x, source_pdp = 0x%x\n",
 		__func__,
 		cap->touch_temp,
 		cap->source_inputs,
@@ -546,10 +544,24 @@ static void pd_core_power_flags_init(struct pd_port *pd_port)
 	src_cap->pdos[0] |= src_flag;
 }
 
+#ifdef CONFIG_RECV_BAT_ABSENT_NOTIFY
+static void fg_bat_absent_work(struct work_struct *work)
+{
+	struct pd_port *pd_port = container_of(work, struct pd_port,
+					       fg_bat_work);
+	struct tcpc_device *tcpc_dev = pd_port->tcpc_dev;
+	int ret = 0;
+
+	ret = tcpm_shutdown(tcpc_dev);
+	if (ret < 0)
+		pr_notice("%s: tcpm shutdown fail\n", __func__);
+}
+#endif /* ONFIG_RECV_BAT_ABSENT_NOTIFY */
+
 int pd_core_init(struct tcpc_device *tcpc_dev)
 {
-	int ret;
 	struct pd_port *pd_port = &tcpc_dev->pd_port;
+	int ret;
 
 	mutex_init(&pd_port->pd_lock);
 
@@ -560,6 +572,11 @@ int pd_core_init(struct tcpc_device *tcpc_dev)
 
 	pd_port->tcpc_dev = tcpc_dev;
 	pd_port->pe_pd_state = PE_IDLE2;
+	pd_port->cap_miss_match = 0; /* For src_cap miss match */
+
+#ifdef CONFIG_COMPATIBLE_APPLE_TA
+	pd_port->apple_ccopen_flag = false;
+#endif
 
 	ret = pd_parse_pdata(pd_port);
 	if (ret)
@@ -569,7 +586,11 @@ int pd_core_init(struct tcpc_device *tcpc_dev)
 
 	pd_dpm_core_init(pd_port);
 
-	PE_INFO("pd_core_init\r\n");
+#ifdef CONFIG_RECV_BAT_ABSENT_NOTIFY
+	INIT_WORK(&pd_port->fg_bat_work, fg_bat_absent_work);
+#endif /* CONFIG_RECV_BAT_ABSENT_NOTIFY */
+
+	PE_INFO("%s\r\n", __func__);
 	return 0;
 }
 
@@ -734,6 +755,7 @@ int pd_reset_protocol_layer(struct pd_port *pd_port, bool sop_only)
 	pe_data->local_selected_cap = 0;
 	pe_data->remote_selected_cap = 0;
 	pe_data->during_swap = 0;
+	pd_port->cap_miss_match = 0;
 
 #ifdef CONFIG_USB_PD_REV30_ALERT_REMOTE
 	pe_data->remote_alert = 0;
@@ -847,6 +869,9 @@ static void pd_init_spec_revision(struct pd_port *pd_port)
 		pd_port->pd_revision[1] = PD_REV20;
 	}
 #endif	/* CONFIG_USB_PD_REV30_SYNC_SPEC_REV */
+
+	pd_port->vdm_revision[0] = SVDM_REV10;
+	pd_port->vdm_revision[1] = SVDM_REV10;
 }
 
 int pd_init_message_hdr(struct pd_port *pd_port, bool act_as_sink)
@@ -870,7 +895,7 @@ int pd_set_vconn(struct pd_port *pd_port, uint8_t role)
 	bool enable;
 	bool en_role = role != PD_ROLE_VCONN_OFF;
 
-	PE_DBG("pd_set_vconn:%d\r\n", role);
+	PE_DBG("%s:%d\r\n", __func__, role);
 
 #ifdef CONFIG_DUAL_ROLE_USB_INTF
 	pd_port->tcpc_dev->dual_role_vconn = en_role;
@@ -954,6 +979,10 @@ int pd_reset_local_hw(struct pd_port *pd_port)
 		dr = PD_ROLE_DFP;
 
 	pd_port->state_machine = PE_STATE_MACHINE_NORMAL;
+
+	pd_port->pe_data.pd_rev_discovered = false;
+	pd_port->pe_data.cable_rev_discovered = false;
+	pd_init_spec_revision(pd_port);
 
 	pd_set_data_role(pd_port, dr);
 	pd_dpm_notify_pe_hardreset(pd_port);
@@ -1160,6 +1189,7 @@ int pd_send_hard_reset(struct pd_port *pd_port)
 	struct tcpc_device *tcpc_dev = pd_port->tcpc_dev;
 
 	PE_DBG("Send HARD Reset\r\n");
+	__pm_wakeup_event(&tcpc_dev->attach_wake_lock, 6000);
 
 	pd_port->pe_data.hard_reset_counter++;
 	pd_notify_pe_send_hard_reset(pd_port);
@@ -1239,7 +1269,7 @@ int pd_send_svdm_request(struct pd_port *pd_port,
 			pd_port, sop_type, PD_DATA_VENDOR_DEF, 1+cnt, payload);
 
 	if (ret == 0 && timer_id != 0)
-		pd_enable_vdm_state_timer(pd_port, timer_id);
+		VDM_STATE_RESPONSE_CMD(pd_port, timer_id);
 
 	return ret;
 }
@@ -1323,6 +1353,24 @@ void pd_reset_pe_timer(struct pd_port *pd_port)
 #endif	/* CONFIG_USB_PD_REV30_PPS_SINK */
 }
 
+bool pd_restart_timer_if_rx_pending(struct pd_port *pd_port, uint32_t timer_id)
+{
+#ifdef CONFIG_USB_PD_CHECK_RX_PENDING_IF_SRTOUT
+	uint32_t alert;
+
+	if (tcpci_get_alert_status(pd_port->tcpc_dev, &alert))
+		return false;
+
+	if (alert & TCPC_REG_ALERT_RX_STATUS) {
+		PE_INFO("rx_pending\r\n");
+		pd_enable_timer(pd_port, timer_id);
+		return true;
+	}
+#endif	/* CONFIG_USB_PD_CHECK_RX_PENDING_IF_SRTOUT */
+
+	return false;
+}
+
 void pd_lock_msg_output(struct pd_port *pd_port)
 {
 	if (pd_port->msg_output_lock)
@@ -1383,9 +1431,11 @@ void pd_set_sink_tx(struct pd_port *pd_port, uint8_t cc)
 void pd_sync_sop_spec_revision(struct pd_port *pd_port)
 {
 #ifdef CONFIG_USB_PD_REV30_SYNC_SPEC_REV
+	struct pe_data *pe_data = &pd_port->pe_data;
 	uint8_t rev = pd_get_msg_hdr_rev(pd_port);
 
-	if (!pd_port->pe_data.pd_prev_connected) {
+	if (!pe_data->pd_rev_discovered) {
+		pe_data->pd_rev_discovered = true;
 		pd_port->pd_revision[0] = MIN(PD_REV30, rev);
 		pd_port->pd_revision[1] = MIN(pd_port->pd_revision[1], rev);
 

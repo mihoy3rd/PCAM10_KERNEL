@@ -48,6 +48,9 @@ enum IMGSENSOR_RETURN {
 	IMGSENSOR_RETURN_SUCCESS = 0,
 	IMGSENSOR_RETURN_ERROR   = -1,
 };
-
+#ifdef VENDOR_EDIT
+/*Henry.Chang@Camera.Driver add for Camera ModuleSN 20190505*/
+#define CAMERA_MODULE_SN_LENGTH    (20)
+#endif
 #endif
 

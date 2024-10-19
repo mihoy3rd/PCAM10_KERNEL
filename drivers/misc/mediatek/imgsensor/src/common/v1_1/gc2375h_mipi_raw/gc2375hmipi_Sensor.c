@@ -242,12 +242,12 @@ static void write_cmos_sensor(kal_uint32 addr, kal_uint32 para)
 
 #ifdef VENDOR_EDIT
 /*Henry.Chang@Camera.Driver add for 18531 ModuleSN*/
-static kal_uint8 gGc2375h_SN[16];
+static kal_uint8 gGc2375h_SN[CAMERA_MODULE_SN_LENGTH];
 static void read_eeprom_SN(void)
 {
 	kal_uint16 idx = 0;
 	kal_uint8 *get_byte= &gGc2375h_SN[0];
-	for (idx = 0; idx <16; idx++) {
+	for (idx = 0; idx <CAMERA_MODULE_SN_LENGTH; idx++) {
 		char pusendcmd[2] = {0x00 , (char)((0xE0 + idx) & 0xFF) };
 		iReadRegI2C(pusendcmd , 2, (u8*)&get_byte[idx],1, 0xA0);
 		LOG_INF("gGc2375h_SN[%d]: 0x%x  0x%x\n", idx, get_byte[idx], gGc2375h_SN[idx]);
@@ -1762,16 +1762,17 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 	LOG_INF("feature_id = %d\n", feature_id);
 	switch (feature_id) {
 		/*Henry.Chang@Camera.Driver add for 18531 ModuleSN*/
-    	case SENSOR_FEATURE_GET_MODULE_SN:
-        	LOG_INF("gc2375h GET_MODULE_SN:%d %d\n", *feature_para_len, *feature_data_32);
-        	if (*feature_data_32 < 4)
-            	*(feature_data_32 + 1) = (gGc2375h_SN[4*(*feature_data_32) + 3] << 24)
-                        	| (gGc2375h_SN[4*(*feature_data_32) + 2] << 16)
-                        	| (gGc2375h_SN[4*(*feature_data_32) + 1] << 8)
-                    	    | (gGc2375h_SN[4*(*feature_data_32)] & 0xFF);
-        	break;
-    	/*Henry.Chang@camera.driver 20181129, add for sensor Module SET*/
-    	case SENSOR_FEATURE_SET_SENSOR_OTP:
+		case SENSOR_FEATURE_GET_MODULE_SN:
+			LOG_INF("gc2375h GET_MODULE_SN:%d %d\n", *feature_para_len, *feature_data_32);
+			if (*feature_data_32 < CAMERA_MODULE_SN_LENGTH/4) {
+				*(feature_data_32 + 1) = (gGc2375h_SN[4*(*feature_data_32) + 3] << 24)
+						| (gGc2375h_SN[4*(*feature_data_32) + 2] << 16)
+						| (gGc2375h_SN[4*(*feature_data_32) + 1] << 8)
+						| (gGc2375h_SN[4*(*feature_data_32)] & 0xFF);
+			}
+			break;
+		/*Henry.Chang@camera.driver 20181129, add for sensor Module SET*/
+		case SENSOR_FEATURE_SET_SENSOR_OTP:
 		{
 			kal_int32 ret = IMGSENSOR_RETURN_SUCCESS;
 			LOG_INF("SENSOR_FEATURE_SET_SENSOR_OTP length :%d\n", (UINT32)*feature_para_len);

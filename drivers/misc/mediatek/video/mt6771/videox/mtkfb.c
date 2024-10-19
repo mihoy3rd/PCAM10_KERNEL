@@ -121,6 +121,8 @@ static struct disp_session_input_config session_input;
  * add for AOD feature
  */
 static DEFINE_MUTEX(fb_pow_mod_lock);
+//jie.cheng@Swdp.shanghai, 2017/06/05, Add notifier for fb info
+static BLOCKING_NOTIFIER_HEAD(mtkfb_notifier_list);
 #endif /*VENDOR_EDIT*/
 
 /* macro definiton */
@@ -221,7 +223,13 @@ static void mtkfb_early_suspend(void);
 int is_lm3697 = 1;
 /* LiPing-m@PSW.MM.Display.LCD.Machine 2018/06/14, Add for dpt_hx83112a lcm support */
 int is_dpt_hx83112a_lcd = 0;
+/*
+* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/03/30,
+* add resume to doze for tp gesture.
+*/
+void notify_suspend_to_tp(struct fb_info *info, enum mtkfb_aod_power_mode aod_pm);
 #endif /*VENDOR_EDIT*/
+
 void mtkfb_log_enable(int enable)
 {
 	mtkfb_log_on = enable;
@@ -305,6 +313,20 @@ exit:
 	return r;
 }
 
+#ifdef VENDOR_EDIT
+//jie.cheng@Swdp.shanghai, 2017/06/05, Add notifier for fb info
+int mtkfb_register_client(struct notifier_block *nb)
+{
+    return blocking_notifier_chain_register(&mtkfb_notifier_list, nb);
+}
+EXPORT_SYMBOL(mtkfb_register_client);
+int mtkfb_unregister_client(struct notifier_block *nb)
+{
+    return blocking_notifier_chain_unregister(&mtkfb_notifier_list, nb);
+}
+EXPORT_SYMBOL(mtkfb_unregister_client);
+#endif
+
 #if defined(CONFIG_PM_AUTOSLEEP)
 #if (CONFIG_MTK_DUAL_DISPLAY_SUPPORT == 2)
 static int mtkfb1_blank(int blank_mode, struct fb_info *info)
@@ -347,13 +369,15 @@ static int mtkfb_blank(int blank_mode, struct fb_info *info)
 		#ifdef VENDOR_EDIT
 		 /* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2018/10/09,  add for aod feature */
 		mutex_lock(&fb_pow_mod_lock);
+		if (!(is_project(OPPO_19531) || is_project(OPPO_19391) \
+			|| is_project(19151) || is_project(19350))) {
+			if (primary_display_is_alive() &&
+					primary_display_get_lcm_power_state() == LCM_ON_LOW_POWER) {
+				primary_display_set_power_mode(DOZE_SUSPEND);
+				primary_display_suspend();
 
-		if (primary_display_is_alive() &&
-				primary_display_get_lcm_power_state() == LCM_ON_LOW_POWER) {
-			primary_display_set_power_mode(DOZE_SUSPEND);
-			primary_display_suspend();
-
-			debug_print_power_mode_check(prev_pm, DOZE_SUSPEND);
+				debug_print_power_mode_check(prev_pm, DOZE_SUSPEND);
+			}
 		}
 		#endif /*VENDOR_EDIT*/
 
@@ -1305,6 +1329,13 @@ static int mtkfb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg
 		enum mtkfb_power_mode prev_pm = primary_display_get_power_mode();
 
 		aod_pm = (enum mtkfb_aod_power_mode)arg;
+		#ifdef VENDOR_EDIT
+		/*
+		* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/03/30,
+		* add resume to doze for tp gesture.
+		*/
+		notify_suspend_to_tp(info,aod_pm);
+		#endif /* VENDOR_EDIT */
 		DISPCHECK("AOD: ioctl: %s\n", aod_pm ? "AOD_DOZE_SUSPEND" : "AOD_DOZE");
 
 		if (!primary_is_aod_supported()) {
@@ -1318,6 +1349,16 @@ static int mtkfb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg
 			 * then DOZE_SUSPEND to power off dispsys.
 			 */
 			#ifdef VENDOR_EDIT
+			/*
+			* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/01/21,
+			* add for fingerprint notify frigger
+			*/
+			if(is_project(19151) || is_project(19350)) {
+				DISPCHECK("AOD power mode DOZE_SUSPEND skip\n");
+				return 0;
+			}
+
+
 			 /* YongPeng.Yi@PSW.MM.Display.LCD.Stability, 2018/10/09,  add for aod feature */
 			mutex_lock(&fb_pow_mod_lock);
 			#endif /*VENDOR_EDIT*/
@@ -2692,7 +2733,7 @@ static struct fb_info *allocate_fb_by_index(struct device *dev)
 #ifdef VENDOR_EDIT
 /* Guoqiang.jiang@MM.Display.LCD.Machine, 2018/03/13, add for backlight IC KTD3136 */
 void get_backlight_ic(void) {
-	if (is_project(OPPO_18531) || is_project(OPPO_18561) || is_project(OPPO_18561)) {
+	if (is_project(OPPO_17175) || is_project(OPPO_18531) || is_project(OPPO_18561) || is_project(OPPO_18311) || is_project(OPPO_18011)) {
 		if (strstr(boot_command_line, "is_lm3697=1")) {
 			/* is_lm3697 = 1 means backlight ic is LM3697 */
 			is_lm3697 = 1;
@@ -2704,24 +2745,40 @@ void get_backlight_ic(void) {
 	}
 	pr_err("[LCD] func:%s, is_lm3697 = %d \n", __func__, is_lm3697);
 }
-
 void get_lcm_id(void) {
-	/* Shizeke@MM.Display.LCD.Machine, 2018/8/24, add for hx83112a IC in realme 18611 */
-	if ( is_project(OPPO_18611)) {
-		if (strstr(boot_command_line, "oppo18611_dsjm_himax83112a_1080p_dsi_vdo-2-fps")) {
+	if (is_project(OPPO_18311) || is_project(OPPO_18011)) {
+		if (strstr(boot_command_line, "oppo18311_dsjm_himax83112a_1080p_dsi_vdo-2-fps")) {
 			is_dpt_hx83112a_lcd = 2;
 		}
-		if (strstr(boot_command_line, "oppo18611_dsjm_himax83112a_1080p_dsi_vdo-1-fps")) {
+		if (strstr(boot_command_line, "oppo18311_dsjm_himax83112a_1080p_dsi_vdo-1-fps")) {
 			is_dpt_hx83112a_lcd = 1;
 		}
-		if (strstr(boot_command_line, "oppo18611_dsjm_himax83112a_1080p_dsi_vdo-8-fps")) {
+		if (strstr(boot_command_line, "oppo18311_dsjm_himax83112a_1080p_dsi_vdo-8-fps")) {
 			is_dpt_hx83112a_lcd = 8;
 		}
-		if (strstr(boot_command_line, "oppo18611_dsjm_himax83112a_1080p_dsi_vdo-7-fps")) {
+		if (strstr(boot_command_line, "oppo18311_dsjm_himax83112a_1080p_dsi_vdo-7-fps")) {
 			is_dpt_hx83112a_lcd = 7;
 		}
 	}
 	pr_err("[LCD] func:%s, lcm_id = %d \n", __func__, is_dpt_hx83112a_lcd);
+}
+
+/*
+* Ling.Guo@PSW.MM.Display.LCD.Stability, 2019/03/30,
+* add resume to doze for tp gesture.
+*/
+void notify_suspend_to_tp(struct fb_info *info, enum mtkfb_aod_power_mode aod_pm) {
+	enum mtkfb_power_mode prev_pm = primary_display_get_power_mode();
+
+	if (aod_pm == MTKFB_AOD_DOZE && prev_pm == FB_RESUME) {
+		int blank_mode = FB_BLANK_POWERDOWN;
+		struct fb_event event;
+
+		event.info  = info;
+		event.data = &blank_mode;
+		pr_info("%s for gesture\n", __func__);
+		fb_notifier_call_chain(FB_EVENT_BLANK, &event);
+	}
 }
 #endif /*VENDOR_EDIT*/
 
@@ -2747,14 +2804,15 @@ static int mtkfb_probe(struct platform_device *pdev)
 	DISPMSG("mtkfb_probe name [%s]  = [%s][%p]\n", pdev->name, pdev->dev.init_name, (void *)&pdev->dev);
 	#ifdef VENDOR_EDIT
 	/* Guoqiang.jiang@MM.Display.LCD.Machine, 2018/03/13, add for backlight IC KTD3136 */
-	if (is_project(OPPO_18531) || is_project(OPPO_18561) || is_project(OPPO_18561)) {
+	if (is_project(OPPO_17175) || is_project(OPPO_18531)
+		|| is_project(OPPO_18561) || is_project(OPPO_18311)
+		|| is_project(OPPO_18011)) {
 		get_backlight_ic();
-	}
 
-    /* Shizeke@MM.Display.LCD.Machine, 2018/8/15, add for hx83112a IC in realme 18611 */
-	if (is_project(OPPO_18611)) {
-		get_lcm_id();
-	}
+		if (is_project(OPPO_18311) || is_project(OPPO_18011)) {
+			get_lcm_id();
+		}
+    }
 	#endif /*VENDOR_EDIT*/
 
 	_parse_tag_videolfb();
@@ -3031,6 +3089,11 @@ static void mtkfb_early_suspend(void)
 	if (disp_helper_get_stage() != DISP_HELPER_STAGE_NORMAL)
 		return;
 
+#ifdef VENDOR_EDIT
+//jie.cheng@Swdp.shanghai, 2017/06/05, Add notifier for fb info
+	blocking_notifier_call_chain(&mtkfb_notifier_list, 0, NULL);
+#endif
+
 	DISPMSG("[FB Driver] enter early_suspend\n");
 
 	ret = primary_display_suspend();
@@ -3052,6 +3115,11 @@ static void mtkfb_late_resume(void)
 
 	if (disp_helper_get_stage() != DISP_HELPER_STAGE_NORMAL)
 		return;
+
+#ifdef VENDOR_EDIT
+//jie.cheng@Swdp.shanghai, 2017/06/05, Add notifier for fb info
+	blocking_notifier_call_chain(&mtkfb_notifier_list, 1, NULL);
+#endif
 
 	DISPMSG("[FB Driver] enter late_resume\n");
 
