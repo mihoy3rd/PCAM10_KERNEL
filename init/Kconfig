@@ -850,6 +850,16 @@ config LOG_BUF_SHIFT
 		     13 =>  8 KB
 		     12 =>  4 KB
 
+config CONSOLE_FLUSH_ON_HOTPLUG
+	bool "Enable console flush configurable in hot plug code path"
+	depends on HOTPLUG_CPU
+	def_bool n
+	help
+	In cpu hot plug path console lock acquire and release causes the
+	console to flush. If console lock is not free hot plug latency
+	increases. So make console flush configurable in hot plug path
+	and default disabled to help in cpu hot plug latencies.
+
 config LOG_CPU_MAX_BUF_SHIFT
 	int "CPU kernel log buffer size contribution (13 => 8 KB, 17 => 128KB)"
 	depends on SMP
@@ -1039,6 +1049,23 @@ config CGROUP_SCHEDTUNE
 config PAGE_COUNTER
        bool
 
+config CGROUP_SCHEDTUNE
+	bool "CFS tasks boosting cgroup subsystem (EXPERIMENTAL)"
+	depends on SCHED_TUNE
+	help
+	  This option provides the "schedtune" controller which improves the
+	  flexibility of the task boosting mechanism by introducing the support
+	  to define "per task" boost values.
+
+	  This new controller:
+	  1. allows only a two layers hierarchy, where the root defines the
+	     system-wide boost value and its direct childrens define each one a
+	     different "class of tasks" to be boosted with a different value
+	  2. supports up to 16 different task classes, each one which could be
+	     configured with a different boost value
+
+	  Say N if unsure.
+
 config MEMCG
 	bool "Memory Resource Controller for Control Groups"
 	select PAGE_COUNTER
@@ -1190,6 +1217,33 @@ config CGROUP_WRITEBACK
 
 endif # CGROUPS
 
+config SCHED_HMP
+	bool "Scheduler support for heterogenous multi-processor systems"
+	depends on SMP && FAIR_GROUP_SCHED
+	help
+	  This feature will let the scheduler optimize task placement on
+	  systems made of heterogeneous cpus i.e cpus that differ either
+	  in their instructions per-cycle capability or the maximum
+	  frequency they can attain.
+
+config SCHED_HMP_CSTATE_AWARE
+	bool "CPU C-state aware scheduler"
+	depends on SCHED_HMP
+	help
+	  This feature will let the HMP scheduler optimize task placement
+	  with CPUs C-state. If this is enabled, scheduler places tasks
+	  onto the shallowest C-state CPU among the most power efficient CPUs.
+
+config SCHED_CORE_CTL
+	bool "QTI Core Control"
+	depends on SMP
+	help
+	  This options enables the core control functionality in
+	  the scheduler. Core control automatically offline and
+	  online cores based on cpu load and utilization.
+
+	  If unsure, say N here.
+
 config CHECKPOINT_RESTORE
 	bool "Checkpoint/restore support" if EXPERT
 	select PROC_CHILDREN
@@ -1276,6 +1330,7 @@ config SCHED_AUTOGROUP
 
 config SCHED_TUNE
 	bool "Boosting for CFS tasks (EXPERIMENTAL)"
+	depends on SMP
 	help
 	  This option enables the system-wide support for task boosting.
 	  When this support is enabled a new sysctl interface is exposed to
@@ -1299,6 +1354,16 @@ config SCHED_TUNE
 	  boost value is applied to all (CFS) tasks in the system.
 
 	  If unsure, say N.
+
+config DEFAULT_USE_ENERGY_AWARE
+	bool "Default to enabling the Energy Aware Scheduler feature"
+	default n
+	help
+	  This option defaults the ENERGY_AWARE scheduling feature to true,
+	  as without SCHED_DEBUG set this feature can't be enabled or disabled
+	  via sysctl.
+
+	  Say N if unsure.
 
 config SYSFS_DEPRECATED
 	bool "Enable deprecated sysfs features to support old userspace tools"
@@ -1774,53 +1839,40 @@ config VM_EVENT_COUNTERS
 
 #ifdef VENDOR_EDIT
 #Wen.Luo@Bsp.Kernel.Stability, 2018/12/05, Add for aging test, slub debug config
-config OPPO_SLUB_TEST
+config OPPO_AGINGTEST
 	string
-	option env="OPPO_SLUB_TEST"
-
-config OPPO_KASAN_TEST
-	string
-	option env="OPPO_KASAN_TEST"
-
-config OPPO_KMEMLEAK_TEST
-	string
-	option env="OPPO_KMEMLEAK_TEST"
-
-config OPPO_AGING_TEST
-	string
-	option env="OPPO_AGING_TEST"
+	option env="OPPO_AGINGTEST"
 #endif
-
+#ifndef VENDOR_EDIT
+# /* Kui.Zhang@PSW.BSP.Kernel.Performance, 2018-11-12, Support slab objects
+#  * statistics whlie not open SLUB_DEBUG*/
+#config SLUB_DEBUG
+#	default y
+#	bool "Enable SLUB debugging support" if EXPERT
+#	depends on SLUB && SYSFS
+#	help
+#	  SLUB has extensive debug support features. Disabling these can
+#	  result in significant savings in code size. This also disables
+#	  SLUB sysfs support. /sys/slab will not exist and there will be
+#	  no support for cache validation etc.
+#else
 config SLUB_DEBUG
-	#ifdef VENDOR_EDIT
-	#Wen.Luo@Bsp.Kernel.Stability, 2018/12/05, Add for aging test, slub debug config
-	default y if OPPO_SLUB_TEST = "true"
 	default n
-	#else
-	#default y
-	#endif
 	bool "Enable SLUB debugging support" if EXPERT
 	depends on SLUB && SYSFS
-	depends on !MTK_ENABLE_AGO
 	help
 	  SLUB has extensive debug support features. Disabling these can
 	  result in significant savings in code size. This also disables
 	  SLUB sysfs support. /sys/slab will not exist and there will be
 	  no support for cache validation etc.
-
-#ifdef VENDOR_EDIT
-# /* Kui.Zhang@PSW.BSP.Kernel.Performance, 2018-11-12, Support slab objects
-#  * statistics whlie not open SLUB_DEBUG
-#  */
-config SLUB_STAT_DEBUG
-	bool "Enable Collect SLUB debug information statisticst" if EXPERT
+config SLAB_STAT_DEBUG
 	default n
+	bool "Enable Collect SLUB debug information statisticst" if EXPERT
 	depends on !SLUB_DEBUG
 	help
 	  If open SLUB_DEBUG, there are more code and will degradte perforance.
 	  To get more slab details, such as the total objects, this option is
 	  to collect slab info on SLUB_DEBUG is closed.
-
 #endif /* VENDOR_EDIT */
 
 config COMPAT_BRK
@@ -1945,13 +1997,12 @@ config HAVE_GENERIC_DMA_COHERENT
 config SLABINFO
 	bool
 	depends on PROC_FS
-	depends on !MTK_ENABLE_GMO
 #ifndef VENDOR_EDIT
 # /* Kui.Zhang@PSW.BSP.Kernel.Performance, 2018-11-12, if SLAB_STAT_DEBUG is
 #  * is enabled, /proc/slabinfo is created for getting more slab details.
 #	depends on SLAB || SLUB_DEBUG
 #else
-	depends on SLAB || SLUB_DEBUG || SLUB_STAT_DEBUG
+	depends on SLAB || SLUB_DEBUG || SLAB_STAT_DEBUG
 #endif
 	default y
 
