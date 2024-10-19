@@ -53,9 +53,6 @@
 #include <sdio_ops.h>
 
 #include "mtk_spm_resource_req.h"
-#ifndef CONFIG_MACH_MT8167
-#include <mtk_sleep.h>
-#endif
 
 #ifdef CONFIG_ARCH_MT6570
 #define CPU_BOOST y
@@ -107,20 +104,6 @@ void connectivity_export_tracing_record_cmdline(struct task_struct *tsk)
 }
 EXPORT_SYMBOL(connectivity_export_tracing_record_cmdline);
 
-#ifndef CONFIG_MACH_MT8167
-unsigned int connectivity_export_slp_get_wake_reason(void)
-{
-	return slp_get_wake_reason();
-}
-EXPORT_SYMBOL(connectivity_export_slp_get_wake_reason);
-
-unsigned int connectivity_export_spm_get_last_wakeup_src(void)
-{
-	return spm_get_last_wakeup_src();
-}
-EXPORT_SYMBOL(connectivity_export_spm_get_last_wakeup_src);
-#endif
-
 #ifdef CPU_BOOST
 bool connectivity_export_spm_resource_req(unsigned int user, unsigned int req_mask)
 {
@@ -170,6 +153,18 @@ bool connectivity_export_is_clk_buf_from_pmic(void)
 	return is_clk_buf_from_pmic();
 }
 EXPORT_SYMBOL(connectivity_export_is_clk_buf_from_pmic);
+
+void connectivity_export_clk_buf_show_status_info(void)
+{
+	clk_buf_show_status_info();
+}
+EXPORT_SYMBOL(connectivity_export_clk_buf_show_status_info);
+
+int connectivity_export_clk_buf_get_xo_wcn_ctrl(void)
+{
+	return clk_buf_get_xo_wcn_ctrl();
+}
+EXPORT_SYMBOL(connectivity_export_clk_buf_get_xo_wcn_ctrl);
 #endif
 
 /*******************************************************************************
@@ -304,10 +299,3 @@ void connectivity_export_dump_gpio_info(int start, int end)
 }
 EXPORT_SYMBOL(connectivity_export_dump_gpio_info);
 #endif
-
-int connectivity_export_gpio_get_tristate_input(unsigned int pin)
-{
-	/* Kernel-4.4 does not support tri-state gpio */
-	return -1;
-}
-EXPORT_SYMBOL(connectivity_export_gpio_get_tristate_input);
