@@ -104,8 +104,8 @@ struct gf_ioc_chip_info {
 #endif
 
 //#define AP_CONTROL_CLK       1
-#define  USE_PLATFORM_BUS     1
-//#define  USE_SPI_BUS	1
+//#define  USE_PLATFORM_BUS     1
+#define  USE_SPI_BUS	1
 //#define GF_FASYNC   1	/*If support fasync mechanism.*/
 #define GF_NETLINK_ENABLE 1
 #define GF_NET_EVENT_IRQ 1
@@ -129,9 +129,7 @@ struct gf_dev {
 	unsigned users;
 	signed irq_gpio;
 	signed reset_gpio;
-#ifdef CONFIG_MT6771_17331
 	signed ldo_gpio;
-#endif
 	signed pwr_gpio;
 	int irq;
 	int irq_enabled;
@@ -144,6 +142,12 @@ struct gf_dev {
 	char fb_black;
 	struct device *dev;
 	struct regulator *vreg[1];
+#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
+        signed cs_gpio;
+        bool cs_gpio_set;
+        struct pinctrl *pinctrl;
+        struct pinctrl_state *pstate_cs_func;
+#endif
 };
 
 int gf_parse_dts(struct gf_dev* gf_dev);

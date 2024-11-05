@@ -118,7 +118,7 @@ static ssize_t sec_ts_regreadsize_store(struct device *dev, struct device_attrib
 
     lv1cmd = buf[0];
     lv1_readsize = ((unsigned int)buf[4] << 24) |
-            ((unsigned int)buf[3] << 16) | ((unsigned int) buf[2] << 8) | ((unsigned int)buf[1] << 0);
+                   ((unsigned int)buf[3] << 16) | ((unsigned int) buf[2] << 8) | ((unsigned int)buf[1] << 0);
 
     mutex_unlock(&ts->mutex);
 
@@ -130,22 +130,28 @@ void sec_raw_device_init(struct touchpanel_data *ts)
 {
     int ret = -1;
     struct class *sec_class = NULL;
+    struct device *sec_dev = NULL;
 
+    #ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
+    sec_class = class_create(THIS_MODULE, "mtk_sec");
+    #else
     sec_class = class_create(THIS_MODULE, "sec");
+    #endif
+
     ret = IS_ERR_OR_NULL(sec_class);
     if (ret) {
         TPD_INFO("%s: fail to create class\n", __func__);
         return;
     }
 
-    ts->dev = device_create(sec_class, NULL, 0, ts, "sec_ts");
-    ret = IS_ERR(ts->dev);
+    sec_dev = device_create(sec_class, NULL, 0, ts, "sec_ts");
+    ret = IS_ERR(sec_dev);
     if (ret) {
         TPD_INFO("%s: fail - device_create\n", __func__);
         return;
     }
 
-    ret = sysfs_create_group(&ts->dev->kobj, &cmd_attr_group);
+    ret = sysfs_create_group(&sec_dev->kobj, &cmd_attr_group);
     if (ret < 0) {
         TPD_INFO("%s: fail - sysfs_create_group\n", __func__);
         goto err_sysfs;
@@ -184,7 +190,7 @@ void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
         return;
     }
 
-    for (i = 0; i < 8*sizeof(ph->test_item); i++) {
+    for (i = 0; i < 8 * sizeof(ph->test_item); i++) {
         if ((ph->test_item >> i) & 0x01 ) {
             item_cnt++;
         }
@@ -254,7 +260,7 @@ void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
                     }
                     seq_printf(s, "\n");
                 }
-            } else if(item_head->item_bit == TYPE_SELF_RAW_OFFSET_DATA_SDC){
+            } else if(item_head->item_bit == TYPE_SELF_RAW_OFFSET_DATA_SDC) {
                 p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset);
                 seq_printf(s, "tx top data: \n");
                 for (i = 0; i < ts->hw_res.TX_NUM; i++) {
@@ -262,21 +268,21 @@ void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
                 }
                 seq_printf(s, "\n");
 
-                p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset + 4*ts->hw_res.TX_NUM);
+                p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset + 4 * ts->hw_res.TX_NUM);
                 seq_printf(s, "tx floor data: \n");
                 for (i = 0; i < ts->hw_res.TX_NUM; i++) {
                     seq_printf(s, "%4d, ", p_data32[i]);
                 }
                 seq_printf(s, "\n");
 
-                p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset + 2*4*ts->hw_res.TX_NUM);
+                p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset + 2 * 4 * ts->hw_res.TX_NUM);
                 seq_printf(s, "rx top data: \n");
                 for (i = 0; i < ts->hw_res.RX_NUM; i++) {
                     seq_printf(s, "%4d, ", p_data32[i]);
                 }
                 seq_printf(s, "\n");
 
-                p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset + 2*4*ts->hw_res.TX_NUM + 4*ts->hw_res.RX_NUM);
+                p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset + 2 * 4 * ts->hw_res.TX_NUM + 4 * ts->hw_res.RX_NUM);
                 seq_printf(s, "rx floor data: \n");
                 for (i = 0; i < ts->hw_res.RX_NUM; i++) {
                     seq_printf(s, "%4d, ", p_data32[i]);
@@ -336,8 +342,7 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
     struct sec_test_header *test_head = NULL;
     uint32_t *p_data32 = NULL;
 
-    struct sec_testdata sec_testdata =
-    {
+    struct sec_testdata sec_testdata = {
         .TX_NUM = 0,
         .RX_NUM = 0,
         .fd = -1,
@@ -369,19 +374,22 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
     getnstimeofday(&now_time);
     rtc_time_to_tm(now_time.tv_sec, &rtc_now_time);
     snprintf(data_buf, 128, "/sdcard/TpTestReport/screenOn/tp_testlimit_%02d%02d%02d-%02d%02d%02d-utc.csv",
-            (rtc_now_time.tm_year + 1900) % 100, rtc_now_time.tm_mon + 1, rtc_now_time.tm_mday,
-            rtc_now_time.tm_hour, rtc_now_time.tm_min, rtc_now_time.tm_sec);
+             (rtc_now_time.tm_year + 1900) % 100, rtc_now_time.tm_mon + 1, rtc_now_time.tm_mday,
+             rtc_now_time.tm_hour, rtc_now_time.tm_min, rtc_now_time.tm_sec);
     old_fs = get_fs();
     set_fs(KERNEL_DS);
+#ifdef CONFIG_ARCH_HAS_SYSCALL_WRAPPER
+    ksys_mkdir("/sdcard/TpTestReport", 0666);
+    ksys_mkdir("/sdcard/TpTestReport/screenOn", 0666);
+    fd = ksys_open(data_buf, O_WRONLY | O_CREAT | O_TRUNC, 0);
+#else
     sys_mkdir("/sdcard/TpTestReport", 0666);
     sys_mkdir("/sdcard/TpTestReport/screenOn", 0666);
     fd = sys_open(data_buf, O_WRONLY | O_CREAT | O_TRUNC, 0);
+#endif /* CONFIG_ARCH_HAS_SYSCALL_WRAPPER */
     if (fd < 0) {
         TPD_INFO("Open log file '%s' failed.\n", data_buf);
         set_fs(old_fs);
-        mutex_unlock(&ts->mutex);
-        enable_irq(ts->irq);
-        return 0;
     }
 
     //step3:request test limit data from userspace
@@ -389,7 +397,11 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
     if (ret < 0) {
         TPD_INFO("Request firmware failed - %s (%d)\n", ts->panel_data.test_limit_name, ret);
         seq_printf(s, "No limit IMG\n");
+#ifdef CONFIG_ARCH_HAS_SYSCALL_WRAPPER
+        ksys_close(fd);
+#else
         sys_close(fd);
+#endif /* CONFIG_ARCH_HAS_SYSCALL_WRAPPER */
         set_fs(old_fs);
         mutex_unlock(&ts->mutex);
         enable_irq(ts->irq);
@@ -420,7 +432,11 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
 OUT:
     //step4: close file && release test limit firmware
     if (fd >= 0) {
+#ifdef CONFIG_ARCH_HAS_SYSCALL_WRAPPER
+        ksys_close(fd);
+#else
         sys_close(fd);
+#endif /* CONFIG_ARCH_HAS_SYSCALL_WRAPPER */
         set_fs(old_fs);
     }
     release_firmware(fw);
@@ -522,7 +538,7 @@ static ssize_t proc_curved_control_read(struct file *file, char __user *user_buf
     struct sec_proc_operations *sec_ops = NULL;
 
     if (!ts)
-        return count;
+        return 0;
 
     sec_ops = (struct sec_proc_operations *)ts->private_data;
     if (!sec_ops->get_curved_rejsize)
@@ -570,8 +586,7 @@ static ssize_t proc_curved_control_write(struct file *file, const char __user *b
     return count;
 }
 
-static const struct file_operations proc_curved_control_ops =
-{
+static const struct file_operations proc_curved_control_ops = {
     .read  = proc_curved_control_read,
     .write = proc_curved_control_write,
     .open  = simple_open,
@@ -600,7 +615,7 @@ static ssize_t proc_corner_control_write(struct file *file, const char __user *b
         return count;
     }
 
-    sscanf(buf, "%d:%s", &para_num, para_buf);
+    sscanf(buf, "%d:%127s", &para_num, para_buf);
     mutex_lock(&ts->mutex);
     sec_ops->set_grip_handle(ts->chip_data, para_num, para_buf);
     if (ts->is_suspended == 0) {
@@ -614,8 +629,7 @@ static ssize_t proc_corner_control_write(struct file *file, const char __user *b
     return count;
 }
 
-static const struct file_operations proc_corner_control_ops =
-{
+static const struct file_operations proc_corner_control_ops = {
     .write = proc_corner_control_write,
     .open  = simple_open,
     .owner = THIS_MODULE,

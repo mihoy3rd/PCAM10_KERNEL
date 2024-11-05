@@ -1174,7 +1174,7 @@ static int32_t Check_CheckSum(struct chip_data_nt36525 *chip_info)
                                         list, chip_info->bin_map[list].crc, fw_checksum);
 
                         TPD_INFO("firmware checksum not match!!\n");
-                        ret = -EIO;
+                        ret = -EBADF;
                         break;
                 }
         }
@@ -1566,7 +1566,11 @@ init_fail:
                 request_fw_headfile = NULL;
                 fw = NULL;
         }
-        return FW_NO_NEED_UPDATE;
+        if (ret == -EBADF) {
+            return FW_UPDATE_ERROR;
+        } else {
+            return FW_NO_NEED_UPDATE;
+        }
 }
 static u8 nvt_trigger_reason(void *chip_data, int gesture_enable, int is_suspended)
 {
@@ -1974,6 +1978,7 @@ static fw_update_state nvt_fw_update_for_common(void *chip_data, const struct fi
     ret = nvt_fw_update(chip_info, fw, 0);
     return ret;
 }
+
 int trigger_count = 0;
 static fw_update_state nvt_fw_update(void *chip_data, const struct firmware *fw, bool chk_ignore)
 {
@@ -1985,7 +1990,7 @@ static fw_update_state nvt_fw_update(void *chip_data, const struct firmware *fw,
         TPD_INFO("firmware update failed, update with headfile!\n");
         ret = nvt_fw_update_choice(chip_info, NULL, chk_ignore);
     }
-    if (ret != FW_UPDATE_SUCCESS) {
+    if (ret != FW_UPDATE_SUCCESS && ret != FW_UPDATE_ERROR) {
         kobject_uevent(&chip_info->dev->kobj, KOBJ_CHANGE);
         TPD_INFO("tp_trigger_lcd_reset\n");
         tp_trigger_lcd_reset();

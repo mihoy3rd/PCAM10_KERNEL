@@ -638,7 +638,7 @@ static void write_shutter(kal_uint32 shutter)
 	}
 	// Update Shutter
 	#ifdef VENDOR_EDIT
-	LOG_INF("2 shutter = %llu\n", CintR);
+	LOG_INF("2 shutter = %d\n", shutter);
 	// 1H=5024/4820000000 =10.4 us
 	// 16s=16000000/10.4 =1538462
 	//1s=1000000/10.4=96153
@@ -667,7 +667,7 @@ static void write_shutter(kal_uint32 shutter)
 		//CintR = (482000000*shutter*0.0000104)/(5024*64);
 		CintR = (5013 * (unsigned long long)shutter) / 321536;
 		Time_Farme = CintR + 0x0002;  // 1st framelength
-		LOG_INF("CintR =%llu \n", CintR);
+		LOG_INF("CintR =%d \n", CintR);
 		//write_cmos_sensor(0x6028, 0x4000);
 		//write_cmos_sensor(0x0100, 0x0000);
 		//streaming_control(KAL_FALSE); // check stream off

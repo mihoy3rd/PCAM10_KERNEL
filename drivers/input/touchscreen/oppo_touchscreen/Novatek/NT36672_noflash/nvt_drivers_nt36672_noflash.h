@@ -34,6 +34,7 @@
 
 #define NVT_ID_BYTE_MAX 6
 #define POINT_DATA_LEN 65
+#define POINT_DATA_CHECKSUM_LEN 65
 #define FW_BIN_SIZE_116KB               (118784)
 #define FW_BIN_SIZE FW_BIN_SIZE_116KB
 #define FW_BIN_VER_OFFSET               (0x1A000)
@@ -75,6 +76,8 @@
 #define FREQ_HOP_DISABLE        0x66
 #define FREQ_HOP_ENABLE         0x65
 #define HANDSHAKING_HOST_READY  0xBB
+
+#define POINT_DATA_CHECKSUM     1
 
 typedef enum {
     NVT_RAWDATA,    //raw data

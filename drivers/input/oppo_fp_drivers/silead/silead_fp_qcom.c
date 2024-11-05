@@ -27,7 +27,9 @@
 
 #include <linux/of_irq.h>
 #include <linux/regulator/consumer.h>
+#ifdef CONFIG_DRM_MSM
 #include <linux/msm_drm_notify.h>
+#endif
 
 #ifndef INIT_COMPLETION
 #define INIT_COMPLETION(x)  ((x).done = 0)
@@ -40,7 +42,6 @@
 
 static irqreturn_t silfp_irq_handler(int irq, void *dev_id);
 static void silfp_work_func(struct work_struct *work);
-static int silfp_input_init(struct silfp_data *fp_dev);
 
 /* -------------------------------------------------------------------- */
 /*                            power supply                              */
@@ -507,9 +508,6 @@ static int silfp_resource_init(struct silfp_data *fp_dev, struct fp_dev_init_t *
     }
 
     if (!ret) {
-        if (silfp_input_init(fp_dev)) {
-            goto err_input;
-        }
         atomic_set(&fp_dev->init,1);
     }
     dev_info->reserve = PKG_SIZE;
@@ -526,11 +524,6 @@ static int silfp_resource_init(struct silfp_data *fp_dev, struct fp_dev_init_t *
     }
 
     return status;
-
-err_input:
-    if (fp_dev->rst_port > 0 ) {
-        gpio_free(fp_dev->rst_port);
-    }
 
 err_rst:
     free_irq(fp_dev->irq, fp_dev);

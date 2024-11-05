@@ -54,6 +54,10 @@ struct nvt_test_header {
     signed int   config_Lmt_FW_Diff_N;
     signed int   config_Lmt_FW_CC_P;
     signed int   config_Lmt_FW_CC_N;
+#ifdef CONFIG_TOUCHPANEL_NT_DIGITALNOISE_TEST
+    signed int   config_Lmt_FW_Digital_Diff_P;
+    signed int   config_Lmt_FW_Digital_Diff_N;
+#endif
     //doze mode test
     unsigned int doze_X_Channel;
     signed int   config_Lmt_Doze_Rawdata_P;
@@ -66,6 +70,13 @@ struct nvt_test_header {
     signed int   config_Lmt_LPWG_Rawdata_N;
     signed int   config_Lmt_LPWG_Diff_P;
     signed int   config_Lmt_LPWG_Diff_N;
+    //fdm mode test
+    unsigned int fdm_X_Channel;
+    signed int   config_Lmt_FDM_Rawdata_P;
+    signed int   config_Lmt_FDM_Rawdata_N;
+    unsigned int config_FDM_Noise_Test_Frame;
+    signed int   config_Lmt_FDM_Diff_P;
+    signed int   config_Lmt_FDM_Diff_N;
     //offset
     unsigned int   array_Short_Rawdata_P_offset;
     unsigned int   array_Short_Rawdata_N_offset;
@@ -73,6 +84,10 @@ struct nvt_test_header {
     unsigned int   array_FW_CC_N_offset;
     unsigned int   array_FW_Diff_P_offset;
     unsigned int   array_FW_Diff_N_offset;
+#ifdef CONFIG_TOUCHPANEL_NT_DIGITALNOISE_TEST
+    unsigned int   array_FW_Digital_Diff_P_offset;
+    unsigned int   array_FW_Digital_Diff_N_offset;
+#endif
     unsigned int   array_Doze_Diff_P_offset;
     unsigned int   array_Doze_Diff_N_offset;
     unsigned int   array_Doze_Rawdata_P_offset;
@@ -81,6 +96,10 @@ struct nvt_test_header {
     unsigned int   array_LPWG_Rawdata_N_offset;
     unsigned int   array_LPWG_Diff_P_offset;
     unsigned int   array_LPWG_Diff_N_offset;
+    unsigned int   array_FDM_Diff_P_offset;
+    unsigned int   array_FDM_Diff_N_offset;
+    unsigned int   array_FDM_Rawdata_P_offset;
+    unsigned int   array_FDM_Rawdata_N_offset;
     //reserve space
     signed int   reserve[16];
 };

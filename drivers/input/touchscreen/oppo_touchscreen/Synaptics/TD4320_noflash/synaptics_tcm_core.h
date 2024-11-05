@@ -524,6 +524,7 @@ struct syna_tcm_hcd {
     struct syna_tcm_touch_info touch_info;
     struct syna_tcm_identification id_info;
     struct zeroflash_hcd *zeroflash_hcd;
+    struct monitor_data *monitor_data;
     unsigned char response_code;
     bool init_okay;
     atomic_t host_downloading;
@@ -540,6 +541,7 @@ struct syna_tcm_hcd {
     unsigned int grip_darkzone_y;
 
     bool irq_trigger_hdl_support;
+    bool health_monitor_support;
 };
 
 struct device_hcd {

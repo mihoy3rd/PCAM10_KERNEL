@@ -2580,6 +2580,9 @@ static int __init tp_driver_init(void)
 {
     TPD_INFO("%s is called\n", __func__);
 
+    if (!tp_judge_ic_match(TPD_DEVICE))
+    return -1;
+
     if (i2c_add_driver(&tp_i2c_driver) != 0) {
         TPD_INFO("unable to add i2c driver.\n");
         return -1;

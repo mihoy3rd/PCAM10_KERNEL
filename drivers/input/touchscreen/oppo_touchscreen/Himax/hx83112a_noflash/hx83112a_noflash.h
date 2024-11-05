@@ -33,6 +33,7 @@
 #endif
 
 #define HX_ZERO_FLASH
+#define HX_ENTER_ALGORITHM_NUMBER		/*Support calculation enter algorithm number*/
 
 /*********PART2:Define Area**********************/
 #define ENABLE_UNICODE    0x40
@@ -90,11 +91,15 @@
 
 #define LIMIT_DOZE_LOW     50
 #define LIMIT_DOZE_HIGH    975
+#define firmware_update_space	131072	/*128*1024*/
+
 
 //gmq-himax
 
+#define HX64K         0x10000
+#define FW_BIN_16K_SZ 0x4000
 struct touchpanel_data *private_ts;
-int g_f_0f_updat = 0; 
+int g_f_0f_updat = 0;
 
 /**COMMON USE   ***START***/
 unsigned long FW_VER_MAJ_FLASH_ADDR;
@@ -118,19 +123,19 @@ uint8_t register_command[4];
 bool cfg_flag = false;
 
 //#ifdef HX_ESD_RECOVERY
-u8 HX_ESD_RESET_ACTIVATE;
+u8 HX_ESD_RESET_ACTIVATE = false;
 int hx_EB_event_flag;
 int hx_EC_event_flag;
 int hx_ED_event_flag;
 //#endif
 
-bool HX_RESET_STATE = false;
+bool HX_RESET_STATE;
 
 unsigned char IC_TYPE = 11;
 unsigned char IC_CHECKSUM = 0;
 bool DSRAM_Flag = false;
 int g_diag_command = 0;
-uint8_t diag_coor[128];// = {0xFF};
+uint8_t diag_coor[128];
 int32_t diag_self[100] = {0};
 
 int g_max_mutual = 0;
@@ -138,7 +143,7 @@ int g_min_mutual = 255;
 int g_max_self = 0;
 int g_min_self = 255;
 
-int mutual_set_flag = 0;
+int mutual_set_flag;
 uint8_t cmd_set[8];
 
 /**GESTURE_TRACK*/
@@ -196,16 +201,25 @@ static int gest_pt_y[10];
 /**COMMON USE*********END***/
 
 /** FOR DEBUG USE*****START***/
-typedef enum
-{
+typedef enum {
     DEBUG_DATA_BASELINE = 0x08,
     DEBUG_DATA_DELTA    = 0x09,
     DEBUG_DATA_RAW      = 0x0A,
-}DEBUG_DATA_TYPE;
+    DEBUG_DATA_DOWN     = 0x0B,
+} DEBUG_DATA_TYPE;
 
 //self test use
-typedef enum
-{
+
+/* ASCII format */
+#define ASCII_LF    (0x0A)
+#define ASCII_CR    (0x0D)
+#define ASCII_COMMA (0x2C)
+#define ASCII_ZERO  (0x30)
+#define CHAR_EL     '\0'
+#define CHAR_NL     '\n'
+#define ACSII_SPACE (0x20)
+
+typedef enum {
     HIMAX_INSPECTION_OPEN,
     HIMAX_INSPECTION_MICRO_OPEN,
     HIMAX_INSPECTION_SHORT,
@@ -213,34 +227,37 @@ typedef enum
     HIMAX_INSPECTION_NOISE,
     HIMAX_INSPECTION_SORTING,
     HIMAX_INSPECTION_BACK_NORMAL,
-    HIMAX_INSPECTION_DOZE_RAWDATA,
-    HIMAX_INSPECTION_DOZE_NOISE,
     HIMAX_INSPECTION_LPWUG_RAWDATA,
     HIMAX_INSPECTION_LPWUG_NOISE,
     HIMAX_INSPECTION_LPWUG_IDLE_RAWDATA,
     HIMAX_INSPECTION_LPWUG_IDLE_NOISE,
-}THP_INSPECTION_ENUM;
+} THP_INSPECTION_ENUM;
 
 /* Error code of AFE Inspection */
-typedef enum
-{
+#define HX_RSLT_OUT_PATH_OK "/sdcard/TpTestReport/screenOn/OK/"
+#define HX_RSLT_OUT_PATH_NG "/sdcard/TpTestReport/screenOn/NG/"
+#define HX_GES_RSLT_OUT_PATH_OK "/sdcard/TpTestReport/screenOff/OK/"
+#define HX_GES_RSLT_OUT_PATH_NG "/sdcard/TpTestReport/screenOff/NG/"
+
+/*#define HX_RSLT_OUT_FILE_OK "tp_testlimit_OK_"*/
+/*#define HX_RSLT_OUT_FILE_NG "tp_testlimitst_NG_"*/
+
+typedef enum {
     RESULT_OK = 0,
     RESULT_ERR,
     RESULT_RETRY,
-}RETURN_RESLUT;
+} RETURN_RESLUT;
 
-typedef enum
-{
+typedef enum {
     SKIPTXNUM_START = 6,
     SKIPTXNUM_6 = SKIPTXNUM_START,
     SKIPTXNUM_7,
     SKIPTXNUM_8,
     SKIPTXNUM_9,
     SKIPTXNUM_END = SKIPTXNUM_9,
-}SKIPTXNUMINDEX;
+} SKIPTXNUMINDEX;
 
-char* g_himax_inspection_mode[]=
-{
+char *g_himax_inspection_mode[] = {
     "HIMAX_INSPECTION_OPEN",
     "HIMAX_INSPECTION_MICRO_OPEN",
     "HIMAX_INSPECTION_SHORT",
@@ -250,15 +267,54 @@ char* g_himax_inspection_mode[]=
     "HIMAX_INSPECTION_BACK_NORMAL",
     "HIMAX_INSPECTION_LPWUG_RAWDATA",
     "HIMAX_INSPECTION_LPWUG_NOISE",
-    "HIMAX_INSPECTION_DOZE_RAWDATA",
-    "HIMAX_INSPECTION_DOZE_NOISE",
     "HIMAX_INSPECTION_LPWUG_IDLE_RAWDATA",
     "HIMAX_INSPECTION_LPWUG_IDLE_NOISE",
 };
 
+/* for criteria */
+char *g_hx_inspt_crtra_name[] = {
+    "CRITERIA_OPEN_MIN",
+    "CRITERIA_OPEN_MAX",
+    "CRITERIA_MICRO_OPEN_MIN",
+    "CRITERIA_MICRO_OPEN_MAX",
+    "CRITERIA_SHORT_MIN",
+    "CRITERIA_SHORT_MAX",
+    "CRITERIA_RAWDATA_MIN",   /* CRITERIA_RAW_MIN */
+    "CRITERIA_RAWDATA_MAX",  /* CRITERIA_RAW_MAX */
+    "CRITERIA_NOISE_MAX",
+    "LPWUG_RAWDATA_MIN",
+    "LPWUG_RAWDATA_MAX",
+    "LPWUG_NOISE_MIN",
+    "LPWUG_NOISE_MAX",
+    "LPWUG_IDLE_RAWDATA_MIN",
+    "LPWUG_IDLE_RAWDATA_MAX",
+    "LPWUG_IDLE_NOISE_MIN",
+    "LPWUG_IDLE_NOISE_MAX",
+    NULL
+};
+
+enum HX_CRITERIA_ENUM {
+    IDX_OPENMIN = 0,
+    IDX_OPENMAX,
+    IDX_M_OPENMIN,
+    IDX_M_OPENMAX,
+    IDX_SHORTMIN,
+    IDX_SHORTMAX,
+    IDX_RAWDATA_MIN,
+    IDX_RAWDATA_MAX,
+    IDX_NOISEMAX,
+    IDX_LPWUG_RAWDATA_MIN,
+    IDX_LPWUG_RAWDATA_MAX,
+    IDX_LPWUG_NOISE_MIN,
+    IDX_LPWUG_NOISE_MAX,
+    IDX_LPWUG_IDLE_RAWDATA_MIN,
+    IDX_LPWUG_IDLE_RAWDATA_MAX,
+    IDX_LPWUG_IDLE_NOISE_MIN,
+    IDX_LPWUG_IDLE_NOISE_MAX,
+};
+
 /* Error code of AFE Inspection */
-typedef enum
-{
+typedef enum {
     THP_AFE_INSPECT_OK      = 0,               /* OK */
     THP_AFE_INSPECT_ESPI    = (1 << 0),        /* SPI communication error */
     THP_AFE_INSPECT_ERAW    = (1 << 1),        /* Raw data error */
@@ -269,13 +325,16 @@ typedef enum
     THP_AFE_INSPECT_ERC     = (1 << 6),        /* Sensor RC error */
     THP_AFE_INSPECT_EPIN    = (1 << 7),        /* Errors of TSVD!FTSHD!FTRCST!FTRCRQ and other PINs
                                                   when Report Rate Switching between 60 Hz and 120 Hz */
-    THP_AFE_INSPECT_EOTHER  = (1 << 8)         /* All other errors */
+    THP_AFE_INSPECT_EOTHER  = (1 << 8),         /* All other errors */
+    THP_AFE_INSPECT_EFILE  = (1 << 9)         /* Get Criteria file error */
 } THP_AFE_INSPECT_ERR_ENUM;
 
 
 //Himax MP Limit
 /*#define RAWMIN         3547*0.05
 #define RAWMAX         5352*0.9*/
+
+/* Define Criteria*/
 #define RAWMIN         906
 #define RAWMAX         16317
 #define SHORTMIN       0
@@ -284,6 +343,12 @@ typedef enum
 #define OPENMAX        500
 #define M_OPENMIN      0
 #define M_OPENMAX      150
+
+#define RAWMIN_BD12    895;
+#define RAWMAX_BD12    16117;
+#define LPWUG_RAWDATA_MAX_BD12        9999;
+#define LPWUG_IDLE_RAWDATA_MAX_BD12   9999;
+
 #define NOISEFRAME     BS_RAWDATANOISE+40
 #define NOISE_P        256 //gmqtest
 #define UNIFMAX        500
@@ -309,8 +374,8 @@ typedef enum
 #define DATA_BACK_NORMAL    0x00
 #define DATA_LPWUG_RAWDATA  0x0C
 #define DATA_LPWUG_NOISE    0x0F
-#define DATA_DOZE_RAWDATA   0x0A
-#define DATA_DOZE_NOISE     0x0F
+/*#define DATA_DOZE_RAWDATA 0x0A
+#define DATA_DOZE_NOISE 0x0F */
 #define DATA_LPWUG_IDLE_RAWDATA    0x0A
 #define DATA_LPWUG_IDLE_NOISE      0x0F
 
@@ -322,9 +387,10 @@ static uint16_t NOISEMAX;
 static uint16_t LPWUG_NOISEMAX;
 
 #define BS_LPWUG           1
-#define BS_DOZE            1
+/*#define BS_DOZE            1*/
 #define BS_LPWUG_dile      1
 
+/* Define Criteria*/
 #define LPWUG_NOISE_MAX          100
 #define LPWUG_NOISE_MIN          0
 #define LPWUG_RAWDATA_MAX        15000
@@ -341,8 +407,8 @@ static uint16_t LPWUG_NOISEMAX;
 #define PWD_NONE                 0x00
 #define PWD_LPWUG_START          0x55
 #define PWD_LPWUG_END            0x66
-#define PWD_DOZE_START           0x22
-#define PWD_DOZE_END             0x44
+/*#define PWD_DOZE_START 0x22
+#define PWD_DOZE_END 0x44 */
 #define PWD_LPWUG_IDLE_START     0x50
 #define PWD_LPWUG_IDLE_END       0x60
 
@@ -353,8 +419,7 @@ static uint16_t LPWUG_NOISEMAX;
 
 /** FOR DEBUG USE ****END****/
 
-struct himax_report_data
-{
+struct himax_report_data {
     int touch_all_size;
     int raw_cnt_max;
     int raw_cnt_rmd;
@@ -362,10 +427,11 @@ struct himax_report_data
     uint8_t finger_num;
     uint8_t finger_on;
     uint8_t *hx_coord_buf;
-    uint8_t hx_state_info[2];
+    uint8_t hx_state_info[5];
 
     int event_size;
     uint8_t *hx_event_buf;
+    int hx_event_buf_oppo[128];
 
     int rawdata_size;
     uint8_t diag_cmd;
@@ -376,35 +442,70 @@ struct himax_report_data
 };
 
 /*********PART3:Struct Area**********************/
+struct himax_fw_debug_info {
+    u16 recal0 : 1;
+    u16 recal1 : 1;
+    u16 paseline : 1;
+    u16 palm : 1;
+    u16 idle : 1;
+    u16 water : 1;
+    u16 hopping : 1;
+    u16 noise : 1;
+    u16 glove : 1;
+    u16 border : 1;
+    u16 vr : 1;
+    u16 big_small : 1;
+    u16 one_block : 1;
+    u16 blewing : 1;
+    u16 thumb_flying : 1;
+    u16 border_extend : 1;
+};
 
 struct chip_data_hx83112b {
     uint32_t *p_tp_fw;
     tp_dev tp_type;
+    char   *test_limit_name;
     struct himax_proc_operations *syna_ops; /*hx83112b func provide to hx83112b common driver*/
 
     struct hw_resource *hw_res;
     int16_t *spuri_fp_data;
     struct spurious_fp_touch *p_spuri_fp_touch;
-/********SPI bus*******************************/	
-	struct spi_device	*hx_spi;
-	int 				hx_irq;
+    /********SPI bus*******************************/
+    struct spi_device    *hx_spi;
+    int                  hx_irq;
 #ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
-	struct mtk_chip_config hx_spi_mcc;
+    struct mtk_chip_config hx_spi_mcc;
 #else
     struct mt_chip_conf    hx_spi_mcc;
 #endif
-/********SPI bus*******************************/
+    /********SPI bus*******************************/
 #ifdef HX_ZERO_FLASH
     struct mutex             spi_lock;
     struct workqueue_struct  *himax_0f_update_wq;
     struct delayed_work      work_0f_update;
     struct firmware_headfile *p_firmware_headfile;
-    const struct firmware    *g_fw_entry;
     uint8_t *tmp_data;
 #endif
     uint8_t     touch_direction;    //show touchpanel current direction
     bool        using_headfile;
     bool        first_download_finished;
+
+    uint32_t    fw_id;
+    uint16_t    fw_ver;
+
+    u8 *g_fw_buf;
+    size_t g_fw_len;
+    bool g_fw_sta;
+
+#ifdef CONFIG_OPPO_TP_APK
+    bool lock_point_status;
+    bool plug_status;
+    bool debug_mode_sta;
+    bool debug_gesture_sta;
+    bool earphone_sta;
+    bool charger_sta;
+    bool noise_sta;
+#endif //end of CONFIG_OPPO_TP_APK
 };
 
 /*********PART4:ZERO FLASH**********************/
@@ -431,38 +532,45 @@ struct chip_data_hx83112b {
 #define zf_data_mode_switch             0x10007294
 
 struct zf_operation {
-	uint8_t addr_dis_flash_reload[4];
-	uint8_t data_dis_flash_reload[4];
-	uint8_t addr_system_reset[4];
-	uint8_t data_system_reset[4];
-	uint8_t data_sram_start_addr[4];
-	uint8_t data_sram_clean[4];
-	uint8_t data_cfg_info[4];
-	uint8_t data_fw_cfg[4];
-	uint8_t data_fw_cfg_p1[4];
-	uint8_t data_fw_cfg_p2[4];
-	uint8_t data_fw_cfg_p3[4];
-	uint8_t data_adc_cfg_1[4];
-	uint8_t data_adc_cfg_2[4];
-	uint8_t data_adc_cfg_3[4];
-	uint8_t data_map_table[4];
-	uint8_t data_mode_switch[4];
+    uint8_t addr_dis_flash_reload[4];
+    uint8_t data_dis_flash_reload[4];
+    uint8_t addr_system_reset[4];
+    uint8_t data_system_reset[4];
+    uint8_t data_sram_start_addr[4];
+    uint8_t data_sram_clean[4];
+    uint8_t data_cfg_info[4];
+    uint8_t data_fw_cfg[4];
+    uint8_t data_fw_cfg_p1[4];
+    uint8_t data_fw_cfg_p2[4];
+    uint8_t data_fw_cfg_p3[4];
+    uint8_t data_adc_cfg_1[4];
+    uint8_t data_adc_cfg_2[4];
+    uint8_t data_adc_cfg_3[4];
+    uint8_t data_map_table[4];
+    uint8_t data_mode_switch[4];
+};
+struct zf_info {
+    uint8_t sram_addr[4];
+    int write_size;
+    uint32_t fw_addr;
+    uint32_t cfg_addr;
 };
 
+
 struct himax_core_fp {
-	int (*fp_reload_disable)(int disable);
-	void (*fp_sys_reset)(void);
-	void (*fp_clean_sram_0f)(uint8_t *addr, int write_len, int type);
-	void (*fp_write_sram_0f)(const struct firmware *fw_entry, uint8_t *addr, int start_index, uint32_t write_len);
-	void (*fp_firmware_update_0f)(const struct firmware *fw_entry);
-	int (*fp_0f_operation_dirly)(void);
-	int (*fp_0f_op_file_dirly)(char *file_name);
-	void (*fp_0f_operation)(struct work_struct *work);
+    int (*fp_reload_disable)(int disable);
+    void (*fp_sys_reset)(void);
+    void (*fp_clean_sram_0f)(uint8_t *addr, int write_len, int type);
+    void (*fp_write_sram_0f)(const struct firmware *fw_entry, uint8_t *addr, int start_index, uint32_t write_len);
+    void (*fp_firmware_update_0f)(const struct firmware *fw_entry);
+    int (*fp_0f_operation_dirly)(void);
+    int (*fp_0f_op_file_dirly)(char *file_name);
+    void (*fp_0f_operation)(struct work_struct *work);
 #ifdef HX_0F_DEBUG
-	void (*fp_read_sram_0f)(const struct firmware *fw_entry, uint8_t *addr, int start_index, int read_len);
-	void (*fp_read_all_sram)(uint8_t *addr, int read_len);
-	void (*fp_firmware_read_0f)(const struct firmware *fw_entry, int type);
-	void (*fp_0f_operation_check)(int type);
+    void (*fp_read_sram_0f)(const struct firmware *fw_entry, uint8_t *addr, int start_index, int read_len);
+    void (*fp_read_all_sram)(uint8_t *addr, int read_len);
+    void (*fp_firmware_read_0f)(const struct firmware *fw_entry, int type);
+    void (*fp_0f_operation_check)(int type);
 #endif
 };
 #endif

@@ -288,7 +288,7 @@ static struct i2c_client* remote_rmi4_get_i2c_client(void)
 static int remote_rmit_set_page(unsigned int address) {
     struct i2c_client* i2c_client = remote_rmi4_get_i2c_client();
     unsigned char retry;
-    unsigned char buf[2];
+    unsigned char *buf = NULL;
     struct i2c_msg msg[] = {
         {
             .addr = i2c_client->addr,
@@ -297,8 +297,17 @@ static int remote_rmit_set_page(unsigned int address) {
             .buf = buf,
         }
     };
+
+    buf = kzalloc(2, GFP_KERNEL | GFP_DMA);
+    if (!buf) {
+        pr_err("kzalloc buf failed.\n");
+        return -ENOMEM;
+    }
+
     buf[0] = 0xff;
     buf[1] = ((address >> 8) & 0xFF);
+
+    msg[0].buf = buf;
 
     for (retry = 0; retry < 2; retry++) {
         if (i2c_transfer(i2c_client->adapter, msg, 1) == 1) {
@@ -308,8 +317,13 @@ static int remote_rmit_set_page(unsigned int address) {
     }
 
     if (retry == 2) {
+        kfree(buf);
+        buf = NULL;
         return -EIO;
     }
+
+    kfree(buf);
+    buf = NULL;
 
     return 0;
 }
@@ -318,7 +332,7 @@ static int remote_rmit_put_page(void)
 {
     struct i2c_client* i2c_client = remote_rmi4_get_i2c_client();
     unsigned char retry;
-    unsigned char buf[2];
+    unsigned char *buf = NULL;
     struct i2c_msg msg[] = {
         {
             .addr = i2c_client->addr,
@@ -327,8 +341,17 @@ static int remote_rmit_put_page(void)
             .buf = buf,
         }
     };
+
+    buf = kzalloc(2, GFP_KERNEL | GFP_DMA);
+    if (!buf) {
+        pr_err("kzalloc buf failed.\n");
+        return -ENOMEM;
+    }
+
     buf[0] = 0xff;
     buf[1] = 0x00;
+
+    msg[0].buf = buf;
 
     for (retry = 0; retry < 2; retry++) {
         if (i2c_transfer(i2c_client->adapter, msg, 1) == 1) {
@@ -338,8 +361,13 @@ static int remote_rmit_put_page(void)
     }
 
     if (retry == 2) {
+        kfree(buf);
+        buf = NULL;
         return -EIO;
     }
+
+    kfree(buf);
+    buf = NULL;
 
     return 0;
 }
@@ -348,24 +376,42 @@ int remote_rmi4_i2c_read(unsigned short addr, unsigned char *data, unsigned shor
 {
     int retval;
     unsigned char retry;
-    unsigned char buf;
+    unsigned char *buf = NULL;
+    unsigned char *read_buf = NULL;
     struct i2c_client* i2c_client = remote_rmi4_get_i2c_client();
     struct i2c_msg msg[] = {
         {
             .addr = i2c_client->addr,
             .flags = 0,
             .len = 1,
-            .buf = &buf,
+            .buf = buf,
         },
         {
             .addr = i2c_client->addr,
             .flags = I2C_M_RD,
             .len = length,
-            .buf = data,
+            .buf = read_buf,
         },
     };
 
-    buf = addr & 0xff;
+    buf = kzalloc(1, GFP_KERNEL | GFP_DMA);
+    if (!buf) {
+        pr_err("kzalloc buf failed.\n");
+        return -ENOMEM;
+    }
+
+    read_buf = kzalloc(length, GFP_KERNEL | GFP_DMA);
+    if (!read_buf) {
+        pr_err("kzalloc read_buf failed.\n");
+        kfree(buf);
+        buf = NULL;
+        return -ENOMEM;
+    }
+
+    *buf = addr & 0xff;
+
+    msg[0].buf = buf;
+    msg[1].buf = read_buf;
 
     retval = remote_rmit_set_page(addr);
     if (retval < 0)
@@ -381,9 +427,16 @@ int remote_rmi4_i2c_read(unsigned short addr, unsigned char *data, unsigned shor
 
     if (retry == 2) {
         retval = -EIO;
+        goto exit;
     }
 
+    memcpy(data, read_buf, length);
+
 exit:
+    kfree(buf);
+    buf = NULL;
+    kfree(read_buf);
+    read_buf = NULL;
     remote_rmit_put_page();
 
     return retval;
@@ -404,7 +457,7 @@ int remote_rmi4_i2c_write(unsigned short addr, unsigned char *data, unsigned sho
         }
     };
 
-    buf = kzalloc(length + 1, GFP_KERNEL);
+    buf = kzalloc(length + 1, GFP_KERNEL | GFP_DMA);
     if (buf == NULL) {
         pr_err("buf info kzalloc error\n");
         return -ENOMEM;
@@ -426,6 +479,8 @@ int remote_rmi4_i2c_write(unsigned short addr, unsigned char *data, unsigned sho
     }
     msleep(10);
     if (retry == 2) {
+        kfree(buf);
+        buf = NULL;
         retval = -EIO;
     }
 

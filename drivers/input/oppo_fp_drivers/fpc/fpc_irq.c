@@ -21,6 +21,8 @@
 **    Long.Liu     2018/11/23    add for 18151 fpc1023
 **    Yang.Tan     2018/11/26    add for 18531 fpc1511
 **    Long.Liu     2019/01/03    add for 18161 fpc1511
+**    Long.Liu     2019/05/05    modify for spi device
+**    Long.Liu     2019/06/07    modify for FPC abnamol module current
 ************************************************************************************/
 
 #include <linux/version.h>
@@ -112,15 +114,28 @@ struct vreg_config {
         int ua_load;
 };
 
+#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18151
+static const struct vreg_config const vreg_conf[] = {
+        { "vdd_io", 3000000UL, 3000000UL, 6000, },
+};
+#else
 static const struct vreg_config const vreg_conf[] = {
         { "vdd_io", 1800000UL, 1800000UL, 6000, },
 };
+#endif
 
 struct fpc1020_data {
         struct device *dev;
         struct platform_device *pldev;
         int irq_gpio;
         int rst_gpio;
+#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
+    int vdd_en_gpio;
+    int cs_gpio;
+    bool cs_gpio_set;
+    struct pinctrl *pinctrl;
+    struct pinctrl_state *pstate_cs_func;
+#endif
         struct input_dev *idev;
         int irq_num;
         struct mutex lock;
@@ -437,6 +452,23 @@ static ssize_t wakelock_enable_set(struct device *dev,
         return count;
 }
 
+#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
+static ssize_t hardware_reset(struct device *dev, struct device_attribute *attribute, const char *buffer, size_t count)
+{
+    struct  fpc1020_data *fpc1020 = dev_get_drvdata(dev);
+    printk("fpc_interrupt: %s enter\n", __func__);
+    gpio_direction_output(fpc1020->vdd_en_gpio, 0);
+    gpio_set_value(fpc1020->rst_gpio, 0);
+    udelay(FPC1020_RESET_LOW_US);
+    gpio_set_value(fpc1020->rst_gpio, 1);
+    gpio_direction_output(fpc1020->vdd_en_gpio, 1);
+    printk("fpc_interrupt: %s exit\n", __func__);
+    return count;
+}
+
+static DEVICE_ATTR(irq_unexpected, S_IWUSR, NULL, hardware_reset);
+#endif
+
 static DEVICE_ATTR(irq, S_IRUSR | S_IWUSR, irq_get, irq_ack);
 static DEVICE_ATTR(regulator_enable, S_IWUSR, NULL, regulator_enable_set);
 static DEVICE_ATTR(irq_enable, S_IRUSR | S_IWUSR, irq_enable_get, irq_enable_set);
@@ -452,6 +484,9 @@ static struct attribute *attributes[] = {
         &dev_attr_irq_enable.attr,
         &dev_attr_wakelock_enable.attr,
         &dev_attr_clk_enable.attr,
+#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
+        &dev_attr_irq_unexpected.attr,
+#endif
         NULL
 };
 
@@ -499,6 +534,11 @@ static int fpc1020_irq_probe(struct platform_device *pldev)
                 goto ERR_ALLOC;
         }
 
+#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
+        fpc1020->cs_gpio_set = false;
+        fpc1020->pinctrl = NULL;
+        fpc1020->pstate_cs_func = NULL;
+#endif
         fpc1020->dev = dev;
         dev_info(fpc1020->dev, "-->%s\n", __func__);
         dev_set_drvdata(dev, fpc1020);
@@ -516,14 +556,24 @@ static int fpc1020_irq_probe(struct platform_device *pldev)
                         &&(FP_FPC_1023 != get_fpsensor_type())
                         &&(FP_FPC_1023_GLASS != get_fpsensor_type())
                         &&(FP_FPC_1270 != get_fpsensor_type())
-                        &&(FP_FPC_1511 != get_fpsensor_type())
-                        &&(FP_FPC_1028_COATING != get_fpsensor_type())
-                        &&(FP_FPC_1511_COATING != get_fpsensor_type())) {
+                        &&(FP_FPC_1511 != get_fpsensor_type())) {
                 dev_err(dev, "found not fpc sensor\n");
                 rc = -EINVAL;
                 goto ERR_BEFORE_WAKELOCK;
         }
         dev_info(dev, "found fpc sensor\n");
+#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
+        fpc1020->pinctrl = devm_pinctrl_get(&pldev->dev);
+        if (IS_ERR(fpc1020->pinctrl)) {
+                dev_err(&pldev->dev, "can not get the fpc pinctrl");
+                return PTR_ERR(fpc1020->pinctrl);
+        }
+        fpc1020->pstate_cs_func = pinctrl_lookup_state(fpc1020->pinctrl, "fpc_cs_func");
+        if (IS_ERR(fpc1020->pstate_cs_func)) {
+                dev_err(&pldev->dev, "Can't find fpc_cs_func pinctrl state\n");
+                return PTR_ERR(fpc1020->pstate_cs_func);
+        }
+#endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0))
         wake_lock_init(&fpc1020->ttw_wl, WAKE_LOCK_SUSPEND, "fpc_ttw_wl");
@@ -582,6 +632,29 @@ static int fpc1020_irq_probe(struct platform_device *pldev)
                 goto ERR_AFTER_WAKELOCK;
         }
 
+#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
+        /*get cs resource*/
+        fpc1020->cs_gpio = of_get_named_gpio(pldev->dev.of_node, "fpc,gpio_cs", 0);
+        if (!gpio_is_valid(fpc1020->cs_gpio)) {
+                pr_info("CS GPIO is invalid.\n");
+                return -1;
+        }
+        rc = gpio_request(fpc1020->cs_gpio, "fpc,gpio_cs");
+        if (rc) {
+                dev_err(fpc1020->dev, "Failed to request CS GPIO. rc = %d\n", rc);
+                return -1;
+        }
+        gpio_direction_output(fpc1020->cs_gpio, 0);
+        fpc1020->cs_gpio_set = true;
+
+        if (fpc1020->cs_gpio_set) {
+                pr_info("---- pull CS up and set CS from gpio to func ----");
+                gpio_set_value(fpc1020->cs_gpio, 1);
+                pinctrl_select_state(fpc1020->pinctrl, fpc1020->pstate_cs_func);
+                fpc1020->cs_gpio_set = false;
+        }
+#endif
+
         rc = gpio_direction_output(fpc1020->rst_gpio, 1);
 
         if (rc) {
@@ -590,6 +663,21 @@ static int fpc1020_irq_probe(struct platform_device *pldev)
                 goto ERR_AFTER_WAKELOCK;
         }
 
+#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18531 || CONFIG_OPPO_FINGERPRINT_PROJCT == 18161
+        /*get ldo resource*/
+/*
+        rc = fpc1020_request_named_gpio(fpc1020, "fpc,vdd-en",
+                    &fpc1020->vdd_en_gpio);
+        if (rc) {
+                goto ERR_AFTER_WAKELOCK;
+        }
+        rc = gpio_direction_output(fpc1020->vdd_en_gpio, 1);
+        if (rc < 0) {
+                dev_err(fpc1020->dev, "gpio_direction_output (vdd_en) failed.\n");
+                goto ERR_AFTER_WAKELOCK;
+        }
+*/
+#else
         rc = vreg_setup(fpc1020, "vdd_io", true);
 
         if (rc) {
@@ -597,6 +685,7 @@ static int fpc1020_irq_probe(struct platform_device *pldev)
                                 "vreg_setup failed.\n");
                 goto ERR_AFTER_WAKELOCK;
         }
+#endif
         mdelay(2);
         gpio_set_value(fpc1020->rst_gpio, 1);
         udelay(FPC1020_RESET_HIGH2_US);
@@ -645,8 +734,6 @@ static int fpc1020_spi_probe(struct spi_device *spi)
         fpc1020_data_t *fpc1020 = NULL;
         /* size_t buffer_size; */
 
-        pr_err("fpc1020_spi_probe enter++++++\n");
-
         fpc1020 = kzalloc(sizeof(*fpc1020), GFP_KERNEL);
         if (!fpc1020) {
                 pr_err("failed to allocate memory for struct fpc1020_data\n");
@@ -678,6 +765,7 @@ MODULE_DEVICE_TABLE(of, fpc1020_of_match);
 
 static struct of_device_id fpc1020_spi_of_match[] = {
         { .compatible = "fpc,fpc1020", },
+        { .compatible = "oppo,oppo_fp" },
         {}
 };
 
@@ -721,6 +809,18 @@ static struct spi_board_info fpc1020_spi_board_devs[] __initdata = {
 static int __init fpc1020_init(void)
 {
         //int rc = 0;
+        if ((FP_FPC_1140 != get_fpsensor_type())
+                        &&(FP_FPC_1260 != get_fpsensor_type())
+                        &&(FP_FPC_1022 != get_fpsensor_type())
+                        &&(FP_FPC_1023 != get_fpsensor_type())
+                        &&(FP_FPC_1023_GLASS != get_fpsensor_type())
+                        &&(FP_FPC_1270 != get_fpsensor_type())
+                        &&(FP_FPC_1511 != get_fpsensor_type())) {
+                pr_err("fpc1020_init, found not fpc sensor\n");
+pr_err("%s, found not fpc sensor: %d\n", __func__, get_fpsensor_type());
+                return -EINVAL;
+        }
+        pr_err("%s, found fpc sensor: %d\n", __func__, get_fpsensor_type());
         #if 0
         rc = spi_register_board_info(fpc1020_spi_board_devs, ARRAY_SIZE(fpc1020_spi_board_devs));
         if (rc)
@@ -749,7 +849,11 @@ static void __exit fpc1020_exit(void)
         //platform_device_unregister(fpc_irq_platform_device);
 }
 
+#if CONFIG_OPPO_FINGERPRINT_PROJCT == 18151
+late_initcall(fpc1020_init);
+#else
 module_init(fpc1020_init);
+#endif
 
 module_exit(fpc1020_exit);
 

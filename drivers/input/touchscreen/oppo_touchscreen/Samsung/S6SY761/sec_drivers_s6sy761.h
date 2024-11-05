@@ -143,6 +143,7 @@
 #define SEC_CMD_EDGE_SCREEN                     0xBE
 #define SEC_CMD_SENSETIVE_CTRL                  0x3F
 #define SEC_CMD_NOISE_CTRL                      0x33
+#define SEC_CMD_WET_SWITCH                      0x4B
 
 #define SEC_CMD_RTDP_ERASE                      0xC9    //Erase RTDP Memory
 #define SEC_CMD_RTDP_START                      0xC0    //Start RTDP

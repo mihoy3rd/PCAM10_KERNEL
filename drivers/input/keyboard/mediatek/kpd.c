@@ -24,6 +24,8 @@
 #include <linux/debugfs.h>
 #ifdef VENDOR_EDIT
 //Fuchun.Liao@BSP.CHG.Basic 2017/12/10 add for key
+#include <linux/proc_fs.h>
+#include <asm/uaccess.h>
 #include <linux/of_gpio.h>
 #include <soc/oppo/oppo_project.h>
 #endif /*VENDOR_EDIT*/
@@ -66,14 +68,63 @@ static irqreturn_t kpd_volumedown_irq_handler(int irq, void *dev_id);
 static void kpd_volumedown_task_process(unsigned long data);
 static DECLARE_TASKLET(kpd_volumekey_down_tasklet, kpd_volumedown_task_process, 0);
 
+#ifdef CONFIG_OPPO_SPECIAL_BUILD
+static int aee_kpd_enable = 1;
+#else
+static int aee_kpd_enable = 0;
+#endif
 
+static void kpd_aee_handler(u32 keycode, u16 pressed);
+static inline void kpd_update_aee_state(void);
+
+#define VOLKEYPASSWORD 17331	//0x43b3
+int door_open = 0;
+static unsigned int vol_key_password = 0;
+static unsigned long start_timer_last = 0;
+static void kpd_set_vol_key_state(int key, int key_val)
+{
+	unsigned long start_timer_current = jiffies;
+	
+	if (key == KEY_VOLUMEUP && key_val)
+		vol_key_password = (vol_key_password << 1)|0x01;
+
+	if(key == KEY_VOLUMEDOWN && key_val)
+		vol_key_password = (vol_key_password << 1)&~0x01;
+
+	if (key_val) {
+		if (door_open) {
+			door_open = 0;
+			vol_key_password = 0;
+			pr_err("vol_Key_password door_close \n");
+		}
+		start_timer_current = jiffies;
+		if(start_timer_last != 0){
+			if (time_after(start_timer_current,start_timer_last + msecs_to_jiffies(1000))){
+				vol_key_password = 0;
+			}
+
+			if((VOLKEYPASSWORD == vol_key_password) && (door_open == 0))
+			{
+				pr_err("vol_key_password door_open \n");
+				door_open = 1;
+			}
+		}
+		start_timer_last = start_timer_current;
+	}
+
+}
+	
 static void kpd_volumeup_task_process(unsigned long data)
 {
 	pr_err("%s vol_up_val: %d\n", __func__, vol_key_info.vol_up_val);
 	input_report_key(kpd_input_dev, KEY_VOLUMEUP, !vol_key_info.vol_up_val);
 	input_sync(kpd_input_dev);
+	kpd_set_vol_key_state(KEY_VOLUMEUP, vol_key_info.vol_up_val);
 	enable_irq(vol_key_info.vol_up_irq);
 
+	if (aee_kpd_enable) {
+		kpd_aee_handler(KEY_VOLUMEUP, !vol_key_info.vol_up_val);
+	}
 }
 
 static irqreturn_t kpd_volumeup_irq_handler(int irq, void *dev_id)
@@ -109,8 +160,8 @@ static irqreturn_t kpd_volumeup_irq_handler(int irq, void *dev_id)
 		irq_set_irq_type(vol_key_info.vol_up_irq, IRQ_TYPE_EDGE_RISING);
 		vol_key_info.vol_up_irq_type = IRQ_TYPE_EDGE_RISING;
 	}
-	pr_err("%s irq_type:%d, val:%d\n", __func__, 
-		vol_key_info.vol_up_irq_type, vol_key_info.vol_up_val);
+	//pr_err("%s irq_type:%d, val:%d\n", __func__, 
+		//vol_key_info.vol_up_irq_type, vol_key_info.vol_up_val);
 	tasklet_schedule(&kpd_volumekey_up_tasklet);
 	return IRQ_HANDLED;
 }
@@ -120,8 +171,12 @@ static void kpd_volumedown_task_process(unsigned long data)
 	pr_err("%s vol_down val:%d\n", __func__, vol_key_info.vol_down_val);
 	input_report_key(kpd_input_dev, KEY_VOLUMEDOWN, !vol_key_info.vol_down_val);
 	input_sync(kpd_input_dev);
+	kpd_set_vol_key_state(KEY_VOLUMEDOWN, vol_key_info.vol_down_val);
 	enable_irq(vol_key_info.vol_down_irq);
 	
+	if (aee_kpd_enable) {
+		kpd_aee_handler(KEY_VOLUMEDOWN, !vol_key_info.vol_down_val);
+	}
 }
 
 static irqreturn_t kpd_volumedown_irq_handler(int irq, void *dev_id)
@@ -156,8 +211,8 @@ static irqreturn_t kpd_volumedown_irq_handler(int irq, void *dev_id)
 		irq_set_irq_type(vol_key_info.vol_down_irq, IRQ_TYPE_EDGE_RISING);
 		vol_key_info.vol_down_irq_type = IRQ_TYPE_EDGE_RISING;
 	}
-	pr_err("%s irq_type:%d, val:%d\n", __func__, 
-		vol_key_info.vol_down_irq_type, vol_key_info.vol_down_val);
+	//pr_err("%s irq_type:%d, val:%d\n", __func__, 
+		//vol_key_info.vol_down_irq_type, vol_key_info.vol_down_val);
 	tasklet_schedule(&kpd_volumekey_down_tasklet);	
 	return IRQ_HANDLED;
 }
@@ -434,6 +489,10 @@ static enum hrtimer_restart aee_timer_func(struct hrtimer *timer)
 	/* aee_kernel_reminding("manual dump ", "Triggered by press KEY_VOLUMEUP+KEY_VOLUMEDOWN"); */
 	/*ZH CHEN*/
 	/*aee_trigger_kdb();*/
+	if (aee_kpd_enable) {
+		pr_err("%s call bug for aee manual dump.", __func__);
+		BUG();
+	}
 
 	return HRTIMER_NORESTART;
 }
@@ -521,6 +580,16 @@ void kpd_pmic_rstkey_handler(unsigned long pressed)
 	kpd_aee_handler(KPD_PMIC_RSTKEY_MAP, pressed);
 #endif
 
+#ifdef VENDOR_EDIT
+/* Fuchun.Liao@BSP.CHG.Basic 2018/03/04 modify for enter dump */
+if(vol_key_info.homekey_as_vol_up) {
+	kpd_set_vol_key_state(kpd_dts_data.kpd_sw_rstkey, !pressed);
+
+	if (aee_kpd_enable) {
+		kpd_aee_handler(kpd_dts_data.kpd_sw_rstkey, pressed);
+	}
+}
+#endif /* VENDOR_EDIT */
 }
 
 /*********************************************************************/
@@ -1054,6 +1123,63 @@ static int init_custom_gpio_state(struct platform_device *client) {
 }
 #endif /*VENDOR_EDIT*/
 
+#ifdef VENDOR_EDIT
+/* Fuchun.Liao@BSP.CHG.Basic 2018/01/09 modify for aee_kpd_enable */
+static ssize_t aee_kpd_enable_read(struct file *filp, char __user *buff,
+				size_t count, loff_t *off)
+{
+	char page[256] = {0};
+	char read_data[16] = {0};
+	int len = 0;
+
+	if (aee_kpd_enable)
+		read_data[0] = '1';
+	else
+		read_data[0] = '0';
+	
+	len = sprintf(page, "%s", read_data);
+
+	if(len > *off)
+		len -= *off;
+	else
+		len = 0;
+	if (copy_to_user(buff, page, (len < count ? len : count))) {
+		return -EFAULT;
+	}
+	*off += len < count ? len : count;
+	return (len < count ? len : count);
+}
+
+static ssize_t aee_kpd_enable_write(struct file *filp, const char __user *buff,
+				size_t len, loff_t *data)
+{
+	char temp[16] = {0};
+	
+	if (copy_from_user(temp, buff, len)) {
+		pr_err("aee_kpd_enable_write error.\n");
+		return -EFAULT;
+	}
+	sscanf(temp, "%d", &aee_kpd_enable);
+	pr_err("%s enable:%d\n", __func__, aee_kpd_enable);
+	
+	return len;
+}
+
+static const struct file_operations aee_kpd_enable_proc_fops = {
+	.write = aee_kpd_enable_write,
+	.read = aee_kpd_enable_read,
+};
+static void init_proc_aee_kpd_enable(void)
+{
+	struct proc_dir_entry *p = NULL;
+
+	p = proc_create("aee_kpd_enable", 0664,
+					NULL, &aee_kpd_enable_proc_fops);
+	if (!p)
+		pr_err("proc_create aee_kpd_enable ops fail!\n");
+
+}
+#endif /* VENDOR_EDIT */
 
 static int kpd_pdrv_probe(struct platform_device *pdev)
 {
@@ -1216,7 +1342,7 @@ static int kpd_pdrv_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, kpd_oppo);
 	kpd_oppo->pdev = pdev;
 
-	if ((kpd_dts_data.kpd_sw_rstkey == KEY_VOLUMEUP) && is_project(OPPO_18611)) {
+	if (kpd_dts_data.kpd_sw_rstkey == KEY_VOLUMEUP) {
 		vol_key_info.homekey_as_vol_up = true;
 	} else {
 		vol_key_info.homekey_as_vol_up = false;
@@ -1271,6 +1397,10 @@ static int kpd_pdrv_probe(struct platform_device *pdev)
 	__set_bit(KEY_POWER, kpd_input_dev->keybit);
 #endif /*VENDOR_EDIT*/
 
+#ifdef VENDOR_EDIT
+/* Fuchun.Liao@BSP.CHG.Basic 2018/01/09 modify for aee_kpd_enable */
+	init_proc_aee_kpd_enable();
+#endif /* VENDOR_EDIT */
 
 	kpd_info("%s Done\n", __func__);
 	return 0;

@@ -24,8 +24,11 @@
  * Bill Yu    2018/6/27   0.2.3      Expand pwdn I/F
  * Bill Yu    2018/8/5    0.2.4      Support TP Up/Down I/F
  * Bill Yu    2018/12/5   0.2.5      Add Spreadtrum platform support
+ * Dongnan.wu 2019/02/23  0.2.6      compatible with silead and goodix device
+ * Bangxiong.Wu 2019/03/12 0.2.7     change loglevel for important msg output
+ * Bangxiong.Wu 2019/04/11 1.0.0     add op_mode for lcd notifier
  *
- */
+ ******************************************************************************/
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -73,6 +76,7 @@
 #endif
 
 #include "silead_fp.h"
+#include "../include/oppo_fp_common.h"
 
 #define FP_DEV_NAME "silead_fp"
 #define FP_DEV_MAJOR 0	/* assigned */
@@ -172,12 +176,17 @@ typedef enum _fp_spi_speet_t {
     SPEED_9M=9*1000*1000,
     SPEED_HIGH=SPEED_8M,
     SPEED_10M=10*1000*1000,
+    SPEED_12M=12*1000*1000,
+    SPEED_15M=15*1000*1000,
+    SPEED_18M=18*1000*1000,
+    SPEED_20M=20*1000*1000,
+    SPEED_HIGHEST=SPEED_20M,
 } fp_spi_speet_t ;
 
 static struct fp_dev_init_t silfp_dev_init_d = {
     .mode = 0,
     .bits = 8,
-    .speed = SPEED_HIGH,
+    .speed = SPEED_18M,
     .delay = 100,
     .dev = DEVICE,
     .nl_id = SIFP_NETLINK_ROUTE,
@@ -508,21 +517,21 @@ static int silfp_fb_callback(struct notifier_block *notif,
     struct fb_event *evdata = data;
     unsigned int blank;
     int retval = 0;
-    blank = *(int *)evdata->data;
 
     if (event == MTK_ONSCREENFINGERPRINT_EVENT ) {
-        LOG_MSG_DEBUG(INFO_LOG, "[%s] UI ready enter\n", __func__);
+        uint8_t op_mode = 0x0;
+        op_mode = *(uint8_t *)evdata->data;
 
-        switch (blank) {
+        switch (op_mode) {
         case UI_DISAPPEAR:
-            LOG_MSG_DEBUG(INFO_LOG, "[%s] UI disappear\n", __func__);
+            LOG_MSG_DEBUG(ERR_LOG, "[%s] UI disappear\n", __func__);
             break;
        case UI_READY:
-            LOG_MSG_DEBUG(INFO_LOG, "[%s] UI ready \n", __func__);
+            LOG_MSG_DEBUG(ERR_LOG, "[%s] UI ready \n", __func__);
             silfp_netlink_send(fp_dev, SIFP_NETLINK_UI_READY);
             break;
         default:
-            LOG_MSG_DEBUG(INFO_LOG, "[%s] Unknown MTK_ONSCREENFINGERPRINT_EVENT\n", __func__);
+            LOG_MSG_DEBUG(ERR_LOG, "[%s] Unknown MTK_ONSCREENFINGERPRINT_EVENT\n", __func__);
             break;
         }
         return retval;
@@ -533,6 +542,7 @@ static int silfp_fb_callback(struct notifier_block *notif,
         return 0;
     }
 
+    blank = *(int *)evdata->data;
     LOG_MSG_DEBUG(INFO_LOG, "[%s] enter, blank=0x%x\n", __func__, blank);
 
     switch (blank) {
@@ -614,11 +624,11 @@ int silfp_opticalfp_irq_handler(struct fp_dev_touch_info* tp_info)
         return IRQ_HANDLED;
     }
     if(1 == tp_info->touch_state){
-        LOG_MSG_DEBUG(INFO_LOG, "[%s]:touch down\n", __func__);
+        LOG_MSG_DEBUG(ERR_LOG, "[%s]:touch down\n", __func__);
         silfp_netlink_send(g_fp_dev, SIFP_NETLINK_TP_TOUCHDOWN);
         lasttouchmode = tp_info->touch_state;
     }else{
-        LOG_MSG_DEBUG(INFO_LOG, "[%s]:touch up\n", __func__);
+        LOG_MSG_DEBUG(ERR_LOG, "[%s]:touch up\n", __func__);
         silfp_netlink_send(g_fp_dev, SIFP_NETLINK_TP_TOUCHUP);
         lasttouchmode = tp_info->touch_state;
     }
@@ -1433,6 +1443,7 @@ static const struct of_device_id sildev_dt_ids[] = {
     { .compatible = "sil,silead-fp" },
     { .compatible = "sil,fingerprint" },
     { .compatible = "sil,silead_fp-pins" },
+    { .compatible = "oppo,oppo_fp" },
     {},
 };
 
@@ -1459,6 +1470,12 @@ static struct spi_driver silfp_driver = {
 static int __init silfp_dev_init(void)
 {
     int status = 0;
+
+    if (FP_SILEAD_OPTICAL_70 != get_fpsensor_type()) {
+        pr_err("%s, found not silead sensor\n", __func__);
+        status = -EINVAL;
+        return status;
+    }
 
     LOG_MSG_DEBUG(ERR_LOG, "SILEAD_FP Driver, Version: %s.\n", FP_DEV_VERSION);
     /* Claim our 256 reserved device numbers.  Then register a class
